@@ -1,16 +1,13 @@
-// game/Terreno.ts
+// Terreno.ts
 // Port 1:1 de Terreno.h (sem dependência de three.js, para ser testável).
 // Guarda o heightmap subamostrado e expõe geração de malha, altura em coordenadas
 // de mundo (interpolação baricêntrica) e aplainamento sobre um caminho.
 
-import { GAME_CONFIG } from '../config';
+import { GAME_CONFIG } from './config';
 
 export type Vec3 = { x: number; y: number; z: number };
 
-const smoothstep = (e0: number, e1: number, x: number) => {
-    const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
-    return t * t * (3 - 2 * t);
-};
+import { smoothstep } from './Mat4';
 
 export class Terreno {
     larguraOriginal = 1024;
