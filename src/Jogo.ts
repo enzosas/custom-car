@@ -1,6 +1,4 @@
-// Jogo.ts — motor do jogo: port de main.cpp (mainLoop, regenerarPista, aplicarMudancasDoPainel...).
-// Cria a cena three.js, roda a física/lógica pura (Veiculo, Estrada, ...) e faz os dois passes de render.
-
+// Jogo.ts   motor do jogo
 import * as THREE from 'three';
 import { GAME_CONFIG } from './config';
 import { Terreno } from './Terreno';
@@ -16,6 +14,7 @@ import { PilotoAutomatico } from './PilotoAutomatico';
 import { PainelConfig } from './PainelConfig';
 import { ShadowMap } from './ShadowMap';
 import { Entrada } from './Input';
+import { TouchHUD } from './TouchHUDController';
 import { Mat4 } from './Mat4';
 import { randGlobal, sementeAleatoria } from './Random';
 import {
@@ -39,7 +38,6 @@ const mudou = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b
 export class Jogo {
     readonly config = GAME_CONFIG;
     private configAnterior: any = JSON.parse(JSON.stringify(GAME_CONFIG));
-
     // three
     private renderer: THREE.WebGLRenderer;
     private scene = new THREE.Scene();
@@ -49,7 +47,6 @@ export class Jogo {
     private matRastro = criarMaterialRastro(this.uniforms);
     private matParticula = criarMaterialParticula();
     private sombra: ShadowMap;
-
     // subsistemas
     private terreno = new Terreno();
     private estrada = new Estrada();
@@ -61,7 +58,6 @@ export class Jogo {
     private pilotoAuto = new PilotoAutomatico();
     private cam = new CameraJogo();
     private painel: PainelConfig;
-
     // malhas
     private terrenoMesh!: THREE.Mesh;
     private terrenoPos!: THREE.BufferAttribute;
@@ -80,7 +76,6 @@ export class Jogo {
     private rastroBuf = { pos: new Float32Array(0), cor: new Float32Array(0) };
     private particulasMesh!: THREE.Mesh;
     private particulasBuf = { pos: new Float32Array(0), cor: new Float32Array(0) };
-
     // estado do main.cpp
     private wireframe = false;
     private estavaDerrapandoAnterior = false;
@@ -96,42 +91,39 @@ export class Jogo {
     private rodando = false;
     private descartado = false;
     private hud: HTMLDivElement;
+    
     private fps = { t: 0, n: 0, v: 0 };
+    // NOVAS VARIAVEIS DE CAMERA
+    private camOffsetX = 0;
+    private camOffsetY = 0;
 
     constructor(private canvas: HTMLCanvasElement, private hostUI: HTMLElement) {
-        // glClearColor(0.8, 0.85, 0.9): valor cru na tela (setRGB em sRGB evita a conversão de saída)
         this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         this.renderer.setClearColor(new THREE.Color().setRGB(0.8, 0.85, 0.9, THREE.SRGBColorSpace), 1);
         this.scene.matrixWorldAutoUpdate = true;
-
         this.sombra = new ShadowMap(this.uniforms);
         this.painel = new PainelConfig(hostUI, this.config);
-
         this.hud = document.createElement('div');
         Object.assign(this.hud.style, {
             position: 'absolute', right: '10px', top: '8px', color: '#000', font: '12px/1.5 monospace',
             textAlign: 'right', pointerEvents: 'none', whiteSpace: 'pre', userSelect: 'none',
         } as CSSStyleDeclaration);
         hostUI.appendChild(this.hud);
-
         Entrada.iniciar(canvas);
         this.redimensionar();
         window.addEventListener('resize', this.redimensionar);
     }
 
-    // ------------------------------------------------------------------ inicialização
     async iniciar(urlTerreno = '/terreno.raw') {
         const resp = await fetch(urlTerreno);
         if (this.descartado) return;
         if (!resp.ok) throw new Error(`${urlTerreno} não encontrado (coloque terreno.raw em /public)`);
         const buffer = await resp.arrayBuffer();
-        if (this.descartado) return; // o React (StrictMode) pode ter descartado esta instância durante o fetch
+        if (this.descartado) return;
         this.terreno.carregarRaw(buffer);
-
         this.veiculo.init();
-
-        // terreno
+        
         const pos = this.terreno.gerarPosicoes();
         const cores = new Float32Array(pos.length);
         for (let i = 0; i < pos.length; i += 3) { cores[i] = COR_GRAMA[0]; cores[i + 1] = COR_GRAMA[1]; cores[i + 2] = COR_GRAMA[2]; }
@@ -145,7 +137,6 @@ export class Jogo {
         this.terrenoMesh.frustumCulled = false;
         this.scene.add(this.terrenoMesh);
 
-        // veículo
         this.chassiMesh = new THREE.Mesh(geometriaDe(this.veiculo.gerarMalhaChassi()), this.matOpaco);
         const geoRoda = geometriaDe(this.veiculo.gerarMalhaRoda());
         for (let i = 0; i < 4; ++i) {
@@ -156,13 +147,11 @@ export class Jogo {
         this.chassiMesh.frustumCulled = false; this.chassiMesh.matrixAutoUpdate = false;
         this.scene.add(this.chassiMesh);
 
-        // vegetação instanciada
         this.construirFlorestaGeometrias();
         this.gramaMesh = new THREE.InstancedMesh(geometriaDe(gerarGeometriaTufo(this.config)), this.matOpaco, 1);
         this.gramaMesh.frustumCulled = false; this.gramaMesh.count = 0;
         this.scene.add(this.gramaMesh);
 
-        // rastros e partículas (buffers dinâmicos)
         const gr = new THREE.BufferGeometry();
         this.rastroMesh = new THREE.Mesh(gr, this.matRastro);
         this.rastroMesh.frustumCulled = false;
@@ -173,20 +162,17 @@ export class Jogo {
         this.particulasMesh.frustumCulled = false;
         this.scene.add(this.particulasMesh);
 
-        // primeira pista (seed opcional na URL: ?seed=123)
         const s = Number(new URLSearchParams(location.search).get('seed'));
         if (Number.isFinite(s) && s > 0) this.seedPista = s >>> 0;
         this.regenerarPista(this.seedPista === 0, true);
         this.configAnterior = JSON.parse(JSON.stringify(this.config));
-
+        
         console.log('Q: alternar wireframe\nR: nova pista\nSHIFT: segure para agachar e solte para pular');
-
         this.lastTime = performance.now() / 1000;
         this.rodando = true;
         this.rafId = requestAnimationFrame(this.loop);
     }
 
-    // ------------------------------------------------------------------ floresta / grama
     private construirFlorestaGeometrias() {
         const g = gerarGeometriasArvore(this.config);
         const grupos = [g.lod0, g.lod1, g.lod2, g.lod3];
@@ -238,7 +224,6 @@ export class Jogo {
         this.garantirCapacidadeGrama(Math.max(1, this.grama.quantidade));
     }
 
-    // ------------------------------------------------------------------ pista / terreno
     private atualizarMalhaTerreno() {
         (this.terrenoPos.array as Float32Array).set(this.terreno.gerarPosicoes());
         this.terrenoPos.needsUpdate = true;
@@ -264,10 +249,8 @@ export class Jogo {
 
     private regenerarPista(novaSeed: boolean, reposicionar: boolean) {
         if (novaSeed || this.seedPista === 0) this.seedPista = sementeAleatoria();
-
         this.gerarEstrada();
         this.veiculo.invalidarSolo();
-
         if (reposicionar) {
             const curva = this.estrada.getPontosCurva();
             if (curva.length >= 2) {
@@ -276,7 +259,6 @@ export class Jogo {
                 this.veiculo.reposicionarNaPista(curva[0], { x: d.x / l, y: d.y / l, z: d.z / l });
             }
         }
-
         this.regerarVegetacao();
         this.terrenoDefasado = false;
         this.vegetacaoPendente = false;
@@ -312,14 +294,12 @@ export class Jogo {
             this.vegetacaoPendente = true;
         }
         if (terrenoMudou) this.terrenoDefasado = true;
-
         this.configAnterior = JSON.parse(JSON.stringify(c));
     }
 
     private processarTrabalhoPendente() {
         const arrastando = Entrada.esquerdo;
         const agora = performance.now() / 1000;
-
         if (this.terrenoDefasado && (!arrastando || agora >= this.proximaRegenTerreno)) {
             const inicio = performance.now() / 1000;
             this.gerarEstrada();
@@ -337,7 +317,6 @@ export class Jogo {
         }
     }
 
-    // ------------------------------------------------------------------ render
     private redimensionar = () => {
         const w = window.innerWidth, h = window.innerHeight;
         this.renderer.setSize(w, h, false);
@@ -362,11 +341,8 @@ export class Jogo {
     private renderizarSombra(lightDir: THREE.Vector3, p: { x: number; y: number; z: number }) {
         const alvo = new THREE.Vector3(p.x, p.y, p.z);
         this.sombra.atualizarMatriz(lightDir, alvo);
-
-        // só terreno, estrada, veículo e floresta entram no mapa de sombras
         this.gramaMesh.visible = false; this.rastroMesh.visible = false; this.particulasMesh.visible = false;
         this.atualizarFloresta(p, true);
-
         const r = this.renderer;
         r.setRenderTarget(this.sombra.alvo);
         r.clear(true, true, false);
@@ -374,20 +350,17 @@ export class Jogo {
         r.render(this.scene, this.camera);
         this.scene.overrideMaterial = null;
         r.setRenderTarget(null);
-
         this.uniforms.uShadowOn.value = 1;
         this.gramaMesh.visible = true; this.rastroMesh.visible = true; this.particulasMesh.visible = true;
     }
 
     private atualizarDinamicos(camRight: THREE.Vector3, camUp: THREE.Vector3) {
-        // rastros
         const nR = this.rastroPneus.gerarGeometria(this.rastroBuf);
         this.sincronizarBuffer(this.rastroMesh.geometry, 'position', this.rastroBuf.pos, 3, nR);
         this.sincronizarBuffer(this.rastroMesh.geometry, 'color', this.rastroBuf.cor, 3, nR);
         this.rastroMesh.geometry.setDrawRange(0, nR);
         this.rastroMesh.visible = nR > 0;
 
-        // partículas
         const nP = this.particulas.gerarGeometria(
             { x: camRight.x, y: camRight.y, z: camRight.z }, { x: camUp.x, y: camUp.y, z: camUp.z }, this.particulasBuf);
         this.sincronizarBuffer(this.particulasMesh.geometry, 'position', this.particulasBuf.pos, 3, nP);
@@ -407,12 +380,10 @@ export class Jogo {
         }
     }
 
-    // ------------------------------------------------------------------ loop principal
     private loop = () => {
         if (!this.rodando) return;
         this.rafId = requestAnimationFrame(this.loop);
         this.trabalhoPesadoNoFrame = false;
-
         const w = this.canvas.clientWidth || window.innerWidth, h = this.canvas.clientHeight || window.innerHeight;
         if (w === 0 || h === 0) return;
 
@@ -423,27 +394,25 @@ export class Jogo {
         }
         if (Entrada.teclaUmaVez('KeyR')) this.regenerarPista(true, true);
 
-        // comandos
         let throttle = 0, steer = 0;
-        let handbrake = Entrada.tecla('Space');
+        let handbrake = Entrada.tecla('Space') || TouchHUD.controls.drift;
+
         if (this.config.pilotoAutomaticoOn) {
             const cmd = this.pilotoAuto.atualizar(this.veiculo, this.estrada);
             throttle = cmd.throttle; steer = cmd.steer; handbrake = cmd.handbrake;
         } else {
-            if (Entrada.tecla('KeyW')) throttle += 1;
-            if (Entrada.tecla('KeyS')) throttle -= 1;
-            if (Entrada.tecla('KeyA')) steer += 1;
-            if (Entrada.tecla('KeyD')) steer -= 1;
+            if (Entrada.tecla('KeyW') || TouchHUD.controls.forward) throttle += 1;
+            if (Entrada.tecla('KeyS') || TouchHUD.controls.backward) throttle -= 1;
+            if (Entrada.tecla('KeyA') || TouchHUD.controls.left) steer += 1;
+            if (Entrada.tecla('KeyD') || TouchHUD.controls.right) steer -= 1;
         }
 
-        // pulo com shift: segura para agachar, solta para pular
-        const shiftAgora = Entrada.tecla('ShiftLeft') || Entrada.tecla('ShiftRight');
+        const shiftAgora = Entrada.tecla('ShiftLeft') || Entrada.tecla('ShiftRight') || TouchHUD.controls.jump;
         if (shiftAgora && !this.shiftAnterior && !this.painel.isMouseSobreUI()) this.carregandoPulo = true;
         if (!shiftAgora) this.carregandoPulo = false;
         this.shiftAnterior = shiftAgora;
         this.veiculo.setSegurandoPulo(this.carregandoPulo);
 
-        // delta time
         const thisTime = performance.now() / 1000;
         let deltaTime = thisTime - this.lastTime;
         this.lastTime = thisTime;
@@ -451,7 +420,6 @@ export class Jogo {
 
         this.veiculo.update(deltaTime, throttle, steer, handbrake, this.alturaSuperficie);
 
-        // rastros
         this.rastroPneus.update(deltaTime);
         if (this.veiculo.estaDerrapando()) {
             const intensidade = this.veiculo.getIntensidadeDrift();
@@ -462,7 +430,6 @@ export class Jogo {
             this.estavaDerrapandoAnterior = false;
         }
 
-        // partículas
         this.particulas.update(deltaTime);
         if (this.veiculo.estaDerrapando()) {
             const intensidade = this.veiculo.getIntensidadeDrift();
@@ -474,6 +441,7 @@ export class Jogo {
                 }
             }
         }
+
         const velCarro = this.veiculo.getVelocidade();
         if (velCarro > 3.0 && !this.veiculo.estaNoAr()) {
             const chance = Math.trunc(((velCarro - 3.0) / 4.0) * 5.0 + 0.1);
@@ -485,14 +453,14 @@ export class Jogo {
             }
         }
 
-        // painel
         if (this.painel.update()) this.aplicarMudancasDoPainel();
         this.processarTrabalhoPendente();
 
-        // câmera
+        // ---- ATUALIZAÇÃO E DESLOCAMENTO CINEMATOGRÁFICO DA CÂMARA ----
         const mouseSobreUI = this.painel.isMouseSobreUI();
         const scroll = Entrada.consumirScroll();
         if (scroll !== 0) this.cam.processarScroll(scroll);
+        
         this.cam.update(deltaTime,
             { x: Entrada.mouseX, y: Entrada.mouseY, direito: Entrada.direito, esquerdo: Entrada.esquerdo },
             this.veiculo.getPosicao(), this.veiculo.getYawAngle(), this.veiculo.getAlturaTeto(),
@@ -503,21 +471,39 @@ export class Jogo {
         this.camera.up.set(up.x, up.y, up.z);
         this.camera.lookAt(ct.x, ct.y, ct.z);
         this.camera.updateMatrixWorld(true);
+        
+        // Aplica o View Offset suavemente quando o configMode é ativado
+        let targetOffX = 0;
+        let targetOffY = 0;
+        
+        // Ativa o offset se estiver no modo config mobile ou se a UI estiver visível
+        if (TouchHUD.configMode) {
+            if (w > h) targetOffX = -w * 0.3125; // 0.3125 centraliza perfeitamente no terço direito
+            else targetOffY = -h * 0.25;
+        }
+        
+        const dt60 = deltaTime * 60;
+        const lerpCam = 1 - Math.pow(1 - 0.08, Math.min(dt60, 3.0));
+        this.camOffsetX += (targetOffX - this.camOffsetX) * lerpCam;
+        this.camOffsetY += (targetOffY - this.camOffsetY) * lerpCam;
+        
+        if (Math.abs(this.camOffsetX) > 1 || Math.abs(this.camOffsetY) > 1) {
+            this.camera.setViewOffset(w, h, this.camOffsetX, this.camOffsetY, w, h);
+        } else {
+            this.camera.clearViewOffset();
+        }
         this.camera.updateProjectionMatrix();
+        // --------------------------------------------------------------
 
-        // luz
         atualizarLuz(this.uniforms);
         const l = this.config.luz.parametros;
         const lightDir = new THREE.Vector3(l.dirX, l.dirY, l.dirZ);
 
-        // matrizes do veículo
         this.aplicarMatriz(this.chassiMesh, this.veiculo.matrizChassi());
         this.veiculo.matrizesRodas().forEach((m, i) => this.aplicarMatriz(this.rodasMesh[i], m));
 
-        // passe de sombra (tudo que não é grama/rastro/partículas)
         this.renderizarSombra(lightDir, this.veiculo.getPosicao());
 
-        // passe principal
         this.atualizarFloresta(this.camera.position, false);
         const nG = this.grama.selecionar(this.camera.position, false, this.gramaLote);
         this.gramaAttr.needsUpdate = true;
@@ -528,7 +514,6 @@ export class Jogo {
 
         this.renderer.setRenderTarget(null);
         this.renderer.render(this.scene, this.camera);
-
         this.painel.render();
         this.atualizarHud(thisTime);
 
@@ -540,7 +525,7 @@ export class Jogo {
         if (agora - this.fps.t >= 0.5) { this.fps.v = this.fps.n / (agora - this.fps.t); this.fps.n = 0; this.fps.t = agora; }
         this.hud.textContent =
             `Q: wireframe  R: nova pista  SHIFT: agachar/pular  ESPAÇO: freio de mão\n` +
-            `botão direito: câmera  roda: zoom\nseed ${this.seedPista}  ${this.fps.v.toFixed(0)} fps`;
+            `botão direito: câmara  roda: zoom\nseed ${this.seedPista}  ${this.fps.v.toFixed(0)} fps`;
     }
 
     dispose() {
@@ -550,6 +535,7 @@ export class Jogo {
         cancelAnimationFrame(this.rafId);
         window.removeEventListener('resize', this.redimensionar);
         Entrada.parar();
+        TouchHUD.parar();
         this.painel.dispose();
         this.hud.remove();
         this.sombra.dispose();

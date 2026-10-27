@@ -1,15 +1,12 @@
-// PainelConfig.ts — port de PainelConfig.h + Botao.h + ItemArrastavel.h + Propriedade.h.
-// Mesma lógica por polling a cada frame do C++; o desenho usa elementos DOM sobre o canvas.
-// As coordenadas seguem a janela de referência 1000x1000 do original, ancoradas no topo.
-
 import { GAME_CONFIG } from './config';
 import { ABAS, type CampoDef } from './painelCampos';
 import { Entrada } from './Input';
 import { mix } from './Mat4';
+import { TouchHUD } from './TouchHUDController';
+import { isMobileDevice } from './JogoCena';
 
-const H0 = 1000; // altura de referência da janela original
+const H0 = 1000;
 
-// ---------------- Propriedade ----------------
 class Propriedade {
     valorBase = 1;
     constructor(public nome: string, public tipo: 'float' | 'uint' | 'secao', private obj: any, private chave: string, public fator = 1) {
@@ -21,7 +18,6 @@ class Propriedade {
             if (this.valorBase < 1) this.valorBase = 1;
         }
     }
-
     ajustarPorArrasto(deltaX: number, modoAcelerado = false) {
         if (this.tipo === 'secao') return;
         const taxa = modoAcelerado ? 1.0 : 0.10;
@@ -34,7 +30,6 @@ class Propriedade {
             this.obj[this.chave] = Math.round(Math.max(0, novo));
         }
     }
-
     valorComoString(): string {
         if (this.tipo === 'float') return (this.obj[this.chave] / this.fator).toFixed(4);
         if (this.tipo === 'uint') return String(this.obj[this.chave]);
@@ -42,36 +37,57 @@ class Propriedade {
     }
 }
 
-// ---------------- Botão (hover/clique animados) ----------------
 class Botao {
     private escalaAtual = 1;
     private escalaAlvo = 1;
     private pressionado = false;
     readonly el: HTMLDivElement;
     readonly rotulo: HTMLDivElement;
-
-    constructor(host: HTMLElement, private x: number, private y: number, private w: number, private h: number, private opacidade: number) {
+    
+    constructor(host: HTMLElement, texto: string, private isMobile: boolean, private origX=0, private origY=0, private origW=0, private origH=0) {
         this.el = document.createElement('div');
-        Object.assign(this.el.style, {
-            position: 'absolute', left: `${x}px`, top: `${H0 - (y + h)}px`, width: `${w}px`, height: `${h}px`,
-            background: `rgba(0,0,0,${opacidade})`, transformOrigin: '50% 50%',
-        } as CSSStyleDeclaration);
         this.rotulo = document.createElement('div');
-        Object.assign(this.rotulo.style, {
-            position: 'absolute', left: '16px', top: '11px', lineHeight: '22px', fontSize: '19.7px',
-            color: '#fff', whiteSpace: 'nowrap',
-        } as CSSStyleDeclaration);
+        
+        if (isMobile) {
+            Object.assign(this.el.style, {
+                background: 'rgba(0,0,0,0.70)', position: 'relative', width: '100%', height: '46px', /* Altura maior */
+                transformOrigin: '50% 50%', cursor: 'pointer', flexShrink: '0'
+            } as CSSStyleDeclaration);
+            Object.assign(this.rotulo.style, {
+                position: 'absolute', left: '16px', top: '12px', lineHeight: '22px', fontSize: '16px', /* Fonte igual ao desktop */
+                color: '#fff', whiteSpace: 'nowrap', fontFamily: 'Arial, Helvetica, sans-serif'
+            } as CSSStyleDeclaration);
+        } else {
+            Object.assign(this.el.style, {
+                position: 'absolute', left: `${origX}px`, top: `${H0 - (origY + origH)}px`, width: `${origW}px`, height: `${origH}px`,
+                background: `rgba(0,0,0,0.70)`, transformOrigin: '50% 50%', cursor: 'pointer'
+            } as CSSStyleDeclaration);
+            Object.assign(this.rotulo.style, {
+                position: 'absolute', left: '16px', top: '11px', lineHeight: '22px', fontSize: '19.7px',
+                color: '#fff', whiteSpace: 'nowrap', fontFamily: 'Arial, Helvetica, sans-serif'
+            } as CSSStyleDeclaration);
+        }
+        
         this.el.appendChild(this.rotulo);
         host.appendChild(this.el);
     }
-
-    /** retorna true no frame em que ocorre o clique (soltar o botão dentro da área) */
+    
     update(): boolean {
-        const mx = Entrada.mouseX, myInv = H0 - Entrada.mouseY;
-        const dentro = mx >= this.x && mx <= this.x + this.w && myInv >= this.y && myInv <= this.y + this.h;
         let clicou = false;
+        let dentro = false;
+        
+        if (this.isMobile) {
+            const rect = this.el.getBoundingClientRect();
+            const mx = Entrada.mouseX;
+            const my = Entrada.mouseY; 
+            dentro = mx >= rect.left && mx <= rect.right && my >= rect.top && my <= rect.bottom;
+        } else {
+            const mx = Entrada.mouseX, myInv = H0 - Entrada.mouseY;
+            dentro = mx >= this.origX && mx <= this.origX + this.origW && myInv >= this.origY && myInv <= this.origY + this.origH;
+        }
+
         if (dentro) {
-            if (Entrada.esquerdo) { this.escalaAlvo = 0.85; this.pressionado = true; }
+            if (Entrada.esquerdo) { this.escalaAlvo = this.isMobile ? 0.9 : 0.85; this.pressionado = true; }
             else if (this.pressionado) { clicou = true; this.pressionado = false; this.escalaAlvo = 0.95; }
             else { this.escalaAlvo = 0.95; }
         } else {
@@ -88,29 +104,47 @@ class Botao {
     }
 }
 
-// ---------------- Item arrastável ----------------
 class ItemArrastavel {
     arrastando = false;
     private ultimoMouseX = 0;
     readonly el: HTMLDivElement;
-
-    constructor(host: HTMLElement, public prop: Propriedade, private x: number, private y: number, private w: number, private h: number) {
+    
+    constructor(host: HTMLElement, public prop: Propriedade, private isMobile: boolean, private origX=0, private origY=0, private origW=0, private origH=0) {
         this.el = document.createElement('div');
-        Object.assign(this.el.style, {
-            position: 'absolute', left: `${x}px`, top: `${H0 - (y + h)}px`, width: `${w}px`, height: `${h}px`,
-            lineHeight: '22px', fontSize: '19.7px', color: '#fff', whiteSpace: 'nowrap', paddingTop: '5px',
-        } as CSSStyleDeclaration);
+        
+        if (isMobile) {
+            Object.assign(this.el.style, {
+                lineHeight: '26px', fontSize: '15px', color: '#fff', whiteSpace: 'nowrap', paddingTop: '6px',
+                cursor: 'ew-resize', userSelect: 'none', fontFamily: 'Arial, Helvetica, sans-serif'
+            } as CSSStyleDeclaration);
+        } else {
+            Object.assign(this.el.style, {
+                position: 'absolute', left: `${origX}px`, top: `${H0 - (origY + origH)}px`, width: `${origW}px`, height: `${origH}px`,
+                lineHeight: '22px', fontSize: '19.7px', color: '#fff', whiteSpace: 'nowrap', paddingTop: '5px',
+                cursor: 'ew-resize', userSelect: 'none', fontFamily: 'Arial, Helvetica, sans-serif'
+            } as CSSStyleDeclaration);
+        }
         host.appendChild(this.el);
     }
 
     tentarIniciarArrasto(): boolean {
         if (this.prop.tipo === 'secao') return false;
-        const mx = Entrada.mouseX, myInv = H0 - Entrada.mouseY;
-        const dentro = mx >= this.x && mx <= this.x + this.w && myInv >= this.y && myInv <= this.y + this.h;
-        if (dentro && Entrada.esquerdo) { this.arrastando = true; this.ultimoMouseX = mx; return true; }
+        let dentro = false;
+        
+        if (this.isMobile) {
+            const rect = this.el.getBoundingClientRect();
+            const mx = Entrada.mouseX;
+            const my = Entrada.mouseY;
+            dentro = mx >= rect.left && mx <= rect.right && my >= rect.top && my <= rect.bottom;
+        } else {
+            const mx = Entrada.mouseX, myInv = H0 - Entrada.mouseY;
+            dentro = mx >= this.origX && mx <= this.origX + this.origW && myInv >= this.origY && myInv <= this.origY + this.origH;
+        }
+        
+        if (dentro && Entrada.esquerdo) { this.arrastando = true; this.ultimoMouseX = Entrada.mouseX; return true; }
         return false;
     }
-
+    
     atualizarArrasto(): boolean {
         if (!this.arrastando) return false;
         if (!Entrada.esquerdo) { this.arrastando = false; return false; }
@@ -121,30 +155,33 @@ class ItemArrastavel {
         }
         return true;
     }
-
+    
     desenhar() {
         const t = this.prop.tipo === 'secao' ? this.prop.nome : `${this.prop.nome}: ${this.prop.valorComoString()}`;
         if (this.el.textContent !== t) this.el.textContent = t;
         this.el.style.color = this.arrastando ? 'rgb(77,204,255)' : '#fff';
     }
-
     remover() { this.el.remove(); }
 }
 
-// ---------------- Painel ----------------
 interface Aba { tituloBotao: string; campos: Propriedade[] }
 
 export class PainelConfig {
     private raiz: HTMLDivElement;
-    private fundo: HTMLDivElement;
     private abas: Aba[] = [];
     private botoesMenu: Botao[] = [];
     private btnPiloto: Botao;
     private itens: ItemArrastavel[] = [];
     private itemArrastando: ItemArrastavel | null = null;
-    private abaAtiva = -1;
-    private aberto = false;
+    private abaAtiva = -1; 
+    private isMobile = isMobileDevice();
 
+    private colMenu!: HTMLDivElement;
+    private colSliders!: HTMLDivElement;
+    private colVazia!: HTMLDivElement;
+    
+    private fundo!: HTMLDivElement;
+    private abertoDesktop = false;
     private readonly painelX = 220;
     private readonly painelY = 20;
     private readonly painelLargura = 420;
@@ -152,27 +189,49 @@ export class PainelConfig {
 
     constructor(host: HTMLElement, private config = GAME_CONFIG) {
         this.raiz = document.createElement('div');
-        Object.assign(this.raiz.style, {
-            position: 'absolute', inset: '0', pointerEvents: 'none', overflow: 'hidden', userSelect: 'none',
-            fontFamily: 'Arial, Helvetica, sans-serif',
-        } as CSSStyleDeclaration);
-        host.appendChild(this.raiz);
+        
+        if (this.isMobile) {
+            this.raiz.className = 'painel-config-root';
+            
+            this.colMenu = document.createElement('div');
+            this.colMenu.className = 'painel-col-menu';
+            this.colSliders = document.createElement('div');
+            this.colSliders.className = 'painel-col-sliders';
+            this.colVazia = document.createElement('div');
+            this.colVazia.className = 'painel-col-vazia';
 
-        this.fundo = document.createElement('div');
-        Object.assign(this.fundo.style, {
-            position: 'absolute', left: `${this.painelX}px`, top: `${H0 - (this.painelY + this.painelAltura)}px`,
-            width: `${this.painelLargura}px`, height: `${this.painelAltura}px`, background: 'rgba(0,0,0,0.70)', display: 'none',
-        } as CSSStyleDeclaration);
-        this.raiz.appendChild(this.fundo);
+            this.raiz.appendChild(this.colMenu);
+            this.raiz.appendChild(this.colSliders);
+            this.raiz.appendChild(this.colVazia);
+            host.appendChild(this.raiz);
 
-        this.registrarAbas();
+            this.registrarAbas();
+            this.abas.forEach((aba) => this.botoesMenu.push(new Botao(this.colMenu, aba.tituloBotao, true)));
+            this.btnPiloto = new Botao(this.colMenu, 'Piloto Auto: OFF', true);
+            
+            this.abaAtiva = 0;
+            this.carregarItensAba(0);
+        } else {
+            Object.assign(this.raiz.style, {
+                position: 'absolute', inset: '0', pointerEvents: 'none', overflow: 'hidden', userSelect: 'none',
+                fontFamily: 'Arial, Helvetica, sans-serif',
+            } as CSSStyleDeclaration);
+            host.appendChild(this.raiz);
 
-        const btnX = 15, btnY = 920, btnW = 180, btnH = 42, espaco = 50;
-        this.abas.forEach((_, i) => this.botoesMenu.push(new Botao(this.raiz, btnX, btnY - i * espaco, btnW, btnH, 0.70)));
-        this.btnPiloto = new Botao(this.raiz, btnX, btnY - this.abas.length * espaco, btnW, btnH, 0.70);
+            this.fundo = document.createElement('div');
+            Object.assign(this.fundo.style, {
+                position: 'absolute', left: `${this.painelX}px`, top: `${H0 - (this.painelY + this.painelAltura)}px`,
+                width: `${this.painelLargura}px`, height: `${this.painelAltura}px`, background: 'rgba(0,0,0,0.70)', display: 'none',
+            } as CSSStyleDeclaration);
+            this.raiz.appendChild(this.fundo);
+
+            this.registrarAbas();
+            const btnX = 15, btnY = 920, btnW = 180, btnH = 42, espaco = 50;
+            this.abas.forEach((aba, i) => this.botoesMenu.push(new Botao(this.raiz, aba.tituloBotao, false, btnX, btnY - i * espaco, btnW, btnH)));
+            this.btnPiloto = new Botao(this.raiz, 'Piloto Auto: OFF', false, btnX, btnY - this.abas.length * espaco, btnW, btnH);
+        }
     }
 
-    /** gerarAbasAutomaticas(): cada seção vira um título + seus campos */
     private registrarAbas() {
         this.abas = ABAS.map((aba) => {
             const campos: Propriedade[] = [];
@@ -191,64 +250,92 @@ export class PainelConfig {
         this.itens.forEach((i) => i.remover());
         this.itens = [];
         this.itemArrastando = null;
-        const startY = this.painelY + this.painelAltura - 40;
-        this.abas[index].campos.forEach((p, i) => {
-            this.itens.push(new ItemArrastavel(this.raiz, p, this.painelX + 25, startY - i * 26, this.painelLargura - 50, 22));
-        });
+        
+        if (this.isMobile) {
+            this.abas[index].campos.forEach((p) => {
+                this.itens.push(new ItemArrastavel(this.colSliders, p, true));
+            });
+        } else {
+            const startY = this.painelY + this.painelAltura - 40;
+            this.abas[index].campos.forEach((p, i) => {
+                this.itens.push(new ItemArrastavel(this.raiz, p, false, this.painelX + 25, startY - i * 26, this.painelLargura - 50, 22));
+            });
+        }
     }
 
     isMouseSobreUI(): boolean {
+        if (this.isMobile) return false; 
+        
         const mx = Entrada.mouseX, myInv = H0 - Entrada.mouseY;
         if (mx >= 15 && mx <= 195) return true;
-        if (this.aberto) {
+        if (this.abertoDesktop) {
             if (mx >= this.painelX && mx <= this.painelX + this.painelLargura &&
                 myInv >= this.painelY && myInv <= this.painelY + this.painelAltura) return true;
         }
         return false;
     }
 
-    /** retorna true se algum valor/estado foi alterado neste frame */
     update(): boolean {
-        let alterou = false;
+        if (this.isMobile && !TouchHUD.configMode) return false;
 
+        let alterou = false;
         if (this.btnPiloto.update()) {
             this.config.pilotoAutomaticoOn = !this.config.pilotoAutomaticoOn;
             alterou = true;
         }
-
+        
         if (!this.itemArrastando) {
             for (let i = 0; i < this.botoesMenu.length; ++i) {
                 if (this.botoesMenu[i].update()) {
-                    if (this.aberto && this.abaAtiva === i) {
-                        this.aberto = false; this.abaAtiva = -1;
-                        this.itens.forEach((it) => it.remover()); this.itens = [];
-                        this.itemArrastando = null;
+                    if (this.isMobile) {
+                        if (this.abaAtiva !== i) {
+                            this.abaAtiva = i;
+                            this.carregarItensAba(i);
+                        }
                     } else {
-                        this.aberto = true; this.abaAtiva = i;
-                        this.carregarItensAba(i);
+                        if (this.abertoDesktop && this.abaAtiva === i) {
+                            this.abertoDesktop = false; this.abaAtiva = -1;
+                            this.itens.forEach((it) => it.remover()); this.itens = [];
+                            this.itemArrastando = null;
+                        } else {
+                            this.abertoDesktop = true; this.abaAtiva = i;
+                            this.carregarItensAba(i);
+                        }
                     }
                 }
             }
         }
-
-        if (this.aberto) {
-            if (this.itemArrastando) {
-                if (this.itemArrastando.atualizarArrasto()) alterou = true;
-                else this.itemArrastando = null;
-            } else {
-                for (const item of this.itens) {
-                    if (item.tentarIniciarArrasto()) { this.itemArrastando = item; alterou = true; break; }
-                }
+        
+        if (this.itemArrastando) {
+            if (this.itemArrastando.atualizarArrasto()) alterou = true;
+            else this.itemArrastando = null;
+        } else {
+            for (const item of this.itens) {
+                if (item.tentarIniciarArrasto()) { this.itemArrastando = item; alterou = true; break; }
             }
         }
         return alterou;
     }
 
     render() {
-        this.fundo.style.display = this.aberto ? 'block' : 'none';
-        this.abas.forEach((a, i) => this.botoesMenu[i].desenhar(a.tituloBotao));
-        this.btnPiloto.desenhar('piloto auto: ' + (this.config.pilotoAutomaticoOn ? 'on' : 'off'));
-        if (this.aberto) this.itens.forEach((it) => it.desenhar());
+        this.btnPiloto.desenhar('Piloto Auto: ' + (this.config.pilotoAutomaticoOn ? 'ON' : 'OFF'));
+        
+        if (this.isMobile) {
+            const visivel = TouchHUD.configMode;
+            this.raiz.style.opacity = visivel ? '1' : '0';
+            this.colMenu.style.pointerEvents = visivel ? 'auto' : 'none';
+            this.colSliders.style.pointerEvents = visivel ? 'auto' : 'none';
+            
+            this.botoesMenu.forEach((b, i) => {
+                b.el.style.background = (i === this.abaAtiva) ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.7)';
+                b.desenhar(this.abas[i].tituloBotao);
+            });
+            if (visivel) this.itens.forEach((it) => it.desenhar());
+        } else {
+            this.fundo.style.display = this.abertoDesktop ? 'block' : 'none';
+            this.abas.forEach((a, i) => this.botoesMenu[i].desenhar(a.tituloBotao));
+            if (this.abertoDesktop) this.itens.forEach((it) => it.desenhar());
+        }
     }
 
     dispose() { this.raiz.remove(); }

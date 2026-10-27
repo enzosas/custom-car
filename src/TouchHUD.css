@@ -1,0 +1,230 @@
+.hud-container {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.driving-controls {
+    position: absolute;
+    inset: 0;
+    padding: 30px;
+    pointer-events: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.config-active .driving-controls {
+    opacity: 0;
+    transform: translateY(20px);
+    pointer-events: none !important;
+}
+
+.config-active .hud-left,
+.config-active .hud-right {
+    pointer-events: none;
+}
+
+/* ---------------------------------------------------
+   SISTEMA DE GRELHA 2x2
+   --------------------------------------------------- */
+.hud-left,
+.hud-right {
+    pointer-events: auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 15px;
+}
+
+/* Esquerda: Setas na linha de baixo (linha 2) */
+#btn-left {
+    grid-column: 1;
+    grid-row: 2;
+}
+
+#btn-right {
+    grid-column: 2;
+    grid-row: 2;
+}
+
+/* Direita: 4 Botões perfeitamente alinhados */
+#btn-drift {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+#btn-jump {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+#btn-backward {
+    grid-column: 1;
+    grid-row: 2;
+}
+
+#btn-forward {
+    grid-column: 2;
+    grid-row: 2;
+}
+
+/* Botão central de Configurações (Posicionado milimetricamente no buraco da Esquerda) */
+.hud-center {
+    position: absolute;
+    /* 30px de padding + 32.5 (metade de 65px) */
+    left: 62.5px;
+    /* 30px de padding + 65px (altura da linha 2) + 15px de gap */
+    bottom: 110px;
+    transform: translateX(-50%);
+    pointer-events: auto;
+    z-index: 110;
+    transition: left 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), bottom 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Quando o painel abre (Landscape), centra no espaço vazio (81.25%) */
+.config-active .hud-center {
+    left: 81.25%;
+    bottom: 30px;
+}
+
+/* ---------------------------------------------------
+   ESTILOS NEUMÓRFICOS (Sombra atualizada)
+   --------------------------------------------------- */
+.hud-btn {
+    position: relative;
+    width: 65px;
+    height: 65px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    /* Nova sombra exata conforme pedido! */
+    box-shadow: 6px 6px 14px rgba(0, 0, 0, 0.15), -6px -6px 14px rgba(255, 255, 255, 0.1), inset 1px 1px 2px rgba(255, 255, 255, 0.2);
+    color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    touch-action: none;
+    transition: transform 0.08s cubic-bezier(0.4, 0.0, 0.2, 1), box-shadow 0.08s ease;
+}
+
+.hud-btn::after {
+    content: '';
+    position: absolute;
+    top: -15px;
+    right: -15px;
+    bottom: -15px;
+    left: -15px;
+    border-radius: 50%;
+}
+
+.hud-btn svg {
+    width: 28px;
+    height: 28px;
+    fill: currentColor;
+    pointer-events: none;
+}
+
+.hud-btn.active {
+    transform: scale(0.92);
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.2), inset -4px -4px 8px rgba(255, 255, 255, 0.1);
+}
+
+/* ---------------------------------------------------
+   Painel de Configurações Responsivo
+   --------------------------------------------------- */
+.painel-config-root {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: flex;
+    padding: 20px;
+    gap: 20px;
+    z-index: 90;
+    font-family: Arial, Helvetica, sans-serif;
+    transition: opacity 0.3s ease;
+}
+
+.painel-col-menu {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: auto;
+    overflow-y: auto;
+}
+
+.painel-col-sliders {
+    flex: 1.5;
+    display: flex;
+    flex-direction: column;
+    background: rgba(0, 0, 0, 0.70);
+    padding: 15px 25px;
+    pointer-events: auto;
+    overflow-y: auto;
+}
+
+.painel-col-vazia {
+    flex: 1.5;
+    pointer-events: none;
+}
+
+/* Modo Retrato (Em pé) */
+@media (max-aspect-ratio: 1/1) {
+    .driving-controls {
+        padding: 15px;
+        padding-bottom: 40px;
+    }
+
+    .hud-btn {
+        width: 55px;
+        height: 55px;
+    }
+
+    .hud-btn svg {
+        width: 24px;
+        height: 24px;
+    }
+
+    /* Posição da Engrenagem adaptada para o tamanho menor dos botões em Portrait */
+    .hud-center {
+        /* 15px de padding + 27.5 (metade de 55px) */
+        left: 42.5px;
+        /* 40px padding bottom + 55px altura + 15px gap */
+        bottom: 110px;
+    }
+
+    /* Aberto: desce para o centro do ecrã alinhado ao fundo */
+    .config-active .hud-center {
+        left: 50%;
+        bottom: 40px;
+    }
+
+    .painel-config-root {
+        flex-direction: column;
+        padding-bottom: 110px;
+    }
+
+    .painel-col-menu {
+        flex: unset;
+        flex-direction: row;
+        flex-wrap: wrap;
+        height: 25%;
+    }
+
+    .painel-col-sliders {
+        flex: unset;
+        height: 40%;
+    }
+
+    .painel-col-vazia {
+        flex: 1;
+    }
+}

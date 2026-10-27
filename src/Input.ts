@@ -1,5 +1,3 @@
-// Input.ts — estado global de teclado/mouse, equivalente às chamadas glfwGetKey / glfwGetMouseButton / glfwGetCursorPos.
-
 type Listener = { alvo: EventTarget; tipo: string; fn: EventListenerOrEventListenerObject; opts?: AddEventListenerOptions };
 
 class EntradaClasse {
@@ -9,6 +7,8 @@ class EntradaClasse {
     mouseY = 0;
     esquerdo = false;
     direito = false;
+    
+    private touchCameraId: number | null = null;
     private scrollAcumulado = 0;
     private ouvintes: Listener[] = [];
 
@@ -35,8 +35,63 @@ class EntradaClasse {
             if (e.button === 0) this.esquerdo = false;
             if (e.button === 2) this.direito = false;
         });
+
+        // Touch Dinâmico: Se tocou num elemento UI é esquerdo (arrastar slider), se tocou no canvas puro é direito (rodar a câmara)
+        this.on(window, 'touchstart', (e: TouchEvent) => {
+            if (e.touches.length > 0) {
+                this.mouseX = e.touches[0].clientX;
+                this.mouseY = e.touches[0].clientY;
+                this.esquerdo = true;
+            }
+            // Procura o toque na câmara (fundo vazio)
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const t = e.changedTouches[i];
+                const target = document.elementFromPoint(t.clientX, t.clientY);
+                if (target && target.tagName === 'CANVAS' && this.touchCameraId === null) {
+                    this.touchCameraId = t.identifier;
+                    this.direito = true;
+                    this.mouseX = t.clientX;
+                    this.mouseY = t.clientY;
+                    break;
+                }
+            }
+        }, { passive: true });
+
+        this.on(window, 'touchmove', (e: TouchEvent) => {
+            if (e.touches.length > 0 && this.touchCameraId === null) {
+                this.mouseX = e.touches[0].clientX;
+                this.mouseY = e.touches[0].clientY;
+            }
+            if (this.touchCameraId !== null) {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    const t = e.changedTouches[i];
+                    if (t.identifier === this.touchCameraId) {
+                        this.mouseX = t.clientX;
+                        this.mouseY = t.clientY;
+                        break;
+                    }
+                }
+            }
+        }, { passive: true });
+
+        const endTouch = (e: TouchEvent) => {
+            if (e.touches.length === 0) this.esquerdo = false;
+            if (this.touchCameraId !== null) {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    const t = e.changedTouches[i];
+                    if (t.identifier === this.touchCameraId) {
+                        this.touchCameraId = null;
+                        this.direito = false;
+                        break;
+                    }
+                }
+            }
+        };
+        
+        this.on(window, 'touchend', endTouch);
+        this.on(window, 'touchcancel', endTouch);
+
         this.on(canvas, 'contextmenu', (e: Event) => e.preventDefault());
-        // GLFW: yoffset > 0 ao rolar para cima (afastar o dedo); DOM: deltaY < 0.
         this.on(canvas, 'wheel', (e: WheelEvent) => {
             e.preventDefault();
             const passo = e.deltaMode === 0 ? e.deltaY / 100 : e.deltaY;
@@ -48,12 +103,10 @@ class EntradaClasse {
         for (const l of this.ouvintes) l.alvo.removeEventListener(l.tipo, l.fn, l.opts);
         this.ouvintes = [];
         this.teclas.clear();
+        this.touchCameraId = null;
     }
 
-    /** glfwGetKey(...) == GLFW_PRESS */
     tecla(code: string) { return this.teclas.has(code); }
-
-    /** glfwGetKeyOnce: verdadeiro só na borda de subida */
     teclaUmaVez(code: string): boolean {
         if (this.teclas.has(code)) {
             if (this.once.has(code)) return false;
@@ -63,8 +116,6 @@ class EntradaClasse {
         this.once.delete(code);
         return false;
     }
-
-    /** consome o deslocamento da roda acumulado desde o último frame */
     consumirScroll(): number { const s = this.scrollAcumulado; this.scrollAcumulado = 0; return s; }
 }
 
