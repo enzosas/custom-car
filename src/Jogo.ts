@@ -94,12 +94,13 @@ export class Jogo {
     private lastTime = 0;
     private rafId = 0;
     private rodando = false;
+    private descartado = false;
     private hud: HTMLDivElement;
     private fps = { t: 0, n: 0, v: 0 };
 
     constructor(private canvas: HTMLCanvasElement, private hostUI: HTMLElement) {
         // glClearColor(0.8, 0.85, 0.9): valor cru na tela (setRGB em sRGB evita a conversão de saída)
-        this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+        this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         this.renderer.setClearColor(new THREE.Color().setRGB(0.8, 0.85, 0.9, THREE.SRGBColorSpace), 1);
         this.scene.matrixWorldAutoUpdate = true;
@@ -122,8 +123,11 @@ export class Jogo {
     // ------------------------------------------------------------------ inicialização
     async iniciar(urlTerreno = '/terreno.raw') {
         const resp = await fetch(urlTerreno);
+        if (this.descartado) return;
         if (!resp.ok) throw new Error(`${urlTerreno} não encontrado (coloque terreno.raw em /public)`);
-        this.terreno.carregarRaw(await resp.arrayBuffer());
+        const buffer = await resp.arrayBuffer();
+        if (this.descartado) return; // o React (StrictMode) pode ter descartado esta instância durante o fetch
+        this.terreno.carregarRaw(buffer);
 
         this.veiculo.init();
 
@@ -540,6 +544,8 @@ export class Jogo {
     }
 
     dispose() {
+        if (this.descartado) return;
+        this.descartado = true;
         this.rodando = false;
         cancelAnimationFrame(this.rafId);
         window.removeEventListener('resize', this.redimensionar);
