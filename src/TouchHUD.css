@@ -11,7 +11,6 @@
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 
-    /* FORÇA ACELERAÇÃO DE HARDWARE NA GPU PARA EVITAR O "PISCAR" DO DESFOQUE */
     transform: translate3d(0, 0, 0);
     -webkit-transform: translate3d(0, 0, 0);
     backface-visibility: hidden;
@@ -153,7 +152,6 @@
    Painel de Configurações (Neumórfico Responsivo)
    --------------------------------------------------- */
 
-/* Mobile Container */
 .painel-config-root {
     position: absolute;
     inset: 0;
@@ -176,7 +174,6 @@
     pointer-events: auto;
 }
 
-/* Desktop Container */
 .desktop-panel-container {
     position: absolute;
     inset: 0;
@@ -201,6 +198,8 @@
     gap: 10px;
     pointer-events: none;
     overflow-y: auto;
+    touch-action: pan-y;
+    /* PERMITE SCROLL VERTICAL */
 }
 
 .painel-col-sliders {
@@ -210,6 +209,8 @@
     padding: 15px 25px;
     pointer-events: none;
     overflow-y: auto;
+    touch-action: pan-y;
+    /* PERMITE SCROLL VERTICAL */
 }
 
 .painel-col-vazia {
@@ -217,7 +218,6 @@
     pointer-events: none;
 }
 
-/* Botões do Menu */
 .painel-btn {
     position: relative;
     cursor: pointer;
@@ -253,14 +253,12 @@
     font-size: 19.7px;
 }
 
-/* Feedback tátil da Aba Ativa */
 .painel-btn.active-tab {
     background: rgba(255, 255, 255, 0.3);
     box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.15), inset -4px -4px 8px rgba(255, 255, 255, 0.3);
     color: rgba(0, 0, 0, 0.9);
 }
 
-/* Itens Arrastáveis (Sliders) */
 .painel-item {
     cursor: ew-resize;
     user-select: none;
@@ -289,7 +287,6 @@
     font-weight: bold;
 }
 
-/* Títulos de Seção */
 .painel-item.secao {
     font-weight: bold;
     color: rgba(0, 0, 0, 0.9);
@@ -301,7 +298,6 @@
     margin-top: 10px;
 }
 
-/* Modo Retrato */
 @media (max-aspect-ratio: 1/1) {
     .driving-controls {
         padding: 15px;
@@ -348,4 +344,16 @@
     .painel-col-vazia {
         flex: 1;
     }
+}
+
+.mobile-mode {
+    color: transparent !important;
+}
+
+.mobile-mode>div:not(.painel-config-root) {
+    display: none !important;
+}
+
+html {
+    background-color: black;
 }

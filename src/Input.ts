@@ -9,6 +9,7 @@ class EntradaClasse {
     direito = false;
     
     private touchCameraId: number | null = null;
+    private pinchDistance = 0; 
     private scrollAcumulado = 0;
     private ouvintes: Listener[] = [];
 
@@ -36,18 +37,36 @@ class EntradaClasse {
             if (e.button === 2) this.direito = false;
         });
 
-        // Touch Dinâmico: Se tocou num elemento UI é esquerdo (arrastar slider), se tocou no canvas puro é direito (rodar a câmara)
         this.on(window, 'touchstart', (e: TouchEvent) => {
+            let emMenu = false;
+            for (let i = 0; i < e.touches.length; i++) {
+                const el = e.touches[i].target as HTMLElement;
+                if (el && el.closest && el.closest('.painel-config-root')) emMenu = true;
+            }
+
+            // Bloqueia gestos nativos APENAS se nenhum dedo estiver no menu de configuração
+            if (e.touches.length > 1 && e.cancelable && !emMenu) e.preventDefault();
+
+            const canvasTouches: Touch[] = [];
+            for (let i = 0; i < e.touches.length; i++) {
+                if (e.touches[i].target === canvas) canvasTouches.push(e.touches[i]);
+            }
+
+            if (canvasTouches.length === 2) {
+                const dx = canvasTouches[0].clientX - canvasTouches[1].clientX;
+                const dy = canvasTouches[0].clientY - canvasTouches[1].clientY;
+                this.pinchDistance = Math.hypot(dx, dy);
+            }
+
             if (e.touches.length > 0) {
                 this.mouseX = e.touches[0].clientX;
                 this.mouseY = e.touches[0].clientY;
                 this.esquerdo = true;
             }
-            // Procura o toque na câmara (fundo vazio)
+            
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const t = e.changedTouches[i];
-                const target = document.elementFromPoint(t.clientX, t.clientY);
-                if (target && target.tagName === 'CANVAS' && this.touchCameraId === null) {
+                if (t.target === canvas && this.touchCameraId === null) {
                     this.touchCameraId = t.identifier;
                     this.direito = true;
                     this.mouseX = t.clientX;
@@ -55,27 +74,62 @@ class EntradaClasse {
                     break;
                 }
             }
-        }, { passive: true });
+        }, { passive: false });
 
         this.on(window, 'touchmove', (e: TouchEvent) => {
+            let emMenu = false;
+            for (let i = 0; i < e.touches.length; i++) {
+                const el = e.touches[i].target as HTMLElement;
+                if (el && el.closest && el.closest('.painel-config-root')) emMenu = true;
+            }
+
+            if (e.cancelable && !emMenu) e.preventDefault(); 
+
+            const canvasTouches: Touch[] = [];
+            for (let i = 0; i < e.touches.length; i++) {
+                if (e.touches[i].target === canvas) canvasTouches.push(e.touches[i]);
+            }
+
+            if (canvasTouches.length === 2) {
+                const dx = canvasTouches[0].clientX - canvasTouches[1].clientX;
+                const dy = canvasTouches[0].clientY - canvasTouches[1].clientY;
+                const dist = Math.hypot(dx, dy);
+                
+                if (this.pinchDistance > 0) {
+                    const delta = this.pinchDistance - dist;
+                    this.scrollAcumulado -= delta * 0.05; 
+                }
+                this.pinchDistance = dist;
+            }
+
             if (e.touches.length > 0 && this.touchCameraId === null) {
                 this.mouseX = e.touches[0].clientX;
                 this.mouseY = e.touches[0].clientY;
             }
+            
             if (this.touchCameraId !== null) {
                 for (let i = 0; i < e.changedTouches.length; i++) {
                     const t = e.changedTouches[i];
                     if (t.identifier === this.touchCameraId) {
-                        this.mouseX = t.clientX;
-                        this.mouseY = t.clientY;
+                        if (canvasTouches.length < 2) {
+                            this.mouseX = t.clientX;
+                            this.mouseY = t.clientY;
+                        }
                         break;
                     }
                 }
             }
-        }, { passive: true });
+        }, { passive: false });
 
         const endTouch = (e: TouchEvent) => {
+            const canvasTouches: Touch[] = [];
+            for (let i = 0; i < e.touches.length; i++) {
+                if (e.touches[i].target === canvas) canvasTouches.push(e.touches[i]);
+            }
+            
+            if (canvasTouches.length < 2) this.pinchDistance = 0; 
             if (e.touches.length === 0) this.esquerdo = false;
+            
             if (this.touchCameraId !== null) {
                 for (let i = 0; i < e.changedTouches.length; i++) {
                     const t = e.changedTouches[i];
@@ -92,6 +146,7 @@ class EntradaClasse {
         this.on(window, 'touchcancel', endTouch);
 
         this.on(canvas, 'contextmenu', (e: Event) => e.preventDefault());
+        
         this.on(canvas, 'wheel', (e: WheelEvent) => {
             e.preventDefault();
             const passo = e.deltaMode === 0 ? e.deltaY / 100 : e.deltaY;
@@ -104,6 +159,7 @@ class EntradaClasse {
         this.ouvintes = [];
         this.teclas.clear();
         this.touchCameraId = null;
+        this.pinchDistance = 0;
     }
 
     tecla(code: string) { return this.teclas.has(code); }
@@ -116,7 +172,12 @@ class EntradaClasse {
         this.once.delete(code);
         return false;
     }
-    consumirScroll(): number { const s = this.scrollAcumulado; this.scrollAcumulado = 0; return s; }
+    
+    consumirScroll(): number { 
+        const s = this.scrollAcumulado; 
+        this.scrollAcumulado = 0; 
+        return s; 
+    }
 }
 
 export const Entrada = new EntradaClasse();

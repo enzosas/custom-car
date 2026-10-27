@@ -66,14 +66,18 @@ class Botao {
     update(): boolean {
         let clicou = false;
         let dentro = false;
+        const mx = Entrada.mouseX;
+        const my = Entrada.mouseY; 
         
         if (this.isMobile) {
             const rect = this.el.getBoundingClientRect();
-            const mx = Entrada.mouseX;
-            const my = Entrada.mouseY; 
-            dentro = mx >= rect.left && mx <= rect.right && my >= rect.top && my <= rect.bottom;
+            // Verifica se o rato/toque está na caixa E se o botão não está escondido pelo scroll (clip)
+            if (mx >= rect.left && mx <= rect.right && my >= rect.top && my <= rect.bottom) {
+                const elHover = document.elementFromPoint(mx, my);
+                dentro = elHover ? (this.el === elHover || this.el.contains(elHover)) : false;
+            }
         } else {
-            const mx = Entrada.mouseX, myInv = H0 - Entrada.mouseY;
+            const myInv = H0 - Entrada.mouseY;
             dentro = mx >= this.origX && mx <= this.origX + this.origW && myInv >= this.origY && myInv <= this.origY + this.origH;
         }
 
@@ -99,6 +103,9 @@ class Botao {
 
 class ItemArrastavel {
     arrastando = false;
+    private arrastoConfirmado = false;
+    private startX = 0;
+    private startY = 0;
     private ultimoMouseX = 0;
     readonly el: HTMLDivElement;
     
@@ -118,24 +125,55 @@ class ItemArrastavel {
     tentarIniciarArrasto(): boolean {
         if (this.prop.tipo === 'secao') return false;
         let dentro = false;
+        const mx = Entrada.mouseX;
+        const my = Entrada.mouseY;
         
         if (this.isMobile) {
             const rect = this.el.getBoundingClientRect();
-            const mx = Entrada.mouseX;
-            const my = Entrada.mouseY;
-            dentro = mx >= rect.left && mx <= rect.right && my >= rect.top && my <= rect.bottom;
+            // Verifica se está dentro da caixa e se o item está visível na tela
+            if (mx >= rect.left && mx <= rect.right && my >= rect.top && my <= rect.bottom) {
+                const elHover = document.elementFromPoint(mx, my);
+                dentro = elHover ? (this.el === elHover || this.el.contains(elHover)) : false;
+            }
         } else {
-            const mx = Entrada.mouseX, myInv = H0 - Entrada.mouseY;
+            const myInv = H0 - my;
             dentro = mx >= this.origX && mx <= this.origX + this.origW && myInv >= this.origY && myInv <= this.origY + this.origH;
         }
         
-        if (dentro && Entrada.esquerdo) { this.arrastando = true; this.ultimoMouseX = Entrada.mouseX; return true; }
+        if (dentro && Entrada.esquerdo) { 
+            this.arrastando = true; 
+            this.arrastoConfirmado = false;
+            this.startX = mx;
+            this.startY = my;
+            this.ultimoMouseX = mx; 
+            return true; 
+        }
         return false;
     }
     
     atualizarArrasto(): boolean {
         if (!this.arrastando) return false;
         if (!Entrada.esquerdo) { this.arrastando = false; return false; }
+        
+        // ZONA DE INTENÇÃO (SLOP THRESHOLD) - Diferencia Scroll de Drag
+        if (!this.arrastoConfirmado) {
+            const dxAcumulado = Math.abs(Entrada.mouseX - this.startX);
+            const dyAcumulado = Math.abs(Entrada.mouseY - this.startY);
+            
+            // Se o utilizador moveu o dedo mais para cima/baixo do que para os lados, é Scroll!
+            if (dyAcumulado > 5 && dyAcumulado > dxAcumulado) {
+                this.arrastando = false; 
+                return false; 
+            }
+            // Se moveu para o lado, confirmamos que ele quer ajustar o valor
+            if (dxAcumulado > 5) {
+                this.arrastoConfirmado = true;
+                this.ultimoMouseX = Entrada.mouseX;
+            }
+            return true; // Continua a segurar a ação enquanto pensa
+        }
+
+        // Aplica o valor se o arrasto estiver confirmado
         const dx = Entrada.mouseX - this.ultimoMouseX;
         if (dx !== 0) {
             this.prop.ajustarPorArrasto(dx, Entrada.tecla('ShiftLeft') || Entrada.tecla('ShiftRight'));
@@ -148,7 +186,7 @@ class ItemArrastavel {
         const t = this.prop.tipo === 'secao' ? this.prop.nome : `${this.prop.nome}: ${this.prop.valorComoString()}`;
         if (this.el.textContent !== t) this.el.textContent = t;
         
-        if (this.arrastando) this.el.classList.add('dragging');
+        if (this.arrastando && this.arrastoConfirmado) this.el.classList.add('dragging');
         else this.el.classList.remove('dragging');
     }
     remover() { this.el.remove(); }
@@ -198,7 +236,7 @@ export class PainelConfig {
 
             this.registrarAbas();
             this.abas.forEach((aba) => this.botoesMenu.push(new Botao(this.colMenu, aba.tituloBotao, true)));
-            this.btnPiloto = new Botao(this.colMenu, 'piloto auto: off', true);
+            this.btnPiloto = new Botao(this.colMenu, 'Piloto Auto: OFF', true);
             
             this.abaAtiva = 0;
             this.carregarItensAba(0);
@@ -219,13 +257,12 @@ export class PainelConfig {
             this.fundo.style.top = `${H0 - (this.painelY + this.painelAltura)}px`;
             this.fundo.style.width = `${this.painelLargura}px`;
             this.fundo.style.height = `${this.painelAltura}px`;
-            // A prioridade display: none estava aqui e foi apagada!
             this.desktopPanel.appendChild(this.fundo);
 
             this.registrarAbas();
             const btnX = 15, btnY = 920, btnW = 180, btnH = 42, espaco = 50;
             this.abas.forEach((aba, i) => this.botoesMenu.push(new Botao(this.raiz, aba.tituloBotao, false, btnX, btnY - i * espaco, btnW, btnH)));
-            this.btnPiloto = new Botao(this.raiz, 'piloto auto: off', false, btnX, btnY - this.abas.length * espaco, btnW, btnH);
+            this.btnPiloto = new Botao(this.raiz, 'Piloto Auto: OFF', false, btnX, btnY - this.abas.length * espaco, btnW, btnH);
         }
     }
 
