@@ -115,7 +115,7 @@ export class Jogo {
         window.addEventListener('resize', this.redimensionar);
     }
 
-    async iniciar(urlTerreno = '/terreno.raw') {
+    async iniciar(urlTerreno = './terreno.raw') {
         const resp = await fetch(urlTerreno);
         if (this.descartado) return;
         if (!resp.ok) throw new Error(`${urlTerreno} não encontrado (coloque terreno.raw em /public)`);
