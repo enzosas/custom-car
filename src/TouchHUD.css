@@ -1,3 +1,26 @@
+/* ---------------------------------------------------
+   Estilo Neumórfico Base (Glassmorphism)
+   --------------------------------------------------- */
+.glass-panel {
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 6px 6px 14px rgba(0, 0, 0, 0.15), -6px -6px 14px rgba(255, 255, 255, 0.1), inset 1px 1px 2px rgba(255, 255, 255, 0.2);
+    color: rgba(0, 0, 0, 0.7);
+    border-radius: 12px;
+
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+
+    /* FORÇA ACELERAÇÃO DE HARDWARE NA GPU PARA EVITAR O "PISCAR" DO DESFOQUE */
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+/* ---------------------------------------------------
+   HUD de Controlos de Condução
+   --------------------------------------------------- */
 .hud-container {
     position: absolute;
     inset: 0;
@@ -29,19 +52,15 @@
     pointer-events: none;
 }
 
-/* ---------------------------------------------------
-   SISTEMA DE GRELHA 2x2
-   --------------------------------------------------- */
 .hud-left,
 .hud-right {
     pointer-events: auto;
     display: grid;
+    gap: 15px;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr 1fr;
-    gap: 15px;
 }
 
-/* Esquerda: Setas na linha de baixo (linha 2) */
 #btn-left {
     grid-column: 1;
     grid-row: 2;
@@ -52,7 +71,6 @@
     grid-row: 2;
 }
 
-/* Direita: 4 Botões perfeitamente alinhados */
 #btn-drift {
     grid-column: 1;
     grid-row: 1;
@@ -73,12 +91,9 @@
     grid-row: 2;
 }
 
-/* Botão central de Configurações (Posicionado milimetricamente no buraco da Esquerda) */
 .hud-center {
     position: absolute;
-    /* 30px de padding + 32.5 (metade de 65px) */
     left: 62.5px;
-    /* 30px de padding + 65px (altura da linha 2) + 15px de gap */
     bottom: 110px;
     transform: translateX(-50%);
     pointer-events: auto;
@@ -86,15 +101,11 @@
     transition: left 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), bottom 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* Quando o painel abre (Landscape), centra no espaço vazio (81.25%) */
 .config-active .hud-center {
     left: 81.25%;
     bottom: 30px;
 }
 
-/* ---------------------------------------------------
-   ESTILOS NEUMÓRFICOS (Sombra atualizada)
-   --------------------------------------------------- */
 .hud-btn {
     position: relative;
     width: 65px;
@@ -104,7 +115,6 @@
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border: 1px solid rgba(255, 255, 255, 0.2);
-    /* Nova sombra exata conforme pedido! */
     box-shadow: 6px 6px 14px rgba(0, 0, 0, 0.15), -6px -6px 14px rgba(255, 255, 255, 0.1), inset 1px 1px 2px rgba(255, 255, 255, 0.2);
     color: rgba(0, 0, 0, 0.7);
     display: flex;
@@ -112,6 +122,8 @@
     align-items: center;
     touch-action: none;
     transition: transform 0.08s cubic-bezier(0.4, 0.0, 0.2, 1), box-shadow 0.08s ease;
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
 }
 
 .hud-btn::after {
@@ -138,8 +150,10 @@
 }
 
 /* ---------------------------------------------------
-   Painel de Configurações Responsivo
+   Painel de Configurações (Neumórfico Responsivo)
    --------------------------------------------------- */
+
+/* Mobile Container */
 .painel-config-root {
     position: absolute;
     inset: 0;
@@ -149,7 +163,35 @@
     gap: 20px;
     z-index: 90;
     font-family: Arial, Helvetica, sans-serif;
+    opacity: 0;
     transition: opacity 0.3s ease;
+}
+
+.painel-config-root.open {
+    opacity: 1;
+}
+
+.painel-config-root.open .painel-col-menu,
+.painel-config-root.open .painel-col-sliders {
+    pointer-events: auto;
+}
+
+/* Desktop Container */
+.desktop-panel-container {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.desktop-panel-container.open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.painel-fundo-desktop {
+    position: absolute;
 }
 
 .painel-col-menu {
@@ -157,7 +199,7 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    pointer-events: auto;
+    pointer-events: none;
     overflow-y: auto;
 }
 
@@ -165,9 +207,8 @@
     flex: 1.5;
     display: flex;
     flex-direction: column;
-    background: rgba(0, 0, 0, 0.70);
     padding: 15px 25px;
-    pointer-events: auto;
+    pointer-events: none;
     overflow-y: auto;
 }
 
@@ -176,7 +217,91 @@
     pointer-events: none;
 }
 
-/* Modo Retrato (Em pé) */
+/* Botões do Menu */
+.painel-btn {
+    position: relative;
+    cursor: pointer;
+    transform-origin: 50% 50%;
+    user-select: none;
+    display: flex;
+    align-items: center;
+}
+
+.painel-btn.mobile {
+    width: 100%;
+    height: 46px;
+    flex-shrink: 0;
+}
+
+.painel-btn.desktop {
+    position: absolute;
+}
+
+.painel-btn .rotulo {
+    font-family: Arial, Helvetica, sans-serif;
+    white-space: nowrap;
+    font-weight: bold;
+}
+
+.painel-btn.mobile .rotulo {
+    padding-left: 16px;
+    font-size: 16px;
+}
+
+.painel-btn.desktop .rotulo {
+    padding-left: 16px;
+    font-size: 19.7px;
+}
+
+/* Feedback tátil da Aba Ativa */
+.painel-btn.active-tab {
+    background: rgba(255, 255, 255, 0.3);
+    box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.15), inset -4px -4px 8px rgba(255, 255, 255, 0.3);
+    color: rgba(0, 0, 0, 0.9);
+}
+
+/* Itens Arrastáveis (Sliders) */
+.painel-item {
+    cursor: ew-resize;
+    user-select: none;
+    font-family: Arial, Helvetica, sans-serif;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    color: rgba(0, 0, 0, 0.7);
+    transition: color 0.1s ease;
+    flex-shrink: 0;
+}
+
+.painel-item.mobile {
+    height: 26px;
+    font-size: 15px;
+}
+
+.painel-item.desktop {
+    position: absolute;
+    height: 22px;
+    font-size: 19.7px;
+}
+
+.painel-item.dragging {
+    color: #0055aa;
+    font-weight: bold;
+}
+
+/* Títulos de Seção */
+.painel-item.secao {
+    font-weight: bold;
+    color: rgba(0, 0, 0, 0.9);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+    cursor: default;
+}
+
+.painel-item.mobile.secao {
+    margin-top: 10px;
+}
+
+/* Modo Retrato */
 @media (max-aspect-ratio: 1/1) {
     .driving-controls {
         padding: 15px;
@@ -193,15 +318,11 @@
         height: 24px;
     }
 
-    /* Posição da Engrenagem adaptada para o tamanho menor dos botões em Portrait */
     .hud-center {
-        /* 15px de padding + 27.5 (metade de 55px) */
         left: 42.5px;
-        /* 40px padding bottom + 55px altura + 15px gap */
         bottom: 110px;
     }
 
-    /* Aberto: desce para o centro do ecrã alinhado ao fundo */
     .config-active .hud-center {
         left: 50%;
         bottom: 40px;

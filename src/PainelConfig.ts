@@ -46,28 +46,19 @@ class Botao {
     
     constructor(host: HTMLElement, texto: string, private isMobile: boolean, private origX=0, private origY=0, private origW=0, private origH=0) {
         this.el = document.createElement('div');
-        this.rotulo = document.createElement('div');
+        this.el.className = `glass-panel painel-btn ${isMobile ? 'mobile' : 'desktop'}`;
         
-        if (isMobile) {
-            Object.assign(this.el.style, {
-                background: 'rgba(0,0,0,0.70)', position: 'relative', width: '100%', height: '46px', /* Altura maior */
-                transformOrigin: '50% 50%', cursor: 'pointer', flexShrink: '0'
-            } as CSSStyleDeclaration);
-            Object.assign(this.rotulo.style, {
-                position: 'absolute', left: '16px', top: '12px', lineHeight: '22px', fontSize: '16px', /* Fonte igual ao desktop */
-                color: '#fff', whiteSpace: 'nowrap', fontFamily: 'Arial, Helvetica, sans-serif'
-            } as CSSStyleDeclaration);
-        } else {
-            Object.assign(this.el.style, {
-                position: 'absolute', left: `${origX}px`, top: `${H0 - (origY + origH)}px`, width: `${origW}px`, height: `${origH}px`,
-                background: `rgba(0,0,0,0.70)`, transformOrigin: '50% 50%', cursor: 'pointer'
-            } as CSSStyleDeclaration);
-            Object.assign(this.rotulo.style, {
-                position: 'absolute', left: '16px', top: '11px', lineHeight: '22px', fontSize: '19.7px',
-                color: '#fff', whiteSpace: 'nowrap', fontFamily: 'Arial, Helvetica, sans-serif'
-            } as CSSStyleDeclaration);
+        this.rotulo = document.createElement('div');
+        this.rotulo.className = 'rotulo';
+        
+        if (!isMobile) {
+            this.el.style.left = `${origX}px`;
+            this.el.style.top = `${H0 - (origY + origH)}px`;
+            this.el.style.width = `${origW}px`;
+            this.el.style.height = `${origH}px`;
         }
         
+        this.rotulo.textContent = texto;
         this.el.appendChild(this.rotulo);
         host.appendChild(this.el);
     }
@@ -88,18 +79,20 @@ class Botao {
 
         if (dentro) {
             if (Entrada.esquerdo) { this.escalaAlvo = this.isMobile ? 0.9 : 0.85; this.pressionado = true; }
-            else if (this.pressionado) { clicou = true; this.pressionado = false; this.escalaAlvo = 0.95; }
-            else { this.escalaAlvo = 0.95; }
+            else if (this.pressionado) { clicou = true; this.pressionado = false; this.escalaAlvo = 1.0; }
+            else { this.escalaAlvo = 1.0; }
         } else {
             this.pressionado = false;
             this.escalaAlvo = 1;
         }
+        
         this.escalaAtual = mix(this.escalaAtual, this.escalaAlvo, 0.2);
+        this.el.style.transform = `scale(${this.escalaAtual})`;
+        
         return clicou;
     }
 
     desenhar(texto: string) {
-        this.el.style.transform = `scale(${this.escalaAtual})`;
         if (this.rotulo.textContent !== texto) this.rotulo.textContent = texto;
     }
 }
@@ -111,18 +104,13 @@ class ItemArrastavel {
     
     constructor(host: HTMLElement, public prop: Propriedade, private isMobile: boolean, private origX=0, private origY=0, private origW=0, private origH=0) {
         this.el = document.createElement('div');
+        this.el.className = `painel-item ${isMobile ? 'mobile' : 'desktop'} ${prop.tipo === 'secao' ? 'secao' : ''}`;
         
-        if (isMobile) {
-            Object.assign(this.el.style, {
-                lineHeight: '26px', fontSize: '15px', color: '#fff', whiteSpace: 'nowrap', paddingTop: '6px',
-                cursor: 'ew-resize', userSelect: 'none', fontFamily: 'Arial, Helvetica, sans-serif'
-            } as CSSStyleDeclaration);
-        } else {
-            Object.assign(this.el.style, {
-                position: 'absolute', left: `${origX}px`, top: `${H0 - (origY + origH)}px`, width: `${origW}px`, height: `${origH}px`,
-                lineHeight: '22px', fontSize: '19.7px', color: '#fff', whiteSpace: 'nowrap', paddingTop: '5px',
-                cursor: 'ew-resize', userSelect: 'none', fontFamily: 'Arial, Helvetica, sans-serif'
-            } as CSSStyleDeclaration);
+        if (!isMobile) {
+            this.el.style.left = `${origX}px`;
+            this.el.style.top = `${H0 - (origY + origH)}px`;
+            this.el.style.width = `${origW}px`;
+            this.el.style.height = `${origH}px`;
         }
         host.appendChild(this.el);
     }
@@ -159,7 +147,9 @@ class ItemArrastavel {
     desenhar() {
         const t = this.prop.tipo === 'secao' ? this.prop.nome : `${this.prop.nome}: ${this.prop.valorComoString()}`;
         if (this.el.textContent !== t) this.el.textContent = t;
-        this.el.style.color = this.arrastando ? 'rgb(77,204,255)' : '#fff';
+        
+        if (this.arrastando) this.el.classList.add('dragging');
+        else this.el.classList.remove('dragging');
     }
     remover() { this.el.remove(); }
 }
@@ -180,6 +170,7 @@ export class PainelConfig {
     private colSliders!: HTMLDivElement;
     private colVazia!: HTMLDivElement;
     
+    private desktopPanel!: HTMLDivElement;
     private fundo!: HTMLDivElement;
     private abertoDesktop = false;
     private readonly painelX = 220;
@@ -196,7 +187,7 @@ export class PainelConfig {
             this.colMenu = document.createElement('div');
             this.colMenu.className = 'painel-col-menu';
             this.colSliders = document.createElement('div');
-            this.colSliders.className = 'painel-col-sliders';
+            this.colSliders.className = 'painel-col-sliders glass-panel';
             this.colVazia = document.createElement('div');
             this.colVazia.className = 'painel-col-vazia';
 
@@ -207,28 +198,34 @@ export class PainelConfig {
 
             this.registrarAbas();
             this.abas.forEach((aba) => this.botoesMenu.push(new Botao(this.colMenu, aba.tituloBotao, true)));
-            this.btnPiloto = new Botao(this.colMenu, 'Piloto Auto: OFF', true);
+            this.btnPiloto = new Botao(this.colMenu, 'piloto auto: off', true);
             
             this.abaAtiva = 0;
             this.carregarItensAba(0);
         } else {
-            Object.assign(this.raiz.style, {
-                position: 'absolute', inset: '0', pointerEvents: 'none', overflow: 'hidden', userSelect: 'none',
-                fontFamily: 'Arial, Helvetica, sans-serif',
-            } as CSSStyleDeclaration);
+            this.raiz.style.position = 'absolute';
+            this.raiz.style.inset = '0';
+            this.raiz.style.pointerEvents = 'none';
+            this.raiz.style.overflow = 'hidden';
             host.appendChild(this.raiz);
 
+            this.desktopPanel = document.createElement('div');
+            this.desktopPanel.className = 'desktop-panel-container';
+            this.raiz.appendChild(this.desktopPanel);
+
             this.fundo = document.createElement('div');
-            Object.assign(this.fundo.style, {
-                position: 'absolute', left: `${this.painelX}px`, top: `${H0 - (this.painelY + this.painelAltura)}px`,
-                width: `${this.painelLargura}px`, height: `${this.painelAltura}px`, background: 'rgba(0,0,0,0.70)', display: 'none',
-            } as CSSStyleDeclaration);
-            this.raiz.appendChild(this.fundo);
+            this.fundo.className = 'painel-fundo-desktop glass-panel';
+            this.fundo.style.left = `${this.painelX}px`;
+            this.fundo.style.top = `${H0 - (this.painelY + this.painelAltura)}px`;
+            this.fundo.style.width = `${this.painelLargura}px`;
+            this.fundo.style.height = `${this.painelAltura}px`;
+            // A prioridade display: none estava aqui e foi apagada!
+            this.desktopPanel.appendChild(this.fundo);
 
             this.registrarAbas();
             const btnX = 15, btnY = 920, btnW = 180, btnH = 42, espaco = 50;
             this.abas.forEach((aba, i) => this.botoesMenu.push(new Botao(this.raiz, aba.tituloBotao, false, btnX, btnY - i * espaco, btnW, btnH)));
-            this.btnPiloto = new Botao(this.raiz, 'Piloto Auto: OFF', false, btnX, btnY - this.abas.length * espaco, btnW, btnH);
+            this.btnPiloto = new Botao(this.raiz, 'piloto auto: off', false, btnX, btnY - this.abas.length * espaco, btnW, btnH);
         }
     }
 
@@ -258,7 +255,7 @@ export class PainelConfig {
         } else {
             const startY = this.painelY + this.painelAltura - 40;
             this.abas[index].campos.forEach((p, i) => {
-                this.itens.push(new ItemArrastavel(this.raiz, p, false, this.painelX + 25, startY - i * 26, this.painelLargura - 50, 22));
+                this.itens.push(new ItemArrastavel(this.desktopPanel, p, false, this.painelX + 25, startY - i * 26, this.painelLargura - 50, 22));
             });
         }
     }
@@ -294,11 +291,12 @@ export class PainelConfig {
                         }
                     } else {
                         if (this.abertoDesktop && this.abaAtiva === i) {
-                            this.abertoDesktop = false; this.abaAtiva = -1;
-                            this.itens.forEach((it) => it.remover()); this.itens = [];
+                            this.abertoDesktop = false; 
+                            this.abaAtiva = -1;
                             this.itemArrastando = null;
                         } else {
-                            this.abertoDesktop = true; this.abaAtiva = i;
+                            this.abertoDesktop = true; 
+                            this.abaAtiva = i;
                             this.carregarItensAba(i);
                         }
                     }
@@ -318,23 +316,29 @@ export class PainelConfig {
     }
 
     render() {
-        this.btnPiloto.desenhar('Piloto Auto: ' + (this.config.pilotoAutomaticoOn ? 'ON' : 'OFF'));
+        this.btnPiloto.desenhar('piloto auto: ' + (this.config.pilotoAutomaticoOn ? 'on' : 'off'));
         
         if (this.isMobile) {
             const visivel = TouchHUD.configMode;
-            this.raiz.style.opacity = visivel ? '1' : '0';
-            this.colMenu.style.pointerEvents = visivel ? 'auto' : 'none';
-            this.colSliders.style.pointerEvents = visivel ? 'auto' : 'none';
+            if (visivel) this.raiz.classList.add('open');
+            else this.raiz.classList.remove('open');
             
             this.botoesMenu.forEach((b, i) => {
-                b.el.style.background = (i === this.abaAtiva) ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.7)';
+                if (i === this.abaAtiva) b.el.classList.add('active-tab');
+                else b.el.classList.remove('active-tab');
                 b.desenhar(this.abas[i].tituloBotao);
             });
             if (visivel) this.itens.forEach((it) => it.desenhar());
         } else {
-            this.fundo.style.display = this.abertoDesktop ? 'block' : 'none';
-            this.abas.forEach((a, i) => this.botoesMenu[i].desenhar(a.tituloBotao));
-            if (this.abertoDesktop) this.itens.forEach((it) => it.desenhar());
+            if (this.abertoDesktop) this.desktopPanel.classList.add('open');
+            else this.desktopPanel.classList.remove('open');
+
+            this.abas.forEach((a, i) => {
+                if (this.abertoDesktop && i === this.abaAtiva) this.botoesMenu[i].el.classList.add('active-tab');
+                else this.botoesMenu[i].el.classList.remove('active-tab');
+                this.botoesMenu[i].desenhar(a.tituloBotao);
+            });
+            this.itens.forEach((it) => it.desenhar());
         }
     }
 
