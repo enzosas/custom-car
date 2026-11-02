@@ -94,7 +94,6 @@ export class Jogo {
 
     // UI
     private hud: HTMLDivElement;
-    private dropOverlay: HTMLDivElement | null = null;
     private fps = { t: 0, n: 0, v: 0 };
     private camOffsetX = 0;
     private camOffsetY = 0;
@@ -106,7 +105,6 @@ export class Jogo {
     private estadoCarroGLB = JSON.parse(JSON.stringify(CONFIG_CARRO_GLB));
     private historicoFreioMao: number[] = [];
     private freioMaoPressionadoAnterior = false;
-    private removerDragAndDrop: () => void = () => { };
 
     constructor(private canvas: HTMLCanvasElement, private hostUI: HTMLElement) {
         this.renderizador = new Renderer(canvas, this.uniforms);
@@ -179,8 +177,6 @@ export class Jogo {
             });
             this.modeloGLBCache = modelo;
         }, undefined, () => { console.log('carro.glb não encontrado em /public.'); });
-
-        this.configurarDragAndDrop();
 
         // Efeitos
         this.rastroMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.matRastro);
@@ -298,49 +294,22 @@ export class Jogo {
         this.modeloCarroAtual.position.y = (-this.bboxOriginalCarro.min.y * fatorEscala) + offsetBase + this.config.carro.dimensoes.alturachao;
     }
 
-    private configurarDragAndDrop() {
-        this.dropOverlay = document.createElement('div');
-        Object.assign(this.dropOverlay.style, {
-            position: 'fixed', inset: '0', background: 'rgba(0, 0, 0, 0.45)', border: '3px dashed #ffffff',
-            display: 'none', justifyContent: 'center', alignItems: 'center', color: '#ffffff',
-            fontSize: '24px', fontFamily: 'monospace', zIndex: '9999', pointerEvents: 'none',
-        } as CSSStyleDeclaration);
-        this.dropOverlay.textContent = 'Solte o ficheiro .glb do carro aqui';
-        document.body.appendChild(this.dropOverlay);
+    public async carregarModeloGLBLocal(arquivo: File) {
+        try {
+            const buffer = await arquivo.arrayBuffer();
+            const loader = new GLTFLoader();
+            const gltf = await loader.parseAsync(buffer, '');
+            this.modeloGLBCache = gltf.scene;
 
-        let dragCounter = 0;
-
-        const tratarDragEnter = (e: DragEvent) => { e.preventDefault(); dragCounter++; if (this.dropOverlay) this.dropOverlay.style.display = 'flex'; };
-        const tratarDragOver = (e: DragEvent) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; };
-        const tratarDragLeave = (e: DragEvent) => { e.preventDefault(); dragCounter--; if (dragCounter <= 0) { dragCounter = 0; if (this.dropOverlay) this.dropOverlay.style.display = 'none'; } };
-        const tratarDrop = async (e: DragEvent) => {
-            e.preventDefault();
-            dragCounter = 0;
-            if (this.dropOverlay) this.dropOverlay.style.display = 'none';
-            const arquivos = e.dataTransfer?.files;
-            if (!arquivos || arquivos.length === 0) return;
-            const arquivo = arquivos[0];
-            if (!arquivo.name.toLowerCase().endsWith('.glb')) { alert('Apenas ficheiros no formato .glb são suportados!'); return; }
-
-            try {
-                const buffer = await arquivo.arrayBuffer();
-                const loader = new GLTFLoader();
-                const gltf = await loader.parseAsync(buffer, '');
-                this.modeloGLBCache = gltf.scene;
-                if (!this.modoCarroGLB) {
-                    this.alternarModoCarro();
-                }
-                this.aplicarNovoModeloCarro(gltf.scene);
-            } catch (err) { alert('Erro ao carregar o modelo .glb.'); }
-        };
-
-        window.addEventListener('dragenter', tratarDragEnter); window.addEventListener('dragover', tratarDragOver);
-        window.addEventListener('dragleave', tratarDragLeave); window.addEventListener('drop', tratarDrop);
-        this.removerDragAndDrop = () => {
-            window.removeEventListener('dragenter', tratarDragEnter); window.removeEventListener('dragover', tratarDragOver);
-            window.removeEventListener('dragleave', tratarDragLeave); window.removeEventListener('drop', tratarDrop);
-            this.dropOverlay?.remove();
-        };
+            if (!this.modoCarroGLB) {
+                this.alternarModoCarro();
+            }
+            this.aplicarNovoModeloCarro(gltf.scene);
+            console.log(`Modelo ${arquivo.name} importado com sucesso!`);
+        } catch (err) {
+            console.error('Falha ao processar o ficheiro .glb:', err);
+            alert('Erro ao carregar o modelo .glb.');
+        }
     }
 
     private aplicarMudancasDoPainel() {
@@ -614,7 +583,6 @@ export class Jogo {
         this.descartado = true;
         this.rodando = false;
         cancelAnimationFrame(this.rafId);
-        this.removerDragAndDrop();
         Entrada.parar();
         TouchHUD.parar();
         this.painel.dispose();
