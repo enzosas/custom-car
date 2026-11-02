@@ -1,6 +1,6 @@
 // materialPrincipal.ts — materiais do jogo (shader principal, rastro, profundidade, partículas).
 import * as THREE from 'three';
-import { GAME_CONFIG } from './config';
+import { GAME_CONFIG } from '../core/config';
 import {
     vertexPrincipal, fragmentPrincipal, vertexProfundidade, fragmentProfundidade,
     vertexParticula, fragmentParticula,

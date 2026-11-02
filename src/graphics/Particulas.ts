@@ -1,7 +1,7 @@
 // Particulas.ts — port de Particulas.h: fumaça de drift e pedaços de grama (billboards).
 
 import { type V3, mix } from './Mat4';
-import { randGlobal } from './Random';
+import { randGlobal } from '../core/Random';
 
 export enum TipoParticula { P_FUMACA, P_GRAMA }
 

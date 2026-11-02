@@ -1,12 +1,12 @@
 // Grama.ts — port de Grama.h: tufos de grama (3 cones inclinados) instanciados sobre o terreno.
 
-import { GAME_CONFIG } from './config';
+import { GAME_CONFIG } from '../core/config';
 import { Terreno } from './Terreno';
 import { Estrada } from './Estrada';
-import { Mt19937, uniformReal } from './Random';
-import { Mat4, X_AXIS, Y_AXIS, Z_AXIS, type V3, radians } from './Mat4';
+import { Mt19937, uniformReal } from '../core/Random';
+import { Mat4, X_AXIS, Y_AXIS, Z_AXIS, type V3, radians } from '../graphics/Mat4';
 import { criarDistanciaPista } from './Floresta';
-import type { Malha } from './Veiculo';
+import type { Malha } from '../entities/Veiculo';
 
 /** adicionarConeGeometria(): cone inclinado (tronco de cone) com rotação em X e Z */
 function adicionarCone(pos: number[], col: number[], idx: number[], offsetBase: V3,

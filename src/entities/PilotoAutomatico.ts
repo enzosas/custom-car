@@ -1,9 +1,9 @@
 // PilotoAutomatico.ts — port de PilotoAutomatico.h (pure pursuit + perfil de frenagem antecipada).
 
-import { GAME_CONFIG } from './config';
-import { clamp } from './Mat4';
+import { GAME_CONFIG } from '../core/config';
+import { clamp } from '../graphics/Mat4';
 import type { Veiculo } from './Veiculo';
-import type { Estrada } from './Estrada';
+import type { Estrada } from '../world/Estrada';
 
 type V2 = { x: number; y: number };
 const xz = (v: { x: number; z: number }): V2 => ({ x: v.x, y: v.z });

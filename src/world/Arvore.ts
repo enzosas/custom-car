@@ -1,9 +1,9 @@
 // Arvore.ts — port de Arvore.h: geometria das árvores em 4 níveis de detalhe (LOD).
 // Devolve apenas malhas (positions/colors/indices); o desenho instanciado é feito em Jogo.ts.
 
-import { GAME_CONFIG } from './config';
-import { radians } from './Mat4';
-import type { Malha } from './Veiculo';
+import { GAME_CONFIG } from '../core/config';
+import { radians } from '../graphics/Mat4';
+import type { Malha } from '../entities/Veiculo';
 
 export enum NivelLOD { LOD_0_NORMAL = 0, LOD_1_TRES_SEGMENTOS = 1, LOD_2_CONE_UNICO = 2, LOD_3_BILLBOARD = 3 }
 
