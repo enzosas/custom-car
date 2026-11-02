@@ -1,4 +1,4 @@
-// Jogo.ts   motor do jogo
+// Jogo.ts - motor do jogo
 import * as THREE from 'three';
 import { GAME_CONFIG } from './config';
 import { Terreno } from './Terreno';
@@ -18,7 +18,11 @@ import { TouchHUD } from './TouchHUDController';
 import { Mat4 } from './Mat4';
 import { randGlobal, sementeAleatoria } from './Random';
 import {
-    criarUniformsCompartilhados, criarMaterialPrincipal, criarMaterialRastro, criarMaterialParticula, atualizarLuz,
+    criarUniformsCompartilhados,
+    criarMaterialPrincipal,
+    criarMaterialRastro,
+    criarMaterialParticula,
+    atualizarLuz,
 } from './materialPrincipal';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
@@ -36,10 +40,110 @@ function geometriaDe(m: Malha): THREE.BufferGeometry {
 
 const mudou = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
 
+// Presets iniciais de fábrica
+const CONFIG_CARRO_PADRAO = {
+    dimensoes: {
+        largura: 10.0,
+        comprimento: 20.0,
+        alturachao: 2.0,
+        alturaporta: 4.5,
+        alturaparabrisa: 4.5,
+        comprimentorodas: 13.0,
+        largurarodas: 10.0,
+        offsetchassi: 0.0,
+        taxaBaseCockpitTras: 0.1,
+        taxaTopoCockpitTras: 0.2,
+        taxaTopoCockpitFrente: 0.6,
+        taxaBaseCockpitFrente: 0.7,
+    },
+    rodas: {
+        raio: 2.0,
+        largura: 1.5,
+        segmentos: 16,
+    },
+    fisica: {
+        aceleracao: 0.03,
+        aceleracaoFreio: 0.04,
+        velmax: 7.0,
+        velmaxre: -2.0,
+        anguloVolanteMax: 0.7,
+        velocidadeGiro: 0.03,
+        taxaLerpVolante: 0.035,
+        aderenciaFreioDeMao: 0.015,
+        aderenciaPista: 0.03,
+        atritoEscalar: 0.9999,
+        atritoLinear: 0.001,
+        arrastoQuadratico: 0.0,
+        suspensaoRigidez: 150.0,
+        suspensaoAmortecimento: 8.0,
+        suspensaoInclinacaoMax: 8.0,
+        velReferenciaGiro: 0.5,
+        taxaRecuperacaoGrip: 0.02,
+        forcaPulo: 70.0,
+        gravidade: 150.0,
+        fatorPuloMinimo: 0.55,
+        tempoCargaPulo: 0.6,
+        compressaoPulo: 1.4,
+        reacaoPouso: 1.0,
+        limiarDecolagem: 10.0,
+        limiarDriftRastro: 0.9,
+    }
+};
+
+const CONFIG_CARRO_GLB = {
+    dimensoes: {
+        largura: 10.0,
+        comprimento: 40.0,
+        alturachao: 2.0,
+        alturaporta: 4.5,
+        alturaparabrisa: 4.5,
+        comprimentorodas: 26.5,
+        largurarodas: 16.5,
+        offsetchassi: 0.100,
+        taxaBaseCockpitTras: 0.1,
+        taxaTopoCockpitTras: 0.2,
+        taxaTopoCockpitFrente: 0.6,
+        taxaBaseCockpitFrente: 0.7,
+    },
+    rodas: {
+        raio: 3.2,
+        largura: 1.5,
+        segmentos: 16,
+    },
+    fisica: {
+        aceleracao: 0.03,
+        aceleracaoFreio: 0.04,
+        velmax: 7.0,
+        velmaxre: -2.0,
+        anguloVolanteMax: 0.7,
+        velocidadeGiro: 0.03,
+        taxaLerpVolante: 0.035,
+        aderenciaFreioDeMao: 0.015,
+        aderenciaPista: 0.03,
+        atritoEscalar: 0.9999,
+        atritoLinear: 0.001,
+        arrastoQuadratico: 0.0,
+        suspensaoRigidez: 80.0,
+        suspensaoAmortecimento: 8.0,
+        suspensaoInclinacaoMax: 8.0,
+        velReferenciaGiro: 0.5,
+        taxaRecuperacaoGrip: 0.02,
+        forcaPulo: 70.0,
+        gravidade: 150.0,
+        fatorPuloMinimo: 0.55,
+        tempoCargaPulo: 0.6,
+        compressaoPulo: 1.4,
+        reacaoPouso: 1.0,
+        limiarDecolagem: 10.0,
+        limiarDriftRastro: 0.9,
+    }
+};
+
 export class Jogo {
     readonly config = GAME_CONFIG;
     private configAnterior: any = JSON.parse(JSON.stringify(GAME_CONFIG));
-    // three
+
+    // Three.js
     private renderer: THREE.WebGLRenderer;
     private scene = new THREE.Scene();
     private camera = new THREE.PerspectiveCamera(60, 1, NEAR_PLANE, FAR_PLANE);
@@ -48,7 +152,8 @@ export class Jogo {
     private matRastro = criarMaterialRastro(this.uniforms);
     private matParticula = criarMaterialParticula();
     private sombra: ShadowMap;
-    // subsistemas
+
+    // Subsistemas
     private terreno = new Terreno();
     private estrada = new Estrada();
     private veiculo = new Veiculo();
@@ -59,11 +164,14 @@ export class Jogo {
     private pilotoAuto = new PilotoAutomatico();
     private cam = new CameraJogo();
     private painel: PainelConfig;
-    // malhas
+
+    // Malhas e nós
     private terrenoMesh!: THREE.Mesh;
     private terrenoPos!: THREE.BufferAttribute;
     private estradaMesh: THREE.Mesh | null = null;
-    private chassiMesh!: THREE.Mesh;
+    private chassiMesh!: THREE.Group;
+    private modeloCarroAtual: THREE.Object3D | null = null;
+    private bboxOriginalCarro = new THREE.Box3();
     private rodasMesh: THREE.Mesh[] = [];
     private florestaMeshes: THREE.InstancedMesh[][] = [[], [], [], []];
     private florestaAttrs: THREE.InstancedBufferAttribute[] = [];
@@ -77,7 +185,8 @@ export class Jogo {
     private rastroBuf = { pos: new Float32Array(0), cor: new Float32Array(0) };
     private particulasMesh!: THREE.Mesh;
     private particulasBuf = { pos: new Float32Array(0), cor: new Float32Array(0) };
-    // estado do main.cpp
+
+    // Estado geral
     private wireframe = false;
     private estavaDerrapandoAnterior = false;
     private shiftAnterior = false;
@@ -92,32 +201,65 @@ export class Jogo {
     private rodando = false;
     private descartado = false;
     private hud: HTMLDivElement;
-    
+    private dropOverlay: HTMLDivElement | null = null;
+
     private fps = { t: 0, n: 0, v: 0 };
-    // NOVAS VARIAVEIS DE CAMERA
+
+    // Deslocamento da câmara
     private camOffsetX = 0;
     private camOffsetY = 0;
+
+    // Alternância de modelos e persistência individual
+    private modoCarroGLB = false;
+    private modeloGLBCache: THREE.Group | null = null;
+    private malhaChassiProcedural: THREE.Mesh | null = null;
+
+    // Slots de estado em tempo de execução para cada carro (não perde alterações)
+    private estadoCarroVermelho = JSON.parse(JSON.stringify(CONFIG_CARRO_PADRAO));
+    private estadoCarroGLB = JSON.parse(JSON.stringify(CONFIG_CARRO_GLB));
+
+    // Histórico para acionamento do travão de mão (10x em 5s)
+    private historicoFreioMao: number[] = [];
+    private freioMaoPressionadoAnterior = false;
+
+    // Limpeza de ouvintes Drag & Drop
+    private removerDragAndDrop: () => void = () => { };
 
     constructor(private canvas: HTMLCanvasElement, private hostUI: HTMLElement) {
         this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         this.renderer.setClearColor(new THREE.Color().setRGB(0.8, 0.85, 0.9, THREE.SRGBColorSpace), 1);
         this.scene.matrixWorldAutoUpdate = true;
+
         this.sombra = new ShadowMap(this.uniforms);
         this.painel = new PainelConfig(hostUI, this.config);
+
         this.hud = document.createElement('div');
         Object.assign(this.hud.style, {
-            position: 'absolute', right: '10px', top: '8px', color: '#000', font: '12px/1.5 monospace',
-            textAlign: 'right', pointerEvents: 'none', whiteSpace: 'pre', userSelect: 'none',
+            position: 'absolute',
+            right: '10px',
+            top: '8px',
+            color: '#000',
+            font: '12px/1.5 monospace',
+            textAlign: 'right',
+            pointerEvents: 'none',
+            whiteSpace: 'pre',
+            userSelect: 'none',
         } as CSSStyleDeclaration);
         hostUI.appendChild(this.hud);
+
         Entrada.iniciar(canvas);
         this.redimensionar();
         window.addEventListener('resize', this.redimensionar);
     }
 
     async iniciar(urlTerreno = './terreno.raw') {
+        // Preserva a referência de memória dos objetos internos da config
+        Object.assign(this.config.carro.dimensoes, this.estadoCarroVermelho.dimensoes);
+        Object.assign(this.config.carro.rodas, this.estadoCarroVermelho.rodas);
+        Object.assign(this.config.carro.fisica, this.estadoCarroVermelho.fisica);
 
+        // Luzes para suportar MeshStandardMaterial em modelos GLTF
         const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
         this.scene.add(ambientLight);
 
@@ -125,7 +267,7 @@ export class Jogo {
         const l = this.config.luz.parametros;
         dirLight.position.set(l.dirX, l.dirY, l.dirZ).normalize().multiplyScalar(500);
         this.scene.add(dirLight);
-        
+
         const resp = await fetch(urlTerreno);
         if (this.descartado) return;
         if (!resp.ok) throw new Error(`${urlTerreno} não encontrado (coloque terreno.raw em /public)`);
@@ -133,10 +275,15 @@ export class Jogo {
         if (this.descartado) return;
         this.terreno.carregarRaw(buffer);
         this.veiculo.init();
-        
+
         const pos = this.terreno.gerarPosicoes();
         const cores = new Float32Array(pos.length);
-        for (let i = 0; i < pos.length; i += 3) { cores[i] = COR_GRAMA[0]; cores[i + 1] = COR_GRAMA[1]; cores[i + 2] = COR_GRAMA[2]; }
+        for (let i = 0; i < pos.length; i += 3) {
+            cores[i] = COR_GRAMA[0];
+            cores[i + 1] = COR_GRAMA[1];
+            cores[i + 2] = COR_GRAMA[2];
+        }
+
         const gt = new THREE.BufferGeometry();
         this.terrenoPos = new THREE.BufferAttribute(pos, 3);
         this.terrenoPos.setUsage(THREE.DynamicDrawUsage);
@@ -146,59 +293,20 @@ export class Jogo {
         this.terrenoMesh = new THREE.Mesh(gt, this.matOpaco);
         this.terrenoMesh.frustumCulled = false;
         this.scene.add(this.terrenoMesh);
-        const loader = new GLTFLoader();
-        const gltf = await loader.loadAsync('./carro.glb');
-        const modelo = gltf.scene;
 
-        // 1. Calcula a dimensão original
-        const bbox = new THREE.Box3().setFromObject(modelo);
-        const size = new THREE.Vector3();
-        bbox.getSize(size);
-
-        // 2. Fator de escala baseado no comprimento configurado
-        const comprimentoAlvo = this.config.carro.dimensoes.comprimento * 2; // 20
-        const dimMaiorOriginal = Math.max(size.z, size.x);
-        const fatorEscala = dimMaiorOriginal > 0 ? (comprimentoAlvo / dimMaiorOriginal) : 1;
-
-        modelo.scale.setScalar(fatorEscala);
-
-        // Centraliza a geometria interna em relação ao ponto de pivô (0, 0, 0)
-        const center = new THREE.Vector3();
-        bbox.getCenter(center);
-        modelo.position.x = -center.x * fatorEscala;
-        modelo.position.z = -center.z * fatorEscala;
-
-        // 2. AJUSTE VERTICAL (Y):
-        // Alinha o centro das rodas do modelo com a altura do eixo físico do jogo.
-        // Se o modelo ficar ligeiramente acima ou abaixo do chão, ajuste este número (-1.5, -2.0, etc.)
-        const offsetVertical = -1.8;
-        modelo.position.y = (-bbox.min.y * fatorEscala) + offsetVertical;
-
-        modelo.matrixAutoUpdate = true;
-        modelo.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh) {
-                const mesh = child as THREE.Mesh;
-                mesh.frustumCulled = false;
-
-                if (mesh.material) {
-                    const mat = mesh.material as THREE.MeshStandardMaterial;
-                    if (mat.map) {
-                        mat.map.colorSpace = THREE.SRGBColorSpace;
-                    }
-                }
-            }
-        });
-
-        // 3. Grupo intermediário que recebe a matriz do motor de física
-        const chassiPivot = new THREE.Group();
-        chassiPivot.matrixAutoUpdate = false;
-        chassiPivot.frustumCulled = false;
-        chassiPivot.add(modelo);
-
-        this.chassiMesh = chassiPivot;
+        // Grupo pivô principal do chassi
+        this.chassiMesh = new THREE.Group();
+        this.chassiMesh.matrixAutoUpdate = false;
+        this.chassiMesh.frustumCulled = false;
         this.scene.add(this.chassiMesh);
 
-        // 4. Rodas procedurais
+        // Chassi procedural inicial
+        this.malhaChassiProcedural = new THREE.Mesh(geometriaDe(this.veiculo.gerarMalhaChassi()), this.matOpaco);
+        this.malhaChassiProcedural.frustumCulled = false;
+        this.malhaChassiProcedural.matrixAutoUpdate = true;
+        this.chassiMesh.add(this.malhaChassiProcedural);
+
+        // Rodas procedurais
         const geoRoda = geometriaDe(this.veiculo.gerarMalhaRoda());
         this.rodasMesh = [];
         for (let i = 0; i < 4; ++i) {
@@ -209,9 +317,38 @@ export class Jogo {
             this.scene.add(m);
         }
 
+        // Pré-carregamento do ficheiro GLB padrão
+        const loader = new GLTFLoader();
+        loader.load(
+            './carro.glb',
+            (gltf) => {
+                const modelo = gltf.scene;
+                modelo.traverse((child) => {
+                    if ((child as THREE.Mesh).isMesh) {
+                        const mesh = child as THREE.Mesh;
+                        mesh.frustumCulled = false;
+                        if (mesh.material) {
+                            const mat = mesh.material as THREE.MeshStandardMaterial;
+                            if (mat.map) {
+                                mat.map.colorSpace = THREE.SRGBColorSpace;
+                            }
+                        }
+                    }
+                });
+                this.modeloGLBCache = modelo;
+            },
+            undefined,
+            () => {
+                console.log('carro.glb não encontrado em /public. Pode arrastar um ficheiro .glb para testar.');
+            }
+        );
+
+        this.configurarDragAndDrop();
+
         this.construirFlorestaGeometrias();
         this.gramaMesh = new THREE.InstancedMesh(geometriaDe(gerarGeometriaTufo(this.config)), this.matOpaco, 1);
-        this.gramaMesh.frustumCulled = false; this.gramaMesh.count = 0;
+        this.gramaMesh.frustumCulled = false;
+        this.gramaMesh.count = 0;
         this.scene.add(this.gramaMesh);
 
         const gr = new THREE.BufferGeometry();
@@ -228,11 +365,244 @@ export class Jogo {
         if (Number.isFinite(s) && s > 0) this.seedPista = s >>> 0;
         this.regenerarPista(this.seedPista === 0, true);
         this.configAnterior = JSON.parse(JSON.stringify(this.config));
-        
-        console.log('Q: alternar wireframe\nR: nova pista\nSHIFT: segure para agachar e solte para pular');
+
+        console.log('X: alternar carro | 10x Travão de Mão em 5s: alternar carro | Q: wireframe | R: pista');
         this.lastTime = performance.now() / 1000;
         this.rodando = true;
         this.rafId = requestAnimationFrame(this.loop);
+    }
+
+    /**
+     * Alterna entre o modo clássico e o modelo GLB salvando e restaurando as configs modificadas de cada um
+     */
+    private alternarModoCarro() {
+        // 1. SALVA o estado em tempo de execução do carro atual antes de sair
+        if (this.modoCarroGLB) {
+            this.estadoCarroGLB = JSON.parse(JSON.stringify(this.config.carro));
+        } else {
+            this.estadoCarroVermelho = JSON.parse(JSON.stringify(this.config.carro));
+        }
+
+        // 2. Alterna a flag
+        this.modoCarroGLB = !this.modoCarroGLB;
+        const estadoDestino = this.modoCarroGLB ? this.estadoCarroGLB : this.estadoCarroVermelho;
+
+        // 3. RESTAURA as configurações mantendo as referências para não desconectar os sliders
+        Object.assign(this.config.carro.dimensoes, estadoDestino.dimensoes);
+        Object.assign(this.config.carro.rodas, estadoDestino.rodas);
+        Object.assign(this.config.carro.fisica, estadoDestino.fisica);
+
+        this.veiculo.reconstruirGeometria();
+
+        // 4. Atualiza as malhas das rodas procedurais
+        const geoRoda = geometriaDe(this.veiculo.gerarMalhaRoda());
+        this.rodasMesh[0]?.geometry.dispose();
+        this.rodasMesh.forEach((m) => {
+            m.geometry = geoRoda;
+        });
+        this.rastroPneus.setLargura(this.config.carro.rodas.largura);
+
+        // 5. Alterna as malhas filhas no grupo pivô
+        while (this.chassiMesh.children.length > 0) {
+            this.chassiMesh.remove(this.chassiMesh.children[0]);
+        }
+
+        if (this.modoCarroGLB) {
+            if (this.modeloGLBCache) {
+                this.aplicarNovoModeloCarro(this.modeloGLBCache);
+            } else {
+                console.warn('Modelo GLB ainda não está em cache.');
+            }
+        } else {
+            this.modeloCarroAtual = null;
+            if (this.malhaChassiProcedural) {
+                this.malhaChassiProcedural.geometry.dispose();
+                this.malhaChassiProcedural.geometry = geometriaDe(this.veiculo.gerarMalhaChassi());
+                this.chassiMesh.add(this.malhaChassiProcedural);
+            }
+        }
+
+        // 6. Recarrega os valores visíveis na aba atual do painel se o método existir
+        if (typeof (this.painel as any).recarregarAbaAtual === 'function') {
+            (this.painel as any).recarregarAbaAtual();
+        }
+
+        this.configAnterior = JSON.parse(JSON.stringify(this.config));
+        console.log(`Modo alternado para: ${this.modoCarroGLB ? 'Carro GLB' : 'Carrinho Vermelho Padrão'}`);
+    }
+
+    /**
+     * Instancia o modelo GLB no pivô e aplica as transformações iniciais
+     */
+    public aplicarNovoModeloCarro(modelo: THREE.Object3D) {
+        while (this.chassiMesh.children.length > 0) {
+            this.chassiMesh.remove(this.chassiMesh.children[0]);
+        }
+
+        modelo.position.set(0, 0, 0);
+        modelo.rotation.set(0, 0, 0);
+        modelo.scale.set(1, 1, 1);
+        modelo.updateMatrixWorld(true);
+
+        this.bboxOriginalCarro = new THREE.Box3().setFromObject(modelo);
+        this.modeloCarroAtual = modelo;
+
+        modelo.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+                const mesh = child as THREE.Mesh;
+                mesh.frustumCulled = false;
+                if (mesh.material) {
+                    const mat = mesh.material as THREE.MeshStandardMaterial;
+                    if (mat.map) {
+                        mat.map.colorSpace = THREE.SRGBColorSpace;
+                    }
+                }
+            }
+        });
+
+        modelo.matrixAutoUpdate = true;
+        this.chassiMesh.add(modelo);
+        this.atualizarTransformacaoModeloCarro();
+    }
+
+    /**
+     * Aplica escala baseada no comprimento e posicionamento vertical em Y usando alturachao
+     */
+    private atualizarTransformacaoModeloCarro() {
+        if (!this.modeloCarroAtual || this.bboxOriginalCarro.isEmpty()) return;
+
+        const size = new THREE.Vector3();
+        this.bboxOriginalCarro.getSize(size);
+
+        // 1. Escala proporcional pelo comprimento da configuração
+        const comprimentoAlvo = this.config.carro.dimensoes.comprimento;
+        const dimMaiorOriginal = Math.max(size.z, size.x);
+        const fatorEscala = dimMaiorOriginal > 0 ? comprimentoAlvo / dimMaiorOriginal : 1;
+
+        this.modeloCarroAtual.scale.setScalar(fatorEscala);
+
+        // 2. Centralização X e Z
+        const center = new THREE.Vector3();
+        this.bboxOriginalCarro.getCenter(center);
+        this.modeloCarroAtual.position.x = -center.x * fatorEscala;
+        this.modeloCarroAtual.position.z = -center.z * fatorEscala;
+
+        // 3. Posicionamento vertical com interferência direta de alturachao
+        const offsetBase = -3.8;
+        this.modeloCarroAtual.position.y = (-this.bboxOriginalCarro.min.y * fatorEscala) + offsetBase + this.config.carro.dimensoes.alturachao;
+    }
+
+    /**
+     * Configura ouvintes para carregar ficheiros .glb via Drag & Drop na janela
+     */
+    private configurarDragAndDrop() {
+        this.dropOverlay = document.createElement('div');
+        Object.assign(this.dropOverlay.style, {
+            position: 'fixed',
+            inset: '0',
+            background: 'rgba(0, 0, 0, 0.45)',
+            border: '3px dashed #ffffff',
+            display: 'none',
+            justifyContent: 'center',
+            alignItems: 'center',
+            color: '#ffffff',
+            fontSize: '24px',
+            fontFamily: 'monospace',
+            zIndex: '9999',
+            pointerEvents: 'none',
+        } as CSSStyleDeclaration);
+        this.dropOverlay.textContent = 'Solte o ficheiro .glb do carro aqui';
+        document.body.appendChild(this.dropOverlay);
+
+        let dragCounter = 0;
+
+        const tratarDragEnter = (e: DragEvent) => {
+            e.preventDefault();
+            dragCounter++;
+            if (this.dropOverlay) this.dropOverlay.style.display = 'flex';
+        };
+
+        const tratarDragOver = (e: DragEvent) => {
+            e.preventDefault();
+            if (e.dataTransfer) {
+                e.dataTransfer.dropEffect = 'copy';
+            }
+        };
+
+        const tratarDragLeave = (e: DragEvent) => {
+            e.preventDefault();
+            dragCounter--;
+            if (dragCounter <= 0) {
+                dragCounter = 0;
+                if (this.dropOverlay) this.dropOverlay.style.display = 'none';
+            }
+        };
+
+        const tratarDrop = async (e: DragEvent) => {
+            e.preventDefault();
+            dragCounter = 0;
+            if (this.dropOverlay) this.dropOverlay.style.display = 'none';
+
+            const arquivos = e.dataTransfer?.files;
+            if (!arquivos || arquivos.length === 0) return;
+
+            const arquivo = arquivos[0];
+            if (!arquivo.name.toLowerCase().endsWith('.glb')) {
+                alert('Apenas ficheiros no formato .glb são suportados!');
+                return;
+            }
+
+            try {
+                const buffer = await arquivo.arrayBuffer();
+                const loader = new GLTFLoader();
+                const gltf = await loader.parseAsync(buffer, '');
+
+                this.modeloGLBCache = gltf.scene;
+
+                // Se o usuário soltou um GLB enquanto estava no modo vermelho, salva o vermelho antes
+                if (!this.modoCarroGLB) {
+                    this.estadoCarroVermelho = JSON.parse(JSON.stringify(this.config.carro));
+                    this.modoCarroGLB = true;
+
+                    // Restaura as configurações do GLB (incluindo alterações anteriores que foram salvas)
+                    Object.assign(this.config.carro.dimensoes, this.estadoCarroGLB.dimensoes);
+                    Object.assign(this.config.carro.rodas, this.estadoCarroGLB.rodas);
+                    Object.assign(this.config.carro.fisica, this.estadoCarroGLB.fisica);
+
+                    this.veiculo.reconstruirGeometria();
+                    const geoRoda = geometriaDe(this.veiculo.gerarMalhaRoda());
+                    this.rodasMesh[0]?.geometry.dispose();
+                    this.rodasMesh.forEach((m) => {
+                        m.geometry = geoRoda;
+                    });
+                    this.rastroPneus.setLargura(this.config.carro.rodas.largura);
+                    this.configAnterior = JSON.parse(JSON.stringify(this.config));
+
+                    if (typeof (this.painel as any).recarregarAbaAtual === 'function') {
+                        (this.painel as any).recarregarAbaAtual();
+                    }
+                }
+
+                this.aplicarNovoModeloCarro(gltf.scene);
+                console.log(`Modelo ${arquivo.name} importado com sucesso!`);
+            } catch (err) {
+                console.error('Falha ao processar o ficheiro .glb:', err);
+                alert('Erro ao carregar o modelo .glb.');
+            }
+        };
+
+        window.addEventListener('dragenter', tratarDragEnter);
+        window.addEventListener('dragover', tratarDragOver);
+        window.addEventListener('dragleave', tratarDragLeave);
+        window.addEventListener('drop', tratarDrop);
+
+        this.removerDragAndDrop = () => {
+            window.removeEventListener('dragenter', tratarDragEnter);
+            window.removeEventListener('dragover', tratarDragOver);
+            window.removeEventListener('dragleave', tratarDragLeave);
+            window.removeEventListener('drop', tratarDrop);
+            this.dropOverlay?.remove();
+        };
     }
 
     private construirFlorestaGeometrias() {
@@ -244,7 +614,8 @@ export class Jogo {
                 let mesh = this.florestaMeshes[k][j];
                 if (!mesh) {
                     mesh = new THREE.InstancedMesh(geo, this.matOpaco, 1);
-                    mesh.frustumCulled = false; mesh.count = 0;
+                    mesh.frustumCulled = false;
+                    mesh.count = 0;
                     this.florestaMeshes[k][j] = mesh;
                     this.scene.add(mesh);
                 } else {
@@ -265,7 +636,8 @@ export class Jogo {
             const arr = new Float32Array(this.florestaCap * 16);
             const attr = new THREE.InstancedBufferAttribute(arr, 16);
             attr.setUsage(THREE.DynamicDrawUsage);
-            this.florestaLotes.push(arr); this.florestaAttrs.push(attr);
+            this.florestaLotes.push(arr);
+            this.florestaAttrs.push(attr);
             for (const mesh of this.florestaMeshes[k]) mesh.instanceMatrix = attr;
         }
     }
@@ -334,24 +706,37 @@ export class Jogo {
     };
 
     private aplicarMudancasDoPainel() {
-        const c = this.config, a = this.configAnterior;
+        const c = this.config,
+            a = this.configAnterior;
         const carroMudou = mudou(c.carro.dimensoes, a.carro.dimensoes) || mudou(c.carro.rodas, a.carro.rodas);
         const arvoreMudou = mudou(c.arvore.arvores, a.arvore.arvores);
         const gramaMudou = mudou(c.grama.grama, a.grama.grama);
-        const terrenoMudou = mudou(c.terreno.parametros, a.terreno.parametros) || mudou(c.estrada.estrada, a.estrada.estrada);
+        const terrenoMudou =
+            mudou(c.terreno.parametros, a.terreno.parametros) || mudou(c.estrada.estrada, a.estrada.estrada);
 
         if (carroMudou) {
             this.veiculo.reconstruirGeometria();
-            if (this.chassiMesh instanceof THREE.Mesh) {
-                this.chassiMesh.geometry.dispose();
-                this.chassiMesh.geometry = geometriaDe(this.veiculo.gerarMalhaChassi());
+
+            // Atualiza escala e altura Y do GLB em tempo real caso esteja ativo
+            if (this.modeloCarroAtual) {
+                this.atualizarTransformacaoModeloCarro();
+            } else if (this.malhaChassiProcedural) {
+                this.malhaChassiProcedural.geometry.dispose();
+                this.malhaChassiProcedural.geometry = geometriaDe(this.veiculo.gerarMalhaChassi());
             }
+
             const geoRoda = geometriaDe(this.veiculo.gerarMalhaRoda());
             this.rodasMesh[0]?.geometry.dispose();
-            this.rodasMesh.forEach((m) => { m.geometry = geoRoda; });
+            this.rodasMesh.forEach((m) => {
+                m.geometry = geoRoda;
+            });
             this.rastroPneus.setLargura(c.carro.rodas.largura);
         }
-        if (arvoreMudou) { this.construirFlorestaGeometrias(); this.vegetacaoPendente = true; }
+
+        if (arvoreMudou) {
+            this.construirFlorestaGeometrias();
+            this.vegetacaoPendente = true;
+        }
         if (gramaMudou) {
             this.gramaMesh.geometry.dispose();
             this.gramaMesh.geometry = geometriaDe(gerarGeometriaTufo(this.config));
@@ -382,14 +767,17 @@ export class Jogo {
     }
 
     private redimensionar = () => {
-        const w = window.innerWidth, h = window.innerHeight;
+        const w = window.innerWidth,
+            h = window.innerHeight;
         this.renderer.setSize(w, h, false);
-        this.canvas.style.width = '100%'; this.canvas.style.height = '100%';
+        this.canvas.style.width = '100%';
+        this.canvas.style.height = '100%';
         this.camera.aspect = w / Math.max(1, h);
         this.camera.updateProjectionMatrix();
     };
 
-    private aplicarMatriz(obj: THREE.Object3D, m: Mat4) {
+    private aplicarMatriz(obj: THREE.Object3D | undefined, m: Mat4) {
+        if (!obj) return;
         obj.matrix.fromArray(m.m);
         obj.matrixWorldNeedsUpdate = true;
     }
@@ -398,14 +786,19 @@ export class Jogo {
         const cont = this.floresta.selecionar(ref, sombraPass, this.florestaLotes);
         for (let k = 0; k < 4; ++k) {
             this.florestaAttrs[k].needsUpdate = true;
-            for (const mesh of this.florestaMeshes[k]) { mesh.count = cont[k]; mesh.visible = cont[k] > 0; }
+            for (const mesh of this.florestaMeshes[k]) {
+                mesh.count = cont[k];
+                mesh.visible = cont[k] > 0;
+            }
         }
     }
 
     private renderizarSombra(lightDir: THREE.Vector3, p: { x: number; y: number; z: number }) {
         const alvo = new THREE.Vector3(p.x, p.y, p.z);
         this.sombra.atualizarMatriz(lightDir, alvo);
-        this.gramaMesh.visible = false; this.rastroMesh.visible = false; this.particulasMesh.visible = false;
+        this.gramaMesh.visible = false;
+        this.rastroMesh.visible = false;
+        this.particulasMesh.visible = false;
         this.atualizarFloresta(p, true);
         const r = this.renderer;
         r.setRenderTarget(this.sombra.alvo);
@@ -415,7 +808,9 @@ export class Jogo {
         this.scene.overrideMaterial = null;
         r.setRenderTarget(null);
         this.uniforms.uShadowOn.value = 1;
-        this.gramaMesh.visible = true; this.rastroMesh.visible = true; this.particulasMesh.visible = true;
+        this.gramaMesh.visible = true;
+        this.rastroMesh.visible = true;
+        this.particulasMesh.visible = true;
     }
 
     private atualizarDinamicos(camRight: THREE.Vector3, camUp: THREE.Vector3) {
@@ -426,14 +821,23 @@ export class Jogo {
         this.rastroMesh.visible = nR > 0;
 
         const nP = this.particulas.gerarGeometria(
-            { x: camRight.x, y: camRight.y, z: camRight.z }, { x: camUp.x, y: camUp.y, z: camUp.z }, this.particulasBuf);
+            { x: camRight.x, y: camRight.y, z: camRight.z },
+            { x: camUp.x, y: camUp.y, z: camUp.z },
+            this.particulasBuf
+        );
         this.sincronizarBuffer(this.particulasMesh.geometry, 'position', this.particulasBuf.pos, 3, nP);
         this.sincronizarBuffer(this.particulasMesh.geometry, 'aCor', this.particulasBuf.cor, 4, nP);
         this.particulasMesh.geometry.setDrawRange(0, nP);
         this.particulasMesh.visible = nP > 0;
     }
 
-    private sincronizarBuffer(geo: THREE.BufferGeometry, nome: string, arr: Float32Array, itemSize: number, _n: number) {
+    private sincronizarBuffer(
+        geo: THREE.BufferGeometry,
+        nome: string,
+        arr: Float32Array,
+        itemSize: number,
+        _n: number
+    ) {
         const atual = geo.getAttribute(nome) as THREE.BufferAttribute | undefined;
         if (!atual || atual.array !== arr) {
             const a = new THREE.BufferAttribute(arr, itemSize);
@@ -448,8 +852,28 @@ export class Jogo {
         if (!this.rodando) return;
         this.rafId = requestAnimationFrame(this.loop);
         this.trabalhoPesadoNoFrame = false;
-        const w = this.canvas.clientWidth || window.innerWidth, h = this.canvas.clientHeight || window.innerHeight;
+        const w = this.canvas.clientWidth || window.innerWidth,
+            h = this.canvas.clientHeight || window.innerHeight;
         if (w === 0 || h === 0) return;
+
+        // Gatilho 1: Tecla X
+        if (Entrada.teclaUmaVez('KeyX')) {
+            this.alternarModoCarro();
+        }
+
+        // Gatilho 2: 10 toques no travão de mão em até 5 segundos
+        const freioMaoAtivo = Entrada.tecla('Space') || TouchHUD.controls.drift;
+        if (freioMaoAtivo && !this.freioMaoPressionadoAnterior) {
+            const agora = performance.now() / 1000;
+            this.historicoFreioMao.push(agora);
+            this.historicoFreioMao = this.historicoFreioMao.filter((t) => agora - t <= 5.0);
+
+            if (this.historicoFreioMao.length >= 10) {
+                this.historicoFreioMao = [];
+                this.alternarModoCarro();
+            }
+        }
+        this.freioMaoPressionadoAnterior = freioMaoAtivo;
 
         if (Entrada.teclaUmaVez('KeyQ')) {
             this.wireframe = !this.wireframe;
@@ -458,12 +882,15 @@ export class Jogo {
         }
         if (Entrada.teclaUmaVez('KeyR')) this.regenerarPista(true, true);
 
-        let throttle = 0, steer = 0;
-        let handbrake = Entrada.tecla('Space') || TouchHUD.controls.drift;
+        let throttle = 0,
+            steer = 0;
+        let handbrake = freioMaoAtivo;
 
         if (this.config.pilotoAutomaticoOn) {
             const cmd = this.pilotoAuto.atualizar(this.veiculo, this.estrada);
-            throttle = cmd.throttle; steer = cmd.steer; handbrake = cmd.handbrake;
+            throttle = cmd.throttle;
+            steer = cmd.steer;
+            handbrake = cmd.handbrake;
         } else {
             if (Entrada.tecla('KeyW') || TouchHUD.controls.forward) throttle += 1;
             if (Entrada.tecla('KeyS') || TouchHUD.controls.backward) throttle -= 1;
@@ -487,8 +914,20 @@ export class Jogo {
         this.rastroPneus.update(deltaTime);
         if (this.veiculo.estaDerrapando()) {
             const intensidade = this.veiculo.getIntensidadeDrift();
-            this.rastroPneus.adicionarPontoRoda(0, this.veiculo.getPosContatoRoda(2), this.veiculo.getEixoLateralRoda(2), intensidade, this.estavaDerrapandoAnterior);
-            this.rastroPneus.adicionarPontoRoda(1, this.veiculo.getPosContatoRoda(3), this.veiculo.getEixoLateralRoda(3), intensidade, this.estavaDerrapandoAnterior);
+            this.rastroPneus.adicionarPontoRoda(
+                0,
+                this.veiculo.getPosContatoRoda(2),
+                this.veiculo.getEixoLateralRoda(2),
+                intensidade,
+                this.estavaDerrapandoAnterior
+            );
+            this.rastroPneus.adicionarPontoRoda(
+                1,
+                this.veiculo.getPosContatoRoda(3),
+                this.veiculo.getEixoLateralRoda(3),
+                intensidade,
+                this.estavaDerrapandoAnterior
+            );
             this.estavaDerrapandoAnterior = true;
         } else {
             this.estavaDerrapandoAnterior = false;
@@ -512,7 +951,8 @@ export class Jogo {
             for (let r = 0; r < 4; ++r) {
                 const posRoda = this.veiculo.getPosContatoRoda(r);
                 if (!this.estrada.estaNoAsfalto(posRoda.x, posRoda.z)) {
-                    if ((randGlobal.next() % 100) < chance) this.particulas.emitirGrama(posRoda, this.veiculo.getVelocidadeVetor(), 1);
+                    if ((randGlobal.next() % 100) < chance)
+                        this.particulas.emitirGrama(posRoda, this.veiculo.getVelocidadeVetor(), 1);
                 }
             }
         }
@@ -520,44 +960,50 @@ export class Jogo {
         if (this.painel.update()) this.aplicarMudancasDoPainel();
         this.processarTrabalhoPendente();
 
-        // ---- ATUALIZAÇÃO E DESLOCAMENTO CINEMATOGRÁFICO DA CÂMARA ----
+        // Câmara
         const mouseSobreUI = this.painel.isMouseSobreUI();
         const scroll = Entrada.consumirScroll();
         if (scroll !== 0) this.cam.processarScroll(scroll);
-        
-        this.cam.update(deltaTime,
-            { x: Entrada.mouseX, y: Entrada.mouseY, direito: Entrada.direito, esquerdo: Entrada.esquerdo },
-            this.veiculo.getPosicao(), this.veiculo.getYawAngle(), this.veiculo.getAlturaTeto(),
-            throttle, this.veiculo.getVelocidade(), mouseSobreUI, this.alturaSuperficie);
 
-        const cp = this.cam.cameraPos, ct = this.cam.cameraTarget, up = this.cam.getUpRef();
+        this.cam.update(
+            deltaTime,
+            { x: Entrada.mouseX, y: Entrada.mouseY, direito: Entrada.direito, esquerdo: Entrada.esquerdo },
+            this.veiculo.getPosicao(),
+            this.veiculo.getYawAngle(),
+            this.veiculo.getAlturaTeto(),
+            throttle,
+            this.veiculo.getVelocidade(),
+            mouseSobreUI,
+            this.alturaSuperficie
+        );
+
+        const cp = this.cam.cameraPos,
+            ct = this.cam.cameraTarget,
+            up = this.cam.getUpRef();
         this.camera.position.set(cp.x, cp.y, cp.z);
         this.camera.up.set(up.x, up.y, up.z);
         this.camera.lookAt(ct.x, ct.y, ct.z);
         this.camera.updateMatrixWorld(true);
-        
-        // Aplica o View Offset suavemente quando o configMode é ativado
+
         let targetOffX = 0;
         let targetOffY = 0;
-        
-        // Ativa o offset se estiver no modo config mobile ou se a UI estiver visível
+
         if (TouchHUD.configMode) {
-            if (w > h) targetOffX = -w * 0.3125; // 0.3125 centraliza perfeitamente no terço direito
+            if (w > h) targetOffX = -w * 0.3125;
             else targetOffY = -h * 0.25;
         }
-        
+
         const dt60 = deltaTime * 60;
         const lerpCam = 1 - Math.pow(1 - 0.08, Math.min(dt60, 3.0));
         this.camOffsetX += (targetOffX - this.camOffsetX) * lerpCam;
         this.camOffsetY += (targetOffY - this.camOffsetY) * lerpCam;
-        
+
         if (Math.abs(this.camOffsetX) > 1 || Math.abs(this.camOffsetY) > 1) {
             this.camera.setViewOffset(w, h, this.camOffsetX, this.camOffsetY, w, h);
         } else {
             this.camera.clearViewOffset();
         }
         this.camera.updateProjectionMatrix();
-        // --------------------------------------------------------------
 
         atualizarLuz(this.uniforms);
         const l = this.config.luz.parametros;
@@ -586,10 +1032,15 @@ export class Jogo {
 
     private atualizarHud(agora: number) {
         this.fps.n++;
-        if (agora - this.fps.t >= 0.5) { this.fps.v = this.fps.n / (agora - this.fps.t); this.fps.n = 0; this.fps.t = agora; }
+        if (agora - this.fps.t >= 0.5) {
+            this.fps.v = this.fps.n / (agora - this.fps.t);
+            this.fps.n = 0;
+            this.fps.t = agora;
+        }
         this.hud.textContent =
             `Q: wireframe  R: nova pista  SHIFT: agachar/pular  ESPAÇO: freio de mão\n` +
-            `botão direito: câmara  roda: zoom\nseed ${this.seedPista}  ${this.fps.v.toFixed(0)} fps`;
+            `botão direito: câmara  roda: zoom  X: alternar carro (${this.modoCarroGLB ? 'GLB' : 'Vermelho'})\n` +
+            `seed ${this.seedPista}  ${this.fps.v.toFixed(0)} fps`;
     }
 
     dispose() {
@@ -598,13 +1049,18 @@ export class Jogo {
         this.rodando = false;
         cancelAnimationFrame(this.rafId);
         window.removeEventListener('resize', this.redimensionar);
+        this.removerDragAndDrop();
         Entrada.parar();
         TouchHUD.parar();
         this.painel.dispose();
         this.hud.remove();
         this.sombra.dispose();
-        this.scene.traverse((o: any) => { if (o.geometry) o.geometry.dispose(); });
-        this.matOpaco.dispose(); this.matRastro.dispose(); this.matParticula.dispose();
+        this.scene.traverse((o: any) => {
+            if (o.geometry) o.geometry.dispose();
+        });
+        this.matOpaco.dispose();
+        this.matRastro.dispose();
+        this.matParticula.dispose();
         this.renderer.dispose();
     }
 }

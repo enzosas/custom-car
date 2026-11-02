@@ -461,7 +461,8 @@ export class Veiculo {
 
     /** matriz do chassi (com compressão e inclinação inercial) */
     matrizChassi(): Mat4 {
-        let m = this.modelMatrix.translate(v3(0, -this.deslocamentoCarroceria(), 0));
+        const offZ = this.config.carro.dimensoes.offsetchassi ?? 0;
+        let m = this.modelMatrix.translate(v3(0, -this.deslocamentoCarroceria(), offZ));
         m = m.rotate(radians(this.suspensao.chassiPitchAngle), X_AXIS);
         m = m.rotate(radians(this.suspensao.chassiRollAngle), Z_AXIS);
         return m;
