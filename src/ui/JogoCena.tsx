@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Jogo } from '../core/Jogo';
+import { Jogo } from '@/core/Jogo';
 import { TouchHUD } from './TouchHUDController';
 import './TouchHUD.css';
 

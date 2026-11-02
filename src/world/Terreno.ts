@@ -3,11 +3,11 @@
 // Guarda o heightmap subamostrado e expõe geração de malha, altura em coordenadas
 // de mundo (interpolação baricêntrica) e aplainamento sobre um caminho.
 
-import { GAME_CONFIG } from '../core/config';
+import { GAME_CONFIG } from '@/core/config';
 
 export type Vec3 = { x: number; y: number; z: number };
 
-import { smoothstep } from '../graphics/Mat4';
+import { smoothstep } from '@/graphics/Mat4';
 
 export class Terreno {
     larguraOriginal = 1024;

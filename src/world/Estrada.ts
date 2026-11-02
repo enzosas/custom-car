@@ -1,10 +1,10 @@
 // Estrada.ts — port de Estrada.h (pista procedural em spline Catmull-Rom).
 // A malha é devolvida como arrays tipados; quem desenha é o Jogo.ts.
 
-import { GAME_CONFIG } from '../core/config';
+import { GAME_CONFIG } from '@/core/config';
 import { Terreno, type Vec3 } from './Terreno';
-import { Mt19937, uniformReal, sementeAleatoria } from '../core/Random';
-import { clamp, smoothstep, mix } from '../graphics/Mat4';
+import { Mt19937, uniformReal, sementeAleatoria } from '@/core/Random';
+import { clamp, smoothstep, mix } from '@/graphics/Mat4';
 
 export interface MalhaPista {
     positions: Float32Array;

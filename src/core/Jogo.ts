@@ -1,21 +1,21 @@
 // Jogo.ts - motor do jogo
 import * as THREE from 'three';
 import { GAME_CONFIG } from './config';
-import { Terreno } from '../world/Terreno';
-import { Estrada } from '../world/Estrada';
-import { Veiculo, type Malha } from '../entities/Veiculo';
-import { CameraJogo } from '../entities/Camera';
-import { Floresta } from '../world/Floresta';
-import { Grama, gerarGeometriaTufo } from '../world/Grama';
-import { gerarGeometriasArvore } from '../world/Arvore';
-import { RastroPneu } from '../graphics/RastroPneu';
-import { SistemaParticulas } from '../graphics/Particulas';
-import { PilotoAutomatico } from '../entities/PilotoAutomatico';
-import { PainelConfig } from '../ui/PainelConfig';
-import { ShadowMap } from '../graphics/ShadowMap';
+import { Terreno } from '@/world/Terreno';
+import { Estrada } from '@/world/Estrada';
+import { Veiculo, type Malha } from '@/entities/Veiculo';
+import { CameraJogo } from '@/entities/Camera';
+import { Floresta } from '@/world/Floresta';
+import { Grama, gerarGeometriaTufo } from '@/world/Grama';
+import { gerarGeometriasArvore } from '@/world/Arvore';
+import { RastroPneu } from '@/graphics/RastroPneu';
+import { SistemaParticulas } from '@/graphics/Particulas';
+import { PilotoAutomatico } from '@/entities/PilotoAutomatico';
+import { PainelConfig } from '@/ui/PainelConfig';
+import { ShadowMap } from '@/graphics/ShadowMap';
 import { Entrada } from './Input';
-import { TouchHUD } from '../ui/TouchHUDController';
-import { Mat4 } from '../graphics/Mat4';
+import { TouchHUD } from '@/ui/TouchHUDController';
+import { Mat4 } from '@/graphics/Mat4';
 import { randGlobal, sementeAleatoria } from './Random';
 import {
     criarUniformsCompartilhados,
@@ -23,7 +23,7 @@ import {
     criarMaterialRastro,
     criarMaterialParticula,
     atualizarLuz,
-} from '../graphics/materialPrincipal';
+} from '@/graphics/materialPrincipal';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const NEAR_PLANE = 0.3;

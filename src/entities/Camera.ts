@@ -1,8 +1,8 @@
 // Camera.ts — port de Camera.h (câmera orbital de perseguição com amortecimento).
 // Só a lógica; o Jogo.ts aplica posição/alvo na câmera do three.
 
-import { GAME_CONFIG } from '../core/config';
-import { type V3, clamp, mix, radians } from '../graphics/Mat4';
+import { GAME_CONFIG } from '@/core/config';
+import { type V3, clamp, mix, radians } from '@/graphics/Mat4';
 
 export interface EntradaMouse { x: number; y: number; direito: boolean; esquerdo: boolean }
 

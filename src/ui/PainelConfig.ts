@@ -1,7 +1,7 @@
-import { GAME_CONFIG } from '../core/config';
+import { GAME_CONFIG } from '@/core/config';
 import { ABAS, type CampoDef } from './painelCampos';
-import { Entrada } from '../core/Input';
-import { mix } from '../graphics/Mat4';
+import { Entrada } from '@/core/Input';
+import { mix } from '@/graphics/Mat4';
 import { TouchHUD } from './TouchHUDController';
 import { isMobileDevice } from './JogoCena';
 

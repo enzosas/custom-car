@@ -1,10 +1,10 @@
 // Floresta.ts — port de Floresta.h: distribuição das árvores (Perlin + rejeição pela pista) e seleção de LOD.
 
-import { GAME_CONFIG } from '../core/config';
+import { GAME_CONFIG } from '@/core/config';
 import { Terreno } from './Terreno';
 import { Estrada } from './Estrada';
-import { Mt19937, uniformReal, shuffle } from '../core/Random';
-import { Mat4, X_AXIS, Y_AXIS, Z_AXIS, clamp, radians } from '../graphics/Mat4';
+import { Mt19937, uniformReal, shuffle } from '@/core/Random';
+import { Mat4, X_AXIS, Y_AXIS, Z_AXIS, clamp, radians } from '@/graphics/Mat4';
 import { NivelLOD } from './Arvore';
 
 export class PerlinNoise2D {

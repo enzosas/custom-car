@@ -1,8 +1,8 @@
 // Veiculo.ts — port de Veiculo.h + Cylinder.h (física arcade, suspensão, pulo, malhas do carro).
 // Toda a física roda em unidades "por frame a 60 Hz" (dt60), exatamente como no C++.
 
-import { GAME_CONFIG } from '../core/config';
-import { Mat4, type V3, X_AXIS, Y_AXIS, Z_AXIS, clamp, mix, sign, radians, degrees } from '../graphics/Mat4';
+import { GAME_CONFIG } from '@/core/config';
+import { Mat4, type V3, X_AXIS, Y_AXIS, Z_AXIS, clamp, mix, sign, radians, degrees } from '@/graphics/Mat4';
 
 export type Malha = { positions: Float32Array; colors: Float32Array; indices: Uint32Array };
 export type AlturaFn = (x: number, z: number) => number;
