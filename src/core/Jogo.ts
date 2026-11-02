@@ -1,32 +1,26 @@
 // Jogo.ts - motor do jogo
 import * as THREE from 'three';
 import { GAME_CONFIG } from './config';
-import { Terreno } from '@/world/Terreno';
-import { Estrada } from '@/world/Estrada';
 import { Veiculo, type Malha } from '@/entities/Veiculo';
 import { CameraJogo } from '@/entities/Camera';
-import { Floresta } from '@/world/Floresta';
-import { Grama, gerarGeometriaTufo } from '@/world/Grama';
-import { gerarGeometriasArvore } from '@/world/Arvore';
-import { RastroPneu } from '@/graphics/RastroPneu';
-import { SistemaParticulas } from '@/graphics/Particulas';
 import { PilotoAutomatico } from '@/entities/PilotoAutomatico';
 import { PainelConfig } from '@/ui/PainelConfig';
 import { Entrada } from './Input';
 import { TouchHUD } from '@/ui/TouchHUDController';
 import { Mat4 } from '@/graphics/Mat4';
 import { Renderer } from '@/graphics/Renderer';
-import { randGlobal, sementeAleatoria } from './Random';
+import { WorldBuilder } from '@/world/WorldBuilder';
+import { RastroPneu } from '@/graphics/RastroPneu';
+import { SistemaParticulas } from '@/graphics/Particulas';
+import { randGlobal, sementeAleatoria } from '@/core/Random';
 import {
     criarUniformsCompartilhados,
-    criarMaterialPrincipal,
+    criarMaterialPrincipal, // Adicionado import
     criarMaterialRastro,
     criarMaterialParticula,
     atualizarLuz,
 } from '@/graphics/materialPrincipal';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-
-const COR_GRAMA = [0.34, 0.7, 0.56];
 
 function geometriaDe(m: Malha): THREE.BufferGeometry {
     const g = new THREE.BufferGeometry();
@@ -38,7 +32,6 @@ function geometriaDe(m: Malha): THREE.BufferGeometry {
 
 const mudou = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
 
-// Presets iniciais de fábrica
 const CONFIG_CARRO_PADRAO = {
     dimensoes: { largura: 10.0, comprimento: 20.0, alturachao: 2.0, alturaporta: 4.5, alturaparabrisa: 4.5, comprimentorodas: 13.0, largurarodas: 10.0, offsetchassi: 0.0, taxaBaseCockpitTras: 0.1, taxaTopoCockpitTras: 0.2, taxaTopoCockpitFrente: 0.6, taxaBaseCockpitFrente: 0.7 },
     rodas: { raio: 2.0, largura: 1.5, segmentos: 16 },
@@ -55,41 +48,31 @@ export class Jogo {
     readonly config = GAME_CONFIG;
     private configAnterior: any = JSON.parse(JSON.stringify(GAME_CONFIG));
 
-    // Three.js
+    // Core Systems
     private renderizador: Renderer;
+    private world: WorldBuilder;
     private uniforms = criarUniformsCompartilhados();
-    private matOpaco = criarMaterialPrincipal(this.uniforms);
-    private matRastro = criarMaterialRastro(this.uniforms);
-    private matParticula = criarMaterialParticula();
 
-    // Subsistemas
-    private terreno = new Terreno();
-    private estrada = new Estrada();
+    // Entidades
     private veiculo = new Veiculo();
-    private floresta = new Floresta();
-    private grama = new Grama();
-    private rastroPneus = new RastroPneu(GAME_CONFIG.carro.rodas.largura, 8.0);
-    private particulas = new SistemaParticulas();
     private pilotoAuto = new PilotoAutomatico();
     private cam = new CameraJogo();
     private painel: PainelConfig;
 
-    // Malhas e nós
-    private terrenoMesh!: THREE.Mesh;
-    private terrenoPos!: THREE.BufferAttribute;
-    private estradaMesh: THREE.Mesh | null = null;
+    // Efeitos Gráficos e Materiais
+    private matOpaco = criarMaterialPrincipal(this.uniforms); // Reintroduzido para as malhas do carro
+    private matRastro = criarMaterialRastro(this.uniforms);
+    private matParticula = criarMaterialParticula();
+    private rastroPneus = new RastroPneu(GAME_CONFIG.carro.rodas.largura, 8.0);
+    private particulas = new SistemaParticulas();
+
+    // Malhas do Carro e Efeitos
     private chassiMesh!: THREE.Group;
     private modeloCarroAtual: THREE.Object3D | null = null;
     private bboxOriginalCarro = new THREE.Box3();
     private rodasMesh: THREE.Mesh[] = [];
-    private florestaMeshes: THREE.InstancedMesh[][] = [[], [], [], []];
-    private florestaAttrs: THREE.InstancedBufferAttribute[] = [];
-    private florestaLotes: Float32Array[] = [];
-    private florestaCap = 0;
-    private gramaMesh!: THREE.InstancedMesh;
-    private gramaAttr!: THREE.InstancedBufferAttribute;
-    private gramaLote = new Float32Array(0);
-    private gramaCap = 0;
+    private malhaChassiProcedural: THREE.Mesh | null = null;
+
     private rastroMesh!: THREE.Mesh;
     private rastroBuf = { pos: new Float32Array(0), cor: new Float32Array(0) };
     private particulasMesh!: THREE.Mesh;
@@ -100,7 +83,6 @@ export class Jogo {
     private estavaDerrapandoAnterior = false;
     private shiftAnterior = false;
     private carregandoPulo = false;
-    private seedPista = 0;
     private terrenoDefasado = false;
     private vegetacaoPendente = false;
     private trabalhoPesadoNoFrame = false;
@@ -109,16 +91,17 @@ export class Jogo {
     private rafId = 0;
     private rodando = false;
     private descartado = false;
+
+    // UI
     private hud: HTMLDivElement;
     private dropOverlay: HTMLDivElement | null = null;
-
     private fps = { t: 0, n: 0, v: 0 };
     private camOffsetX = 0;
     private camOffsetY = 0;
 
+    // Estado do Carro
     private modoCarroGLB = false;
     private modeloGLBCache: THREE.Group | null = null;
-    private malhaChassiProcedural: THREE.Mesh | null = null;
     private estadoCarroVermelho = JSON.parse(JSON.stringify(CONFIG_CARRO_PADRAO));
     private estadoCarroGLB = JSON.parse(JSON.stringify(CONFIG_CARRO_GLB));
     private historicoFreioMao: number[] = [];
@@ -127,6 +110,7 @@ export class Jogo {
 
     constructor(private canvas: HTMLCanvasElement, private hostUI: HTMLElement) {
         this.renderizador = new Renderer(canvas, this.uniforms);
+        this.world = new WorldBuilder(this.uniforms, this.config);
         this.painel = new PainelConfig(hostUI, this.config);
 
         this.hud = document.createElement('div');
@@ -145,33 +129,21 @@ export class Jogo {
         Object.assign(this.config.carro.rodas, this.estadoCarroVermelho.rodas);
         Object.assign(this.config.carro.fisica, this.estadoCarroVermelho.fisica);
 
-        const resp = await fetch(urlTerreno);
-        if (this.descartado) return;
-        if (!resp.ok) throw new Error(`${urlTerreno} não encontrado (coloque terreno.raw em /public)`);
-        const buffer = await resp.arrayBuffer();
-        if (this.descartado) return;
+        const terrenoCarregado = await this.world.carregarTerreno(urlTerreno);
+        if (this.descartado || !terrenoCarregado) return;
 
-        this.terreno.carregarRaw(buffer);
         this.veiculo.init();
 
-        const pos = this.terreno.gerarPosicoes();
-        const cores = new Float32Array(pos.length);
-        for (let i = 0; i < pos.length; i += 3) {
-            cores[i] = COR_GRAMA[0];
-            cores[i + 1] = COR_GRAMA[1];
-            cores[i + 2] = COR_GRAMA[2];
+        // Adicionar malhas do World à cena
+        this.renderizador.scene.add(this.world.terrenoMesh);
+        this.renderizador.scene.add(this.world.gramaMesh);
+        for (let i = 0; i < 4; i++) {
+            for (let j = 0; j < this.world.florestaMeshes[i].length; j++) {
+                if (this.world.florestaMeshes[i][j]) this.renderizador.scene.add(this.world.florestaMeshes[i][j]);
+            }
         }
 
-        const gt = new THREE.BufferGeometry();
-        this.terrenoPos = new THREE.BufferAttribute(pos, 3);
-        this.terrenoPos.setUsage(THREE.DynamicDrawUsage);
-        gt.setAttribute('position', this.terrenoPos);
-        gt.setAttribute('color', new THREE.BufferAttribute(cores, 3));
-        gt.setIndex(new THREE.BufferAttribute(this.terreno.gerarIndices(), 1));
-        this.terrenoMesh = new THREE.Mesh(gt, this.matOpaco);
-        this.terrenoMesh.frustumCulled = false;
-        this.renderizador.scene.add(this.terrenoMesh);
-
+        // Construir Carro
         this.chassiMesh = new THREE.Group();
         this.chassiMesh.matrixAutoUpdate = false;
         this.chassiMesh.frustumCulled = false;
@@ -193,52 +165,60 @@ export class Jogo {
         }
 
         const loader = new GLTFLoader();
-        loader.load(
-            './carro.glb',
-            (gltf) => {
-                const modelo = gltf.scene;
-                modelo.traverse((child) => {
-                    if ((child as THREE.Mesh).isMesh) {
-                        const mesh = child as THREE.Mesh;
-                        mesh.frustumCulled = false;
-                        if (mesh.material) {
-                            const mat = mesh.material as THREE.MeshStandardMaterial;
-                            if (mat.map) mat.map.colorSpace = THREE.SRGBColorSpace;
-                        }
+        loader.load('./carro.glb', (gltf) => {
+            const modelo = gltf.scene;
+            modelo.traverse((child) => {
+                if ((child as THREE.Mesh).isMesh) {
+                    const mesh = child as THREE.Mesh;
+                    mesh.frustumCulled = false;
+                    if (mesh.material) {
+                        const mat = mesh.material as THREE.MeshStandardMaterial;
+                        if (mat.map) mat.map.colorSpace = THREE.SRGBColorSpace;
                     }
-                });
-                this.modeloGLBCache = modelo;
-            },
-            undefined,
-            () => { console.log('carro.glb não encontrado em /public. Pode arrastar um ficheiro .glb para testar.'); }
-        );
+                }
+            });
+            this.modeloGLBCache = modelo;
+        }, undefined, () => { console.log('carro.glb não encontrado em /public.'); });
 
         this.configurarDragAndDrop();
-        this.construirFlorestaGeometrias();
-        this.gramaMesh = new THREE.InstancedMesh(geometriaDe(gerarGeometriaTufo(this.config)), this.matOpaco, 1);
-        this.gramaMesh.frustumCulled = false;
-        this.gramaMesh.count = 0;
-        this.renderizador.scene.add(this.gramaMesh);
 
-        const gr = new THREE.BufferGeometry();
-        this.rastroMesh = new THREE.Mesh(gr, this.matRastro);
+        // Efeitos
+        this.rastroMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.matRastro);
         this.rastroMesh.frustumCulled = false;
         this.renderizador.scene.add(this.rastroMesh);
 
-        const gp = new THREE.BufferGeometry();
-        this.particulasMesh = new THREE.Mesh(gp, this.matParticula);
+        this.particulasMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.matParticula);
         this.particulasMesh.frustumCulled = false;
         this.renderizador.scene.add(this.particulasMesh);
 
         const s = Number(new URLSearchParams(location.search).get('seed'));
-        if (Number.isFinite(s) && s > 0) this.seedPista = s >>> 0;
-        this.regenerarPista(this.seedPista === 0, true);
+        if (Number.isFinite(s) && s > 0) this.world.seedPista = s >>> 0;
+        this.regenerarPista(this.world.seedPista === 0, true);
         this.configAnterior = JSON.parse(JSON.stringify(this.config));
 
-        console.log('X: alternar carro | 10x Travão de Mão em 5s: alternar carro | Q: wireframe | R: pista');
         this.lastTime = performance.now() / 1000;
         this.rodando = true;
         this.rafId = requestAnimationFrame(this.loop);
+    }
+
+    private regenerarPista(novaSeed: boolean, reposicionar: boolean) {
+        this.world.regenerarPista(novaSeed);
+        if (this.world.estradaMesh && !this.renderizador.scene.children.includes(this.world.estradaMesh)) {
+            this.renderizador.scene.add(this.world.estradaMesh);
+        }
+        this.veiculo.invalidarSolo();
+        if (reposicionar) {
+            const curva = this.world.estrada.getPontosCurva();
+            if (curva.length >= 2) {
+                const d = { x: curva[1].x - curva[0].x, y: curva[1].y - curva[0].y, z: curva[1].z - curva[0].z };
+                const l = Math.hypot(d.x, d.y, d.z) || 1;
+                this.veiculo.reposicionarNaPista(curva[0], { x: d.x / l, y: d.y / l, z: d.z / l });
+            }
+        }
+        this.world.regerarVegetacao();
+        this.terrenoDefasado = false;
+        this.vegetacaoPendente = false;
+        this.trabalhoPesadoNoFrame = true;
     }
 
     private alternarModoCarro() {
@@ -268,7 +248,6 @@ export class Jogo {
 
         if (this.modoCarroGLB) {
             if (this.modeloGLBCache) this.aplicarNovoModeloCarro(this.modeloGLBCache);
-            else console.warn('Modelo GLB ainda não está em cache.');
         } else {
             this.modeloCarroAtual = null;
             if (this.malhaChassiProcedural) {
@@ -281,7 +260,6 @@ export class Jogo {
         if (typeof (this.painel as any).recarregarAbaAtual === 'function') {
             (this.painel as any).recarregarAbaAtual();
         }
-
         this.configAnterior = JSON.parse(JSON.stringify(this.config));
     }
 
@@ -297,17 +275,6 @@ export class Jogo {
 
         this.bboxOriginalCarro = new THREE.Box3().setFromObject(modelo);
         this.modeloCarroAtual = modelo;
-
-        modelo.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh) {
-                const mesh = child as THREE.Mesh;
-                mesh.frustumCulled = false;
-                if (mesh.material) {
-                    const mat = mesh.material as THREE.MeshStandardMaterial;
-                    if (mat.map) mat.map.colorSpace = THREE.SRGBColorSpace;
-                }
-            }
-        });
 
         modelo.matrixAutoUpdate = true;
         this.chassiMesh.add(modelo);
@@ -327,7 +294,6 @@ export class Jogo {
         this.bboxOriginalCarro.getCenter(center);
         this.modeloCarroAtual.position.x = -center.x * fatorEscala;
         this.modeloCarroAtual.position.z = -center.z * fatorEscala;
-
         const offsetBase = -3.8;
         this.modeloCarroAtual.position.y = (-this.bboxOriginalCarro.min.y * fatorEscala) + offsetBase + this.config.carro.dimensoes.alturachao;
     }
@@ -362,18 +328,7 @@ export class Jogo {
                 const gltf = await loader.parseAsync(buffer, '');
                 this.modeloGLBCache = gltf.scene;
                 if (!this.modoCarroGLB) {
-                    this.estadoCarroVermelho = JSON.parse(JSON.stringify(this.config.carro));
-                    this.modoCarroGLB = true;
-                    Object.assign(this.config.carro.dimensoes, this.estadoCarroGLB.dimensoes);
-                    Object.assign(this.config.carro.rodas, this.estadoCarroGLB.rodas);
-                    Object.assign(this.config.carro.fisica, this.estadoCarroGLB.fisica);
-                    this.veiculo.reconstruirGeometria();
-                    const geoRoda = geometriaDe(this.veiculo.gerarMalhaRoda());
-                    this.rodasMesh[0]?.geometry.dispose();
-                    this.rodasMesh.forEach((m) => { m.geometry = geoRoda; });
-                    this.rastroPneus.setLargura(this.config.carro.rodas.largura);
-                    this.configAnterior = JSON.parse(JSON.stringify(this.config));
-                    if (typeof (this.painel as any).recarregarAbaAtual === 'function') (this.painel as any).recarregarAbaAtual();
+                    this.alternarModoCarro();
                 }
                 this.aplicarNovoModeloCarro(gltf.scene);
             } catch (err) { alert('Erro ao carregar o modelo .glb.'); }
@@ -387,102 +342,6 @@ export class Jogo {
             this.dropOverlay?.remove();
         };
     }
-
-    private construirFlorestaGeometrias() {
-        const g = gerarGeometriasArvore(this.config);
-        const grupos = [g.lod0, g.lod1, g.lod2, g.lod3];
-        grupos.forEach((malhas, k) => {
-            malhas.forEach((m, j) => {
-                const geo = geometriaDe(m);
-                let mesh = this.florestaMeshes[k][j];
-                if (!mesh) {
-                    mesh = new THREE.InstancedMesh(geo, this.matOpaco, 1);
-                    mesh.frustumCulled = false; mesh.count = 0;
-                    this.florestaMeshes[k][j] = mesh;
-                    this.renderizador.scene.add(mesh);
-                } else {
-                    mesh.geometry.dispose(); mesh.geometry = geo;
-                }
-            });
-        });
-        this.garantirCapacidadeFloresta(Math.max(1, this.config.arvore.arvores.quantidade));
-    }
-
-    private garantirCapacidadeFloresta(qtd: number) {
-        if (qtd <= this.florestaCap && this.florestaAttrs.length === 4) return;
-        this.florestaCap = Math.max(qtd, this.florestaCap);
-        this.florestaLotes = []; this.florestaAttrs = [];
-        for (let k = 0; k < 4; ++k) {
-            const arr = new Float32Array(this.florestaCap * 16);
-            const attr = new THREE.InstancedBufferAttribute(arr, 16);
-            attr.setUsage(THREE.DynamicDrawUsage);
-            this.florestaLotes.push(arr); this.florestaAttrs.push(attr);
-            for (const mesh of this.florestaMeshes[k]) mesh.instanceMatrix = attr;
-        }
-    }
-
-    private garantirCapacidadeGrama(qtd: number) {
-        if (qtd <= this.gramaCap && this.gramaAttr) return;
-        this.gramaCap = Math.max(qtd, this.gramaCap, 1);
-        this.gramaLote = new Float32Array(this.gramaCap * 16);
-        this.gramaAttr = new THREE.InstancedBufferAttribute(this.gramaLote, 16);
-        this.gramaAttr.setUsage(THREE.DynamicDrawUsage);
-        this.gramaMesh.instanceMatrix = this.gramaAttr;
-    }
-
-    private regerarVegetacao() {
-        this.floresta.gerarArvores(this.terreno, this.estrada);
-        this.grama.gerarGrama(this.terreno, this.estrada);
-        this.garantirCapacidadeFloresta(Math.max(1, this.floresta.quantidade));
-        this.garantirCapacidadeGrama(Math.max(1, this.grama.quantidade));
-    }
-
-    private atualizarMalhaTerreno() {
-        (this.terrenoPos.array as Float32Array).set(this.terreno.gerarPosicoes());
-        this.terrenoPos.needsUpdate = true;
-    }
-
-    private atualizarMalhaEstrada(m: { positions: Float32Array; colors: Float32Array; indices: Uint32Array } | null) {
-        if (this.estradaMesh) {
-            this.renderizador.scene.remove(this.estradaMesh);
-            this.estradaMesh.geometry.dispose();
-            this.estradaMesh = null;
-        }
-        if (!m) return;
-        this.estradaMesh = new THREE.Mesh(geometriaDe(m), this.matOpaco);
-        this.estradaMesh.frustumCulled = false;
-        this.renderizador.scene.add(this.estradaMesh);
-    }
-
-    private gerarEstrada() {
-        const malha = this.estrada.gerar(this.terreno, this.seedPista);
-        this.atualizarMalhaTerreno();
-        this.atualizarMalhaEstrada(malha);
-    }
-
-    private regenerarPista(novaSeed: boolean, reposicionar: boolean) {
-        if (novaSeed || this.seedPista === 0) this.seedPista = sementeAleatoria();
-        this.gerarEstrada();
-        this.veiculo.invalidarSolo();
-        if (reposicionar) {
-            const curva = this.estrada.getPontosCurva();
-            if (curva.length >= 2) {
-                const d = { x: curva[1].x - curva[0].x, y: curva[1].y - curva[0].y, z: curva[1].z - curva[0].z };
-                const l = Math.hypot(d.x, d.y, d.z) || 1;
-                this.veiculo.reposicionarNaPista(curva[0], { x: d.x / l, y: d.y / l, z: d.z / l });
-            }
-        }
-        this.regerarVegetacao();
-        this.terrenoDefasado = false;
-        this.vegetacaoPendente = false;
-        this.trabalhoPesadoNoFrame = true;
-    }
-
-    private alturaSuperficie = (x: number, z: number): number => {
-        let h = this.estrada.obterAlturaSuperficie(x, z, this.terreno);
-        if (!this.estrada.estaNoAsfalto(x, z)) h -= this.config.terreno.superficie.offsetprofundidadegrama;
-        return h;
-    };
 
     private aplicarMudancasDoPainel() {
         const c = this.config, a = this.configAnterior;
@@ -505,8 +364,12 @@ export class Jogo {
             this.rastroPneus.setLargura(c.carro.rodas.largura);
         }
 
-        if (arvoreMudou) { this.construirFlorestaGeometrias(); this.vegetacaoPendente = true; }
-        if (gramaMudou) { this.gramaMesh.geometry.dispose(); this.gramaMesh.geometry = geometriaDe(gerarGeometriaTufo(this.config)); this.vegetacaoPendente = true; }
+        if (arvoreMudou) { this.world.construirFlorestaGeometrias(); this.vegetacaoPendente = true; }
+        if (gramaMudou) {
+            this.world.gramaMesh.geometry.dispose();
+            this.world.gramaMesh.geometry = geometriaDe(gerarGeometriaTufo(this.config));
+            this.vegetacaoPendente = true;
+        }
         if (terrenoMudou) this.terrenoDefasado = true;
         this.configAnterior = JSON.parse(JSON.stringify(c));
     }
@@ -516,14 +379,14 @@ export class Jogo {
         const agora = performance.now() / 1000;
         if (this.terrenoDefasado && (!arrastando || agora >= this.proximaRegenTerreno)) {
             const inicio = performance.now() / 1000;
-            this.gerarEstrada();
+            this.world.regenerarPista(false);
             this.veiculo.invalidarSolo();
             const fim = performance.now() / 1000;
             this.proximaRegenTerreno = fim + Math.max(0.15, (fim - inicio) * 3.0);
             this.terrenoDefasado = false; this.vegetacaoPendente = true; this.trabalhoPesadoNoFrame = true;
         }
         if (this.vegetacaoPendente && !arrastando) {
-            this.regerarVegetacao();
+            this.world.regerarVegetacao();
             this.vegetacaoPendente = false; this.trabalhoPesadoNoFrame = true;
         }
     }
@@ -534,34 +397,24 @@ export class Jogo {
         obj.matrixWorldNeedsUpdate = true;
     }
 
-    private atualizarFloresta(ref: { x: number; y: number; z: number }, sombraPass: boolean) {
-        const cont = this.floresta.selecionar(ref, sombraPass, this.florestaLotes);
-        for (let k = 0; k < 4; ++k) {
-            this.florestaAttrs[k].needsUpdate = true;
-            for (const mesh of this.florestaMeshes[k]) {
-                mesh.count = cont[k]; mesh.visible = cont[k] > 0;
-            }
-        }
-    }
-
     private renderizarSombra(lightDir: THREE.Vector3, p: { x: number; y: number; z: number }) {
         const alvo = new THREE.Vector3(p.x, p.y, p.z);
         this.renderizador.sombra.atualizarMatriz(lightDir, alvo);
-        this.gramaMesh.visible = false;
+        this.world.gramaMesh.visible = false;
         this.rastroMesh.visible = false;
         this.particulasMesh.visible = false;
-        this.atualizarFloresta(p, true);
+        this.world.atualizarFlorestaLods(p, true);
 
         const r = this.renderizador.renderer;
         r.setRenderTarget(this.renderizador.sombra.alvo);
         r.clear(true, true, false);
         this.renderizador.scene.overrideMaterial = this.renderizador.sombra.materialProfundidade;
-        r.render(this.renderizador.scene, this.renderizador.camera);
+        this.renderizador.render();
         this.renderizador.scene.overrideMaterial = null;
         r.setRenderTarget(null);
 
         this.uniforms.uShadowOn.value = 1;
-        this.gramaMesh.visible = true;
+        this.world.gramaMesh.visible = true;
         this.rastroMesh.visible = true;
         this.particulasMesh.visible = true;
     }
@@ -615,6 +468,7 @@ export class Jogo {
 
         if (Entrada.teclaUmaVez('KeyQ')) {
             this.wireframe = !this.wireframe;
+            this.world.setWireframe(this.wireframe);
             this.matOpaco.wireframe = this.wireframe;
             this.matRastro.wireframe = this.wireframe;
         }
@@ -624,7 +478,7 @@ export class Jogo {
         let handbrake = freioMaoAtivo;
 
         if (this.config.pilotoAutomaticoOn) {
-            const cmd = this.pilotoAuto.atualizar(this.veiculo, this.estrada);
+            const cmd = this.pilotoAuto.atualizar(this.veiculo, this.world.estrada);
             throttle = cmd.throttle; steer = cmd.steer; handbrake = cmd.handbrake;
         } else {
             if (Entrada.tecla('KeyW') || TouchHUD.controls.forward) throttle += 1;
@@ -644,7 +498,7 @@ export class Jogo {
         this.lastTime = thisTime;
         deltaTime = Math.min(deltaTime, 0.05);
 
-        this.veiculo.update(deltaTime, throttle, steer, handbrake, this.alturaSuperficie);
+        this.veiculo.update(deltaTime, throttle, steer, handbrake, this.world.alturaSuperficie);
         this.rastroPneus.update(deltaTime);
 
         if (this.veiculo.estaDerrapando()) {
@@ -661,7 +515,7 @@ export class Jogo {
             const intensidade = this.veiculo.getIntensidadeDrift();
             for (let r = 2; r < 4; ++r) {
                 const posRoda = this.veiculo.getPosContatoRoda(r);
-                if (this.estrada.estaNoAsfalto(posRoda.x, posRoda.z)) {
+                if (this.world.estrada.estaNoAsfalto(posRoda.x, posRoda.z)) {
                     const qtd = Math.max(1, Math.trunc(intensidade * 8));
                     this.particulas.emitirFumaca(posRoda, this.veiculo.getVelocidadeVetor(), deltaTime, qtd);
                 }
@@ -673,7 +527,7 @@ export class Jogo {
             const chance = Math.trunc(((velCarro - 3.0) / 4.0) * 5.0 + 0.1);
             for (let r = 0; r < 4; ++r) {
                 const posRoda = this.veiculo.getPosContatoRoda(r);
-                if (!this.estrada.estaNoAsfalto(posRoda.x, posRoda.z)) {
+                if (!this.world.estrada.estaNoAsfalto(posRoda.x, posRoda.z)) {
                     if ((randGlobal.next() % 100) < chance)
                         this.particulas.emitirGrama(posRoda, this.veiculo.getVelocidadeVetor(), 1);
                 }
@@ -691,7 +545,7 @@ export class Jogo {
             deltaTime,
             { x: Entrada.mouseX, y: Entrada.mouseY, direito: Entrada.direito, esquerdo: Entrada.esquerdo },
             this.veiculo.getPosicao(), this.veiculo.getYawAngle(), this.veiculo.getAlturaTeto(),
-            throttle, this.veiculo.getVelocidade(), mouseSobreUI, this.alturaSuperficie
+            throttle, this.veiculo.getVelocidade(), mouseSobreUI, this.world.alturaSuperficie
         );
 
         const cp = this.cam.cameraPos, ct = this.cam.cameraTarget, up = this.cam.getUpRef();
@@ -727,10 +581,10 @@ export class Jogo {
 
         this.renderizarSombra(lightDir, this.veiculo.getPosicao());
 
-        this.atualizarFloresta(this.renderizador.camera.position, false);
-        const nG = this.grama.selecionar(this.renderizador.camera.position, false, this.gramaLote);
-        this.gramaAttr.needsUpdate = true;
-        this.gramaMesh.count = nG;
+        this.world.atualizarFlorestaLods(this.renderizador.camera.position, false);
+        const nG = this.world.grama.selecionar(this.renderizador.camera.position, false, this.world.gramaLote);
+        this.world.atualizarGrama();
+        this.world.gramaMesh.count = nG;
 
         const e = this.renderizador.camera.matrixWorld.elements;
         this.atualizarDinamicos(new THREE.Vector3(e[0], e[1], e[2]), new THREE.Vector3(e[4], e[5], e[6]));
@@ -752,7 +606,7 @@ export class Jogo {
         this.hud.textContent =
             `Q: wireframe  R: nova pista  SHIFT: agachar/pular  ESPAÇO: freio de mão\n` +
             `botão direito: câmara  roda: zoom  X: alternar carro (${this.modoCarroGLB ? 'GLB' : 'Vermelho'})\n` +
-            `seed ${this.seedPista}  ${this.fps.v.toFixed(0)} fps`;
+            `seed ${this.world.seedPista}  ${this.fps.v.toFixed(0)} fps`;
     }
 
     dispose() {
@@ -770,6 +624,7 @@ export class Jogo {
             if (o.geometry) o.geometry.dispose();
         });
 
+        this.world.dispose();
         this.matOpaco.dispose();
         this.matRastro.dispose();
         this.matParticula.dispose();
