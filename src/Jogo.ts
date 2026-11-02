@@ -20,6 +20,7 @@ import { randGlobal, sementeAleatoria } from './Random';
 import {
     criarUniformsCompartilhados, criarMaterialPrincipal, criarMaterialRastro, criarMaterialParticula, atualizarLuz,
 } from './materialPrincipal';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const NEAR_PLANE = 0.3;
 const FAR_PLANE = 15000;
@@ -116,6 +117,15 @@ export class Jogo {
     }
 
     async iniciar(urlTerreno = './terreno.raw') {
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+        this.scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
+        const l = this.config.luz.parametros;
+        dirLight.position.set(l.dirX, l.dirY, l.dirZ).normalize().multiplyScalar(500);
+        this.scene.add(dirLight);
+        
         const resp = await fetch(urlTerreno);
         if (this.descartado) return;
         if (!resp.ok) throw new Error(`${urlTerreno} não encontrado (coloque terreno.raw em /public)`);
@@ -136,16 +146,68 @@ export class Jogo {
         this.terrenoMesh = new THREE.Mesh(gt, this.matOpaco);
         this.terrenoMesh.frustumCulled = false;
         this.scene.add(this.terrenoMesh);
+        const loader = new GLTFLoader();
+        const gltf = await loader.loadAsync('./carro.glb');
+        const modelo = gltf.scene;
 
-        this.chassiMesh = new THREE.Mesh(geometriaDe(this.veiculo.gerarMalhaChassi()), this.matOpaco);
+        // 1. Calcula a dimensão original
+        const bbox = new THREE.Box3().setFromObject(modelo);
+        const size = new THREE.Vector3();
+        bbox.getSize(size);
+
+        // 2. Fator de escala baseado no comprimento configurado
+        const comprimentoAlvo = this.config.carro.dimensoes.comprimento * 2; // 20
+        const dimMaiorOriginal = Math.max(size.z, size.x);
+        const fatorEscala = dimMaiorOriginal > 0 ? (comprimentoAlvo / dimMaiorOriginal) : 1;
+
+        modelo.scale.setScalar(fatorEscala);
+
+        // Centraliza a geometria interna em relação ao ponto de pivô (0, 0, 0)
+        const center = new THREE.Vector3();
+        bbox.getCenter(center);
+        modelo.position.x = -center.x * fatorEscala;
+        modelo.position.z = -center.z * fatorEscala;
+
+        // 2. AJUSTE VERTICAL (Y):
+        // Alinha o centro das rodas do modelo com a altura do eixo físico do jogo.
+        // Se o modelo ficar ligeiramente acima ou abaixo do chão, ajuste este número (-1.5, -2.0, etc.)
+        const offsetVertical = -1.8;
+        modelo.position.y = (-bbox.min.y * fatorEscala) + offsetVertical;
+
+        modelo.matrixAutoUpdate = true;
+        modelo.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+                const mesh = child as THREE.Mesh;
+                mesh.frustumCulled = false;
+
+                if (mesh.material) {
+                    const mat = mesh.material as THREE.MeshStandardMaterial;
+                    if (mat.map) {
+                        mat.map.colorSpace = THREE.SRGBColorSpace;
+                    }
+                }
+            }
+        });
+
+        // 3. Grupo intermediário que recebe a matriz do motor de física
+        const chassiPivot = new THREE.Group();
+        chassiPivot.matrixAutoUpdate = false;
+        chassiPivot.frustumCulled = false;
+        chassiPivot.add(modelo);
+
+        this.chassiMesh = chassiPivot;
+        this.scene.add(this.chassiMesh);
+
+        // 4. Rodas procedurais
         const geoRoda = geometriaDe(this.veiculo.gerarMalhaRoda());
+        this.rodasMesh = [];
         for (let i = 0; i < 4; ++i) {
             const m = new THREE.Mesh(geoRoda, this.matOpaco);
-            m.frustumCulled = false; m.matrixAutoUpdate = false;
-            this.rodasMesh.push(m); this.scene.add(m);
+            m.frustumCulled = false;
+            m.matrixAutoUpdate = false;
+            this.rodasMesh.push(m);
+            this.scene.add(m);
         }
-        this.chassiMesh.frustumCulled = false; this.chassiMesh.matrixAutoUpdate = false;
-        this.scene.add(this.chassiMesh);
 
         this.construirFlorestaGeometrias();
         this.gramaMesh = new THREE.InstancedMesh(geometriaDe(gerarGeometriaTufo(this.config)), this.matOpaco, 1);
@@ -280,10 +342,12 @@ export class Jogo {
 
         if (carroMudou) {
             this.veiculo.reconstruirGeometria();
-            this.chassiMesh.geometry.dispose();
-            this.chassiMesh.geometry = geometriaDe(this.veiculo.gerarMalhaChassi());
+            if (this.chassiMesh instanceof THREE.Mesh) {
+                this.chassiMesh.geometry.dispose();
+                this.chassiMesh.geometry = geometriaDe(this.veiculo.gerarMalhaChassi());
+            }
             const geoRoda = geometriaDe(this.veiculo.gerarMalhaRoda());
-            this.rodasMesh[0].geometry.dispose();
+            this.rodasMesh[0]?.geometry.dispose();
             this.rodasMesh.forEach((m) => { m.geometry = geoRoda; });
             this.rastroPneus.setLargura(c.carro.rodas.largura);
         }
