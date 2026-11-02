@@ -203,7 +203,7 @@ const CONFIG_CARRO_GLB = {
         alturaporta: 4.5,
         alturaparabrisa: 4.5,
         comprimentorodas: 26.5,
-        largurarodas: 16.5,
+        largurarodas: 15.9,
         offsetchassi: 0.100,
         taxaBaseCockpitTras: 0.1,
         taxaTopoCockpitTras: 0.2,

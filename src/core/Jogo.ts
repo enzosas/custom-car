@@ -4,9 +4,8 @@ import { GAME_CONFIG } from './config';
 import { Veiculo, type Malha } from '@/entities/Veiculo';
 import { CameraJogo } from '@/entities/Camera';
 import { PilotoAutomatico } from '@/entities/PilotoAutomatico';
-import { PainelConfig } from '@/ui/PainelConfig';
 import { Entrada } from './Input';
-import { TouchHUD } from '@/ui/TouchHUDController';
+import { type ControlesToque, criarControlesToque } from './ControlesToque';
 import { Mat4 } from '@/graphics/Mat4';
 import { Renderer } from '@/graphics/Renderer';
 import { WorldBuilder } from '@/world/WorldBuilder';
@@ -39,10 +38,25 @@ const CONFIG_CARRO_PADRAO = {
 };
 
 const CONFIG_CARRO_GLB = {
-    dimensoes: { largura: 10.0, comprimento: 40.0, alturachao: 2.0, alturaporta: 4.5, alturaparabrisa: 4.5, comprimentorodas: 26.5, largurarodas: 16.5, offsetchassi: 0.100, taxaBaseCockpitTras: 0.1, taxaTopoCockpitTras: 0.2, taxaTopoCockpitFrente: 0.6, taxaBaseCockpitFrente: 0.7 },
+    dimensoes: { largura: 10.0, comprimento: 40.0, alturachao: 2.0, alturaporta: 4.5, alturaparabrisa: 4.5, comprimentorodas: 26.5, largurarodas: 15.9, offsetchassi: 0.100, taxaBaseCockpitTras: 0.1, taxaTopoCockpitTras: 0.2, taxaTopoCockpitFrente: 0.6, taxaBaseCockpitFrente: 0.7 },
     rodas: { raio: 3.2, largura: 1.5, segmentos: 16 },
     fisica: { aceleracao: 0.03, aceleracaoFreio: 0.04, velmax: 7.0, velmaxre: -2.0, anguloVolanteMax: 0.7, velocidadeGiro: 0.03, taxaLerpVolante: 0.035, aderenciaFreioDeMao: 0.015, aderenciaPista: 0.03, atritoEscalar: 0.9999, atritoLinear: 0.001, arrastoQuadratico: 0.0, suspensaoRigidez: 80.0, suspensaoAmortecimento: 8.0, suspensaoInclinacaoMax: 8.0, velReferenciaGiro: 0.5, taxaRecuperacaoGrip: 0.02, forcaPulo: 70.0, gravidade: 150.0, fatorPuloMinimo: 0.55, tempoCargaPulo: 0.6, compressaoPulo: 1.4, reacaoPouso: 1.0, limiarDecolagem: 10.0, limiarDriftRastro: 0.9 }
 };
+
+export interface JogoStats {
+    fps: number;
+    seed: number;
+    modoCarroGLB: boolean;
+}
+
+export interface JogoOpcoes {
+    /** Estado dos botões touch; a UI escreve, o loop lê. */
+    controlesToque?: ControlesToque;
+    /** Chamado ~2x por segundo e quando a pista/carro mudam. */
+    onStats?: (stats: JogoStats) => void;
+    /** Chamado quando o motor altera valores do GAME_CONFIG por conta própria (ex.: troca de carro). */
+    onConfigRecarregada?: () => void;
+}
 
 export class Jogo {
     readonly config = GAME_CONFIG;
@@ -57,7 +71,6 @@ export class Jogo {
     private veiculo = new Veiculo();
     private pilotoAuto = new PilotoAutomatico();
     private cam = new CameraJogo();
-    private painel: PainelConfig;
 
     // Efeitos Gráficos e Materiais
     private matOpaco = criarMaterialPrincipal(this.uniforms); // Reintroduzido para as malhas do carro
@@ -92,8 +105,12 @@ export class Jogo {
     private rodando = false;
     private descartado = false;
 
-    // UI
-    private hud: HTMLDivElement;
+    // Interface com a UI (React)
+    private readonly controlesToque: ControlesToque;
+    private readonly opcoes: JogoOpcoes;
+    private configAberto = false;
+    private mouseSobreUI = false;
+    private painelAlterado = false;
     private fps = { t: 0, n: 0, v: 0 };
     private camOffsetX = 0;
     private camOffsetY = 0;
@@ -106,21 +123,27 @@ export class Jogo {
     private historicoFreioMao: number[] = [];
     private freioMaoPressionadoAnterior = false;
 
-    constructor(private canvas: HTMLCanvasElement, private hostUI: HTMLElement) {
+    constructor(private canvas: HTMLCanvasElement, opcoes: JogoOpcoes = {}) {
+        this.opcoes = opcoes;
+        this.controlesToque = opcoes.controlesToque ?? criarControlesToque();
         this.renderizador = new Renderer(canvas, this.uniforms);
         this.world = new WorldBuilder(this.uniforms, this.config);
-        this.painel = new PainelConfig(hostUI, this.config);
-
-        this.hud = document.createElement('div');
-        Object.assign(this.hud.style, {
-            position: 'absolute', right: '10px', top: '8px', color: '#000',
-            font: '12px/1.5 monospace', textAlign: 'right', pointerEvents: 'none',
-            whiteSpace: 'pre', userSelect: 'none',
-        } as CSSStyleDeclaration);
-        hostUI.appendChild(this.hud);
 
         Entrada.iniciar(canvas);
     }
+
+    // ---------------------------------------------------------------
+    // API pública para a UI
+    // ---------------------------------------------------------------
+
+    /** Painel de configuração aberto (mobile): desloca a câmera para liberar espaço. */
+    setConfigAberto(aberto: boolean) { this.configAberto = aberto; }
+
+    /** Ponteiro sobre o painel (desktop): evita orbitar câmera e iniciar pulo por baixo da UI. */
+    setMouseSobreUI(sobre: boolean) { this.mouseSobreUI = sobre; }
+
+    /** Sinaliza que a UI mexeu no GAME_CONFIG; o motor aplica no próximo frame. */
+    marcarConfigAlterada() { this.painelAlterado = true; }
 
     async iniciar(urlTerreno = './terreno.raw') {
         Object.assign(this.config.carro.dimensoes, this.estadoCarroVermelho.dimensoes);
@@ -215,6 +238,7 @@ export class Jogo {
         this.terrenoDefasado = false;
         this.vegetacaoPendente = false;
         this.trabalhoPesadoNoFrame = true;
+        this.emitirStats();
     }
 
     private alternarModoCarro() {
@@ -253,10 +277,9 @@ export class Jogo {
             }
         }
 
-        if (typeof (this.painel as any).recarregarAbaAtual === 'function') {
-            (this.painel as any).recarregarAbaAtual();
-        }
         this.configAnterior = JSON.parse(JSON.stringify(this.config));
+        this.opcoes.onConfigRecarregada?.();
+        this.emitirStats();
     }
 
     public aplicarNovoModeloCarro(modelo: THREE.Object3D) {
@@ -423,7 +446,7 @@ export class Jogo {
 
         if (Entrada.teclaUmaVez('KeyX')) this.alternarModoCarro();
 
-        const freioMaoAtivo = Entrada.tecla('Space') || TouchHUD.controls.drift;
+        const freioMaoAtivo = Entrada.tecla('Space') || this.controlesToque.drift;
         if (freioMaoAtivo && !this.freioMaoPressionadoAnterior) {
             const agora = performance.now() / 1000;
             this.historicoFreioMao.push(agora);
@@ -450,14 +473,14 @@ export class Jogo {
             const cmd = this.pilotoAuto.atualizar(this.veiculo, this.world.estrada);
             throttle = cmd.throttle; steer = cmd.steer; handbrake = cmd.handbrake;
         } else {
-            if (Entrada.tecla('KeyW') || TouchHUD.controls.forward) throttle += 1;
-            if (Entrada.tecla('KeyS') || TouchHUD.controls.backward) throttle -= 1;
-            if (Entrada.tecla('KeyA') || TouchHUD.controls.left) steer += 1;
-            if (Entrada.tecla('KeyD') || TouchHUD.controls.right) steer -= 1;
+            if (Entrada.tecla('KeyW') || this.controlesToque.forward) throttle += 1;
+            if (Entrada.tecla('KeyS') || this.controlesToque.backward) throttle -= 1;
+            if (Entrada.tecla('KeyA') || this.controlesToque.left) steer += 1;
+            if (Entrada.tecla('KeyD') || this.controlesToque.right) steer -= 1;
         }
 
-        const shiftAgora = Entrada.tecla('ShiftLeft') || Entrada.tecla('ShiftRight') || TouchHUD.controls.jump;
-        if (shiftAgora && !this.shiftAnterior && !this.painel.isMouseSobreUI()) this.carregandoPulo = true;
+        const shiftAgora = Entrada.tecla('ShiftLeft') || Entrada.tecla('ShiftRight') || this.controlesToque.jump;
+        if (shiftAgora && !this.shiftAnterior && !this.mouseSobreUI) this.carregandoPulo = true;
         if (!shiftAgora) this.carregandoPulo = false;
         this.shiftAnterior = shiftAgora;
         this.veiculo.setSegurandoPulo(this.carregandoPulo);
@@ -503,10 +526,13 @@ export class Jogo {
             }
         }
 
-        if (this.painel.update()) this.aplicarMudancasDoPainel();
+        if (this.painelAlterado) {
+            this.painelAlterado = false;
+            this.aplicarMudancasDoPainel();
+        }
         this.processarTrabalhoPendente();
 
-        const mouseSobreUI = this.painel.isMouseSobreUI();
+        const mouseSobreUI = this.mouseSobreUI;
         const scroll = Entrada.consumirScroll();
         if (scroll !== 0) this.cam.processarScroll(scroll);
 
@@ -524,7 +550,7 @@ export class Jogo {
         this.renderizador.camera.updateMatrixWorld(true);
 
         let targetOffX = 0, targetOffY = 0;
-        if (TouchHUD.configMode) {
+        if (this.configAberto) {
             if (w > h) targetOffX = -w * 0.3125;
             else targetOffY = -h * 0.25;
         }
@@ -560,7 +586,6 @@ export class Jogo {
 
         this.renderizador.renderer.setRenderTarget(null);
         this.renderizador.render();
-        this.painel.render();
         this.atualizarHud(thisTime);
 
         if (this.trabalhoPesadoNoFrame) this.lastTime = performance.now() / 1000 - 1 / 60;
@@ -571,11 +596,16 @@ export class Jogo {
         if (agora - this.fps.t >= 0.5) {
             this.fps.v = this.fps.n / (agora - this.fps.t);
             this.fps.n = 0; this.fps.t = agora;
+            this.emitirStats();
         }
-        this.hud.textContent =
-            `Q: wireframe  R: nova pista  SHIFT: agachar/pular  ESPAÇO: freio de mão\n` +
-            `botão direito: câmara  roda: zoom  X: alternar carro (${this.modoCarroGLB ? 'GLB' : 'Vermelho'})\n` +
-            `seed ${this.world.seedPista}  ${this.fps.v.toFixed(0)} fps`;
+    }
+
+    private emitirStats() {
+        this.opcoes.onStats?.({
+            fps: this.fps.v,
+            seed: this.world.seedPista,
+            modoCarroGLB: this.modoCarroGLB,
+        });
     }
 
     dispose() {
@@ -584,9 +614,6 @@ export class Jogo {
         this.rodando = false;
         cancelAnimationFrame(this.rafId);
         Entrada.parar();
-        TouchHUD.parar();
-        this.painel.dispose();
-        this.hud.remove();
 
         this.renderizador.scene.traverse((o: any) => {
             if (o.geometry) o.geometry.dispose();

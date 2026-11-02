@@ -1,0 +1,177 @@
+/* Painel de configurações (neumórfico) — layouts mobile e desktop */
+
+/* ---------- elementos compartilhados ---------- */
+.painel-btn {
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    transform-origin: 50% 50%;
+    transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.painel-btn .rotulo {
+    font-family: Arial, Helvetica, sans-serif;
+    white-space: nowrap;
+    font-weight: bold;
+    padding-left: 16px;
+}
+
+.painel-btn.mobile { width: 100%; height: 46px; }
+.painel-btn.mobile .rotulo { font-size: 16px; }
+.painel-btn.mobile:active { transform: scale(0.9); }
+
+.painel-btn.desktop { width: 100%; height: 42px; }
+.painel-btn.desktop .rotulo { font-size: 19.7px; }
+.painel-btn.desktop:active { transform: scale(0.85); }
+
+.painel-btn.active-tab {
+    background: rgba(255, 255, 255, 0.3);
+    box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.15), inset -4px -4px 8px rgba(255, 255, 255, 0.3);
+    color: rgba(0, 0, 0, 0.9);
+}
+
+.painel-item {
+    cursor: ew-resize;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: pan-y; /* scroll vertical nativo; só o gesto horizontal altera o valor */
+    font-family: Arial, Helvetica, sans-serif;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    color: rgba(0, 0, 0, 0.7);
+    transition: color 0.1s ease;
+    flex-shrink: 0;
+}
+
+.painel-item.mobile { height: 26px; font-size: 15px; }
+.painel-item.desktop { height: 22px; font-size: 19.7px; }
+
+.painel-item.dragging {
+    color: #0055aa;
+    font-weight: bold;
+}
+
+.painel-item.secao {
+    font-weight: bold;
+    color: rgba(0, 0, 0, 0.9);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+    cursor: default;
+    touch-action: pan-y;
+}
+
+.painel-item.mobile.secao { margin-top: 10px; }
+
+/* ---------- mobile ---------- */
+.painel-config-root {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: flex;
+    padding: 20px;
+    gap: 20px;
+    z-index: 90;
+    font-family: Arial, Helvetica, sans-serif;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.painel-config-root.open { opacity: 1; }
+
+.painel-config-root.open .painel-col-menu,
+.painel-config-root.open .painel-col-sliders {
+    pointer-events: auto;
+}
+
+.painel-col-menu {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+    overflow-y: auto;
+    touch-action: pan-y;
+}
+
+.painel-col-sliders {
+    flex: 1.5;
+    display: flex;
+    flex-direction: column;
+    padding: 15px 25px;
+    pointer-events: none;
+    overflow-y: auto;
+    touch-action: pan-y;
+}
+
+.painel-col-vazia {
+    flex: 1.5;
+    pointer-events: none;
+}
+
+@media (max-aspect-ratio: 1/1) {
+    .painel-config-root {
+        flex-direction: column;
+        padding-bottom: 110px;
+    }
+
+    .painel-col-menu {
+        flex: unset;
+        flex-direction: row;
+        flex-wrap: wrap;
+        height: 25%;
+    }
+
+    .painel-col-sliders {
+        flex: unset;
+        height: 40%;
+    }
+
+    .painel-col-vazia { flex: 1; }
+}
+
+/* ---------- desktop ---------- */
+.painel-desktop-root {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 90;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.painel-menu-desktop {
+    position: absolute;
+    left: 15px;
+    top: 38px;
+    width: 180px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: auto;
+}
+
+.painel-desktop-fundo {
+    position: absolute;
+    left: 220px;
+    top: 20px;
+    width: 420px;
+    height: min(960px, calc(100% - 40px));
+    box-sizing: border-box;
+    padding: 18px 25px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.painel-desktop-fundo.open {
+    opacity: 1;
+    pointer-events: auto;
+}

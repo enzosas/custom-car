@@ -1,0 +1,52 @@
+html {
+    background-color: black;
+}
+
+/* Contêiner da cena: canvas WebGL + camadas de UI por cima */
+.cena {
+    position: fixed;
+    inset: 0;
+    background: #ccd9e6;
+    overflow: hidden;
+}
+
+.cena-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.hud-info {
+    position: absolute;
+    right: 10px;
+    top: 8px;
+    color: #000;
+    font: 12px/1.5 monospace;
+    text-align: right;
+    white-space: pre;
+    pointer-events: none;
+    user-select: none;
+}
+
+.drop-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    border: 3px dashed #ffffff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #ffffff;
+    font-size: 24px;
+    font-family: monospace;
+    z-index: 9999;
+    pointer-events: none;
+}
+
+.mensagem-erro {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    color: #b00020;
+    font: 14px monospace;
+}
