@@ -14,7 +14,7 @@ import { SistemaParticulas } from '@/graphics/Particulas';
 import { randGlobal, sementeAleatoria } from '@/core/Random';
 import {
     criarUniformsCompartilhados,
-    criarMaterialPrincipal, // Adicionado import
+    criarMaterialPrincipal,
     criarMaterialRastro,
     criarMaterialParticula,
     atualizarLuz,
@@ -50,11 +50,8 @@ export interface JogoStats {
 }
 
 export interface JogoOpcoes {
-    /** Estado dos botões touch; a UI escreve, o loop lê. */
     controlesToque?: ControlesToque;
-    /** Chamado ~2x por segundo e quando a pista/carro mudam. */
     onStats?: (stats: JogoStats) => void;
-    /** Chamado quando o motor altera valores do GAME_CONFIG por conta própria (ex.: troca de carro). */
     onConfigRecarregada?: () => void;
 }
 
@@ -62,36 +59,36 @@ export class Jogo {
     readonly config = GAME_CONFIG;
     private configAnterior: any = JSON.parse(JSON.stringify(GAME_CONFIG));
 
-    // Core Systems
     private renderizador: Renderer;
     private world: WorldBuilder;
     private uniforms = criarUniformsCompartilhados();
 
-    // Entidades
     private veiculo = new Veiculo();
     private pilotoAuto = new PilotoAutomatico();
     private cam = new CameraJogo();
 
-    // Efeitos Gráficos e Materiais
-    private matOpaco = criarMaterialPrincipal(this.uniforms); // Reintroduzido para as malhas do carro
+    private matOpaco = criarMaterialPrincipal(this.uniforms);
     private matRastro = criarMaterialRastro(this.uniforms);
     private matParticula = criarMaterialParticula();
     private rastroPneus = new RastroPneu(GAME_CONFIG.carro.rodas.largura, 8.0);
     private particulas = new SistemaParticulas();
 
-    // Malhas do Carro e Efeitos
     private chassiMesh!: THREE.Group;
     private modeloCarroAtual: THREE.Object3D | null = null;
     private bboxOriginalCarro = new THREE.Box3();
+
     private rodasMesh: THREE.Mesh[] = [];
     private malhaChassiProcedural: THREE.Mesh | null = null;
+
+    private rodasGLBGroup = new THREE.Group();
+    private rodasGLB: (THREE.Group | null)[] = [null, null, null, null];
+    private raiosOriginaisGLB: number[] = [];
 
     private rastroMesh!: THREE.Mesh;
     private rastroBuf = { pos: new Float32Array(0), cor: new Float32Array(0) };
     private particulasMesh!: THREE.Mesh;
     private particulasBuf = { pos: new Float32Array(0), cor: new Float32Array(0) };
 
-    // Estado geral
     private wireframe = false;
     private estavaDerrapandoAnterior = false;
     private shiftAnterior = false;
@@ -105,17 +102,16 @@ export class Jogo {
     private rodando = false;
     private descartado = false;
 
-    // Interface com a UI (React)
     private readonly controlesToque: ControlesToque;
     private readonly opcoes: JogoOpcoes;
     private configAberto = false;
     private mouseSobreUI = false;
     private painelAlterado = false;
+
     private fps = { t: 0, n: 0, v: 0 };
     private camOffsetX = 0;
     private camOffsetY = 0;
 
-    // Estado do Carro
     private modoCarroGLB = false;
     private modeloGLBCache: THREE.Group | null = null;
     private estadoCarroVermelho = JSON.parse(JSON.stringify(CONFIG_CARRO_PADRAO));
@@ -128,21 +124,11 @@ export class Jogo {
         this.controlesToque = opcoes.controlesToque ?? criarControlesToque();
         this.renderizador = new Renderer(canvas, this.uniforms);
         this.world = new WorldBuilder(this.uniforms, this.config);
-
         Entrada.iniciar(canvas);
     }
 
-    // ---------------------------------------------------------------
-    // API pública para a UI
-    // ---------------------------------------------------------------
-
-    /** Painel de configuração aberto (mobile): desloca a câmera para liberar espaço. */
     setConfigAberto(aberto: boolean) { this.configAberto = aberto; }
-
-    /** Ponteiro sobre o painel (desktop): evita orbitar câmera e iniciar pulo por baixo da UI. */
     setMouseSobreUI(sobre: boolean) { this.mouseSobreUI = sobre; }
-
-    /** Sinaliza que a UI mexeu no GAME_CONFIG; o motor aplica no próximo frame. */
     marcarConfigAlterada() { this.painelAlterado = true; }
 
     async iniciar(urlTerreno = './terreno.raw') {
@@ -152,10 +138,8 @@ export class Jogo {
 
         const terrenoCarregado = await this.world.carregarTerreno(urlTerreno);
         if (this.descartado || !terrenoCarregado) return;
-
         this.veiculo.init();
 
-        // Adicionar malhas do World à cena
         this.renderizador.scene.add(this.world.terrenoMesh);
         this.renderizador.scene.add(this.world.gramaMesh);
         for (let i = 0; i < 4; i++) {
@@ -164,11 +148,13 @@ export class Jogo {
             }
         }
 
-        // Construir Carro
         this.chassiMesh = new THREE.Group();
         this.chassiMesh.matrixAutoUpdate = false;
         this.chassiMesh.frustumCulled = false;
         this.renderizador.scene.add(this.chassiMesh);
+
+        this.rodasGLBGroup.matrixAutoUpdate = false;
+        this.renderizador.scene.add(this.rodasGLBGroup);
 
         this.malhaChassiProcedural = new THREE.Mesh(geometriaDe(this.veiculo.gerarMalhaChassi()), this.matOpaco);
         this.malhaChassiProcedural.frustumCulled = false;
@@ -199,9 +185,8 @@ export class Jogo {
                 }
             });
             this.modeloGLBCache = modelo;
-        }, undefined, () => { console.log('carro.glb não encontrado em /public.'); });
+        }, undefined, () => { console.log('carro.glb n o encontrado em /public.'); });
 
-        // Efeitos
         this.rastroMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.matRastro);
         this.rastroMesh.frustumCulled = false;
         this.renderizador.scene.add(this.rastroMesh);
@@ -212,6 +197,7 @@ export class Jogo {
 
         const s = Number(new URLSearchParams(location.search).get('seed'));
         if (Number.isFinite(s) && s > 0) this.world.seedPista = s >>> 0;
+
         this.regenerarPista(this.world.seedPista === 0, true);
         this.configAnterior = JSON.parse(JSON.stringify(this.config));
 
@@ -225,7 +211,9 @@ export class Jogo {
         if (this.world.estradaMesh && !this.renderizador.scene.children.includes(this.world.estradaMesh)) {
             this.renderizador.scene.add(this.world.estradaMesh);
         }
+
         this.veiculo.invalidarSolo();
+
         if (reposicionar) {
             const curva = this.world.estrada.getPontosCurva();
             if (curva.length >= 2) {
@@ -234,6 +222,7 @@ export class Jogo {
                 this.veiculo.reposicionarNaPista(curva[0], { x: d.x / l, y: d.y / l, z: d.z / l });
             }
         }
+
         this.world.regerarVegetacao();
         this.terrenoDefasado = false;
         this.vegetacaoPendente = false;
@@ -256,7 +245,6 @@ export class Jogo {
         Object.assign(this.config.carro.fisica, estadoDestino.fisica);
 
         this.veiculo.reconstruirGeometria();
-
         const geoRoda = geometriaDe(this.veiculo.gerarMalhaRoda());
         this.rodasMesh[0]?.geometry.dispose();
         this.rodasMesh.forEach((m) => { m.geometry = geoRoda; });
@@ -267,9 +255,17 @@ export class Jogo {
         }
 
         if (this.modoCarroGLB) {
-            if (this.modeloGLBCache) this.aplicarNovoModeloCarro(this.modeloGLBCache);
+            if (this.modeloGLBCache) this.aplicarNovoModeloCarro(this.modeloGLBCache.clone());
         } else {
             this.modeloCarroAtual = null;
+
+            while (this.rodasGLBGroup.children.length > 0) {
+                this.rodasGLBGroup.remove(this.rodasGLBGroup.children[0]);
+            }
+            this.rodasGLB = [null, null, null, null];
+            this.raiosOriginaisGLB = [];
+            this.rodasMesh.forEach(m => m.visible = true);
+
             if (this.malhaChassiProcedural) {
                 this.malhaChassiProcedural.geometry.dispose();
                 this.malhaChassiProcedural.geometry = geometriaDe(this.veiculo.gerarMalhaChassi());
@@ -286,18 +282,91 @@ export class Jogo {
         while (this.chassiMesh.children.length > 0) {
             this.chassiMesh.remove(this.chassiMesh.children[0]);
         }
+        while (this.rodasGLBGroup.children.length > 0) {
+            this.rodasGLBGroup.remove(this.rodasGLBGroup.children[0]);
+        }
+        this.rodasGLB = [null, null, null, null];
+        this.raiosOriginaisGLB = [];
+        this.rodasMesh.forEach(m => m.visible = true);
 
         modelo.position.set(0, 0, 0);
         modelo.rotation.set(0, 0, 0);
         modelo.scale.set(1, 1, 1);
         modelo.updateMatrixWorld(true);
 
-        this.bboxOriginalCarro = new THREE.Box3().setFromObject(modelo);
-        this.modeloCarroAtual = modelo;
+        const encontrarRoda = (nomeBuscado: string) => {
+            let encontrada: THREE.Object3D | null = null;
+            const buscaNormalizada = nomeBuscado.toLowerCase().replace(/[^a-z0-9]/g, '');
+            modelo.traverse((child) => {
+                if (!encontrada) {
+                    const nomeNormalizado = child.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    if (nomeNormalizado.includes(buscaNormalizada)) {
+                        encontrada = child;
+                    }
+                }
+            });
+            return encontrada;
+        };
+
+        const rFE = encontrarRoda('wheelfl');
+        const rFD = encontrarRoda('wheelfr');
+        const rTE = encontrarRoda('wheelrl');
+        const rTD = encontrarRoda('wheelrr');
+
+        if (rFE && rFD && rTE && rTD) {
+            const extraidas = [rFE, rFD, rTE, rTD];
+            this.rodasMesh.forEach(m => m.visible = false);
+
+            // 1. EXTRAIR AS RODAS PRIMEIRO!
+            extraidas.forEach((r, i) => {
+                const wrapper = new THREE.Group();
+                wrapper.matrixAutoUpdate = false;
+                wrapper.add(r);
+
+                wrapper.updateMatrixWorld(true);
+                const box = new THREE.Box3().setFromObject(r);
+                const size = new THREE.Vector3();
+                box.getSize(size);
+
+                const diametroOriginal = Math.max(size.x, size.y, size.z);
+                this.raiosOriginaisGLB.push(diametroOriginal / 2);
+
+                const centerWorld = new THREE.Vector3();
+                box.getCenter(centerWorld);
+
+                const centerLocal = r.worldToLocal(centerWorld.clone());
+
+                if ((r as THREE.Mesh).isMesh && (r as THREE.Mesh).geometry) {
+                    (r as THREE.Mesh).geometry.translate(-centerLocal.x, -centerLocal.y, -centerLocal.z);
+                }
+                const childrenToMove = [...r.children];
+                for (const child of childrenToMove) {
+                    child.position.sub(centerLocal);
+                }
+
+                // --- A CORRE O ESTÁ AQUI: TIREI A ROTAÇÃO MANUAL QUE ESTAVA A CONFLITUAR ---
+                r.position.set(0, 0, 0);
+                r.rotation.set(0, 0, 0);
+                r.scale.set(1, 1, 1);
+
+                this.rodasGLBGroup.add(wrapper);
+                this.rodasGLB[i] = wrapper;
+            });
+
+            // 2. SÓ AGORA MEDIMOS A CAIXA DO CARRO
+            modelo.updateMatrixWorld(true);
+            this.bboxOriginalCarro = new THREE.Box3().setFromObject(modelo);
+
+            this.modeloCarroAtual = modelo;
+            this.atualizarTransformacaoModeloCarro();
+        } else {
+            this.bboxOriginalCarro = new THREE.Box3().setFromObject(modelo);
+            this.modeloCarroAtual = modelo;
+            this.atualizarTransformacaoModeloCarro();
+        }
 
         modelo.matrixAutoUpdate = true;
         this.chassiMesh.add(modelo);
-        this.atualizarTransformacaoModeloCarro();
     }
 
     private atualizarTransformacaoModeloCarro() {
@@ -305,14 +374,17 @@ export class Jogo {
         const size = new THREE.Vector3();
         this.bboxOriginalCarro.getSize(size);
         const comprimentoAlvo = this.config.carro.dimensoes.comprimento;
+
         const dimMaiorOriginal = Math.max(size.z, size.x);
         const fatorEscala = dimMaiorOriginal > 0 ? comprimentoAlvo / dimMaiorOriginal : 1;
         this.modeloCarroAtual.scale.setScalar(fatorEscala);
 
         const center = new THREE.Vector3();
         this.bboxOriginalCarro.getCenter(center);
+
         this.modeloCarroAtual.position.x = -center.x * fatorEscala;
         this.modeloCarroAtual.position.z = -center.z * fatorEscala;
+
         const offsetBase = -3.8;
         this.modeloCarroAtual.position.y = (-this.bboxOriginalCarro.min.y * fatorEscala) + offsetBase + this.config.carro.dimensoes.alturachao;
     }
@@ -322,12 +394,14 @@ export class Jogo {
             const buffer = await arquivo.arrayBuffer();
             const loader = new GLTFLoader();
             const gltf = await loader.parseAsync(buffer, '');
+
             this.modeloGLBCache = gltf.scene;
 
             if (!this.modoCarroGLB) {
                 this.alternarModoCarro();
+            } else {
+                this.aplicarNovoModeloCarro(this.modeloGLBCache.clone());
             }
-            this.aplicarNovoModeloCarro(gltf.scene);
             console.log(`Modelo ${arquivo.name} importado com sucesso!`);
         } catch (err) {
             console.error('Falha ao processar o ficheiro .glb:', err);
@@ -344,12 +418,14 @@ export class Jogo {
 
         if (carroMudou) {
             this.veiculo.reconstruirGeometria();
+
             if (this.modeloCarroAtual) {
                 this.atualizarTransformacaoModeloCarro();
             } else if (this.malhaChassiProcedural) {
                 this.malhaChassiProcedural.geometry.dispose();
                 this.malhaChassiProcedural.geometry = geometriaDe(this.veiculo.gerarMalhaChassi());
             }
+
             const geoRoda = geometriaDe(this.veiculo.gerarMalhaRoda());
             this.rodasMesh[0]?.geometry.dispose();
             this.rodasMesh.forEach((m) => { m.geometry = geoRoda; });
@@ -362,6 +438,7 @@ export class Jogo {
             this.world.gramaMesh.geometry = geometriaDe(gerarGeometriaTufo(this.config));
             this.vegetacaoPendente = true;
         }
+
         if (terrenoMudou) this.terrenoDefasado = true;
         this.configAnterior = JSON.parse(JSON.stringify(c));
     }
@@ -369,14 +446,18 @@ export class Jogo {
     private processarTrabalhoPendente() {
         const arrastando = Entrada.esquerdo;
         const agora = performance.now() / 1000;
+
         if (this.terrenoDefasado && (!arrastando || agora >= this.proximaRegenTerreno)) {
             const inicio = performance.now() / 1000;
             this.world.regenerarPista(false);
             this.veiculo.invalidarSolo();
+
             const fim = performance.now() / 1000;
             this.proximaRegenTerreno = fim + Math.max(0.15, (fim - inicio) * 3.0);
+
             this.terrenoDefasado = false; this.vegetacaoPendente = true; this.trabalhoPesadoNoFrame = true;
         }
+
         if (this.vegetacaoPendente && !arrastando) {
             this.world.regerarVegetacao();
             this.vegetacaoPendente = false; this.trabalhoPesadoNoFrame = true;
@@ -392,6 +473,7 @@ export class Jogo {
     private renderizarSombra(lightDir: THREE.Vector3, p: { x: number; y: number; z: number }) {
         const alvo = new THREE.Vector3(p.x, p.y, p.z);
         this.renderizador.sombra.atualizarMatriz(lightDir, alvo);
+
         this.world.gramaMesh.visible = false;
         this.rastroMesh.visible = false;
         this.particulasMesh.visible = false;
@@ -400,6 +482,7 @@ export class Jogo {
         const r = this.renderizador.renderer;
         r.setRenderTarget(this.renderizador.sombra.alvo);
         r.clear(true, true, false);
+
         this.renderizador.scene.overrideMaterial = this.renderizador.sombra.materialProfundidade;
         this.renderizador.render();
         this.renderizador.scene.overrideMaterial = null;
@@ -439,8 +522,8 @@ export class Jogo {
     private loop = () => {
         if (!this.rodando) return;
         this.rafId = requestAnimationFrame(this.loop);
-        this.trabalhoPesadoNoFrame = false;
 
+        this.trabalhoPesadoNoFrame = false;
         const w = window.innerWidth, h = window.innerHeight;
         if (w === 0 || h === 0) return;
 
@@ -503,6 +586,7 @@ export class Jogo {
         }
 
         this.particulas.update(deltaTime);
+
         if (this.veiculo.estaDerrapando()) {
             const intensidade = this.veiculo.getIntensidadeDrift();
             for (let r = 2; r < 4; ++r) {
@@ -530,6 +614,7 @@ export class Jogo {
             this.painelAlterado = false;
             this.aplicarMudancasDoPainel();
         }
+
         this.processarTrabalhoPendente();
 
         const mouseSobreUI = this.mouseSobreUI;
@@ -565,18 +650,36 @@ export class Jogo {
         } else {
             this.renderizador.camera.clearViewOffset();
         }
-        this.renderizador.camera.updateProjectionMatrix();
 
+        this.renderizador.camera.updateProjectionMatrix();
         atualizarLuz(this.uniforms);
+
         const l = this.config.luz.parametros;
         const lightDir = new THREE.Vector3(l.dirX, l.dirY, l.dirZ);
 
         this.aplicarMatriz(this.chassiMesh, this.veiculo.matrizChassi());
-        this.veiculo.matrizesRodas().forEach((m, i) => this.aplicarMatriz(this.rodasMesh[i], m));
+
+        const matrizesRodas = this.veiculo.matrizesRodas();
+        matrizesRodas.forEach((m, i) => {
+            if (this.rodasGLB[i]) {
+                const matThree = new THREE.Matrix4().fromArray(m.m);
+
+                matThree.multiply(new THREE.Matrix4().makeRotationZ(-Math.PI / 2));
+
+                const fatorEscala = this.config.carro.rodas.raio / Math.max(0.001, this.raiosOriginaisGLB[i]);
+                matThree.scale(new THREE.Vector3(fatorEscala, fatorEscala, fatorEscala));
+
+                const wrapper = this.rodasGLB[i]!;
+                wrapper.matrix.copy(matThree);
+                wrapper.matrixWorldNeedsUpdate = true;
+            } else {
+                this.aplicarMatriz(this.rodasMesh[i], m);
+            }
+        });
 
         this.renderizarSombra(lightDir, this.veiculo.getPosicao());
-
         this.world.atualizarFlorestaLods(this.renderizador.camera.position, false);
+
         const nG = this.world.grama.selecionar(this.renderizador.camera.position, false, this.world.gramaLote);
         this.world.atualizarGrama();
         this.world.gramaMesh.count = nG;
