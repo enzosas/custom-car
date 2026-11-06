@@ -1,4 +1,4 @@
-// materialPrincipal.ts — materiais do jogo (shader principal, rastro, profundidade, partículas).
+// materialPrincipal.ts   materiais do jogo (shader principal, rastro, profundidade, part culas).
 import * as THREE from 'three';
 import { GAME_CONFIG } from '@/core/config';
 import {
@@ -12,6 +12,7 @@ export function criarUniformsCompartilhados() {
     return {
         uLightDir: { value: new THREE.Vector3(l.dirX, l.dirY, l.dirZ) },
         uLightColor: { value: new THREE.Vector3(l.corR, l.corG, l.corB) },
+        uSkyColor: { value: new THREE.Vector3(l.ceuR, l.ceuG, l.ceuB) },
         uAmbient: { value: l.intensidadeAmbiente },
         uDiffuse: { value: l.intensidadeDifusa },
         uSpecular: { value: l.intensidadeEspecular },
@@ -22,12 +23,14 @@ export function criarUniformsCompartilhados() {
         uLightSpaceMatrix: { value: new THREE.Matrix4() },
     };
 }
+
 export type UniformsCompartilhados = ReturnType<typeof criarUniformsCompartilhados>;
 
 export function atualizarLuz(u: UniformsCompartilhados) {
     const l = GAME_CONFIG.luz.parametros;
     u.uLightDir.value.set(l.dirX, l.dirY, l.dirZ);
     u.uLightColor.value.set(l.corR, l.corG, l.corB);
+    u.uSkyColor.value.set(l.ceuR, l.ceuG, l.ceuB);
     u.uAmbient.value = l.intensidadeAmbiente;
     u.uDiffuse.value = l.intensidadeDifusa;
     u.uSpecular.value = l.intensidadeEspecular;

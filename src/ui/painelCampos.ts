@@ -51,7 +51,7 @@ export const ABAS: AbaDef[] = [
   },
   {
     titulo: 'luz config', secoes: [
-      { titulo: 'parametros', caminho: ['luz', 'parametros'], campos: [{ nome: 'dirX', tipo: 'float', fator: 1.0 }, { nome: 'dirY', tipo: 'float', fator: 1.0 }, { nome: 'dirZ', tipo: 'float', fator: 1.0 }, { nome: 'corR', tipo: 'float', fator: 1.0 }, { nome: 'corG', tipo: 'float', fator: 1.0 }, { nome: 'corB', tipo: 'float', fator: 1.0 }, { nome: 'intensidadeAmbiente', tipo: 'float', fator: 1.0 }, { nome: 'intensidadeDifusa', tipo: 'float', fator: 1.0 }, { nome: 'intensidadeEspecular', tipo: 'float', fator: 1.0 }, { nome: 'shininess', tipo: 'float', fator: 1.0 }] },
+      { titulo: 'parametros', caminho: ['luz', 'parametros'], campos: [{ nome: 'dirX', tipo: 'float', fator: 1.0 }, { nome: 'dirY', tipo: 'float', fator: 1.0 }, { nome: 'dirZ', tipo: 'float', fator: 1.0 }, { nome: 'corR', tipo: 'float', fator: 1.0 }, { nome: 'corG', tipo: 'float', fator: 1.0 }, { nome: 'corB', tipo: 'float', fator: 1.0 }, { nome: 'ceuR', tipo: 'float', fator: 1.0 }, { nome: 'ceuG', tipo: 'float', fator: 1.0 }, { nome: 'ceuB', tipo: 'float', fator: 1.0 }, { nome: 'intensidadeAmbiente', tipo: 'float', fator: 1.0 }, { nome: 'intensidadeDifusa', tipo: 'float', fator: 1.0 }, { nome: 'intensidadeEspecular', tipo: 'float', fator: 1.0 }, { nome: 'shininess', tipo: 'float', fator: 1.0 }] },
     ]
   },
   {

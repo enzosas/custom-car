@@ -7,9 +7,9 @@ const NEAR_PLANE = 0.3;
 const FAR_PLANE = 15000;
 
 /**
- * As luzes do three (usadas só por materiais embutidos, como os do .glb) seguem os mesmos parâmetros do shader
- * do jogo. O three trabalha em unidades físicas (o difuso é dividido por pi), então a intensidade do jogo
- * é multiplicada por pi. Ajuste aqui se o carro ficar mais claro/escuro que o resto.
+ * As luzes do three (usadas s  por materiais embutidos, como os do .glb) seguem os mesmos par metros do shader
+ * do jogo. O three trabalha em unidades f sicas (o difuso   dividido por pi), ent o a intensidade do jogo
+ * multiplicada por pi. Ajuste aqui se o carro ficar mais claro/escuro que o resto.
  */
 const ESCALA_LUZ_THREE = Math.PI;
 
@@ -23,12 +23,11 @@ export class Renderer {
     private readonly luzSol = new THREE.DirectionalLight(0xffffff, 1);
 
     constructor(private canvas: HTMLCanvasElement, uniforms: UniformsCompartilhados) {
-        // Inicialização WebGL
+        // Inicializa o WebGL
         this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-        this.renderer.setClearColor(new THREE.Color().setRGB(0.8, 0.85, 0.9, THREE.SRGBColorSpace), 1);
 
-        // Cena e Câmara
+        // Cena e C mara
         this.scene = new THREE.Scene();
         this.scene.matrixWorldAutoUpdate = true;
 
@@ -48,18 +47,25 @@ export class Renderer {
 
     private configurarLuzes() {
         this.scene.add(this.luzAmbiente);
-        this.scene.add(this.luzSol);   // o alvo padrão é a origem: a direção é só a posição normalizada
+        this.scene.add(this.luzSol);   // o alvo padr  a origem: a dire  a posi o normalizada
         this.sincronizarLuzes();
     }
 
-    /** copia a config de luz do jogo (direção, cor, intensidades) para as luzes do three; chamar a cada frame */
+    /** copia a config de luz do jogo (dire o, cor, intensidades) para as luzes do three; chamar a cada frame */
     public sincronizarLuzes() {
         const l = GAME_CONFIG.luz.parametros;
-        this.luzAmbiente.color.setRGB(l.corR, l.corG, l.corB);
+
+        // A Luz Ambiente de materiais nativos (.glb) agora recebe diretamente a cor do céu
+        this.luzAmbiente.color.setRGB(l.ceuR, l.ceuG, l.ceuB);
         this.luzAmbiente.intensity = l.intensidadeAmbiente * ESCALA_LUZ_THREE;
+
+        // A luz do Sol contínua independente
         this.luzSol.color.setRGB(l.corR, l.corG, l.corB);
         this.luzSol.intensity = l.intensidadeDifusa * ESCALA_LUZ_THREE;
         this.luzSol.position.set(l.dirX, l.dirY, l.dirZ).normalize().multiplyScalar(500);
+
+        // Atualizamos também o clearColor do WebGLRenderer a cada frame para o céu ficar sempre certo
+        this.renderer.setClearColor(new THREE.Color().setRGB(l.ceuR, l.ceuG, l.ceuB, THREE.SRGBColorSpace), 1);
     }
 
     private redimensionar = () => {
