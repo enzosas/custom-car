@@ -52,13 +52,6 @@ export class RastroPneu {
         });
     }
 
-    finalizarSessaoDerrapagem() {
-        for (let i = 0; i < 2; ++i) {
-            const l = this.fitas[i];
-            if (l.length > 0 && l[l.length - 1].aberta) l[l.length - 1].aberta = false;
-        }
-    }
-
     update(dt: number) {
         for (let i = 0; i < 2; ++i) {
             for (const f of this.fitas[i]) f.tempoVidaRestante -= dt;

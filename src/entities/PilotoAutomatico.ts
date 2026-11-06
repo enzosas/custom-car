@@ -1,7 +1,7 @@
 // PilotoAutomatico.ts — port de PilotoAutomatico.h (pure pursuit + perfil de frenagem antecipada).
 
 import { GAME_CONFIG } from '@/core/config';
-import { clamp } from '@/graphics/Mat4';
+import { clamp, normalizarAngulo as angulo } from '@/graphics/Mat4';
 import type { Veiculo } from './Veiculo';
 import type { Estrada } from '@/world/Estrada';
 
@@ -12,13 +12,6 @@ const addv = (a: V2, b: V2): V2 => ({ x: a.x + b.x, y: a.y + b.y });
 const mulv = (a: V2, s: number): V2 => ({ x: a.x * s, y: a.y * s });
 const dot2 = (a: V2, b: V2) => a.x * b.x + a.y * b.y;
 const len2 = (a: V2) => Math.hypot(a.x, a.y);
-
-/** normaliza um ângulo para [-pi, pi] */
-function angulo(a: number) {
-    while (a > 3.14159265) a -= 6.28318531;
-    while (a < -3.14159265) a += 6.28318531;
-    return a;
-}
 
 function pontoAFrente(curva: { x: number; z: number }[], seg: number, t: number, dist: number): V2 {
     const n = curva.length;

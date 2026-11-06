@@ -3,7 +3,7 @@
 
 import { GAME_CONFIG } from '@/core/config';
 import { radians } from '@/graphics/Mat4';
-import type { Malha } from '@/entities/Veiculo';
+import type { Malha } from '@/graphics/Malha';
 
 export enum NivelLOD { LOD_0_NORMAL = 0, LOD_1_TRES_SEGMENTOS = 1, LOD_2_CONE_UNICO = 2, LOD_3_BILLBOARD = 3 }
 
@@ -19,7 +19,7 @@ export interface GeometriasArvore {
 function gerarConeDeslocado(raioBase: number, raioTopo: number, altura: number, yOffset: number,
                             segmentos: number, cor: number[], rotacaoYDeg = 0): Malha {
     const pos: number[] = [], col: number[] = [], idx: number[] = [];
-    const step = 2 * 3.14159265359 / segmentos;
+    const step = 2 * Math.PI / segmentos;
     const rotRad = radians(rotacaoYDeg);
     let n = 0;
     const v = (x: number, y: number, z: number) => { pos.push(x, y, z); col.push(cor[0], cor[1], cor[2]); return n++; };

@@ -2,22 +2,11 @@
 // Toda a física roda em unidades "por frame a 60 Hz" (dt60), exatamente como no C++.
 
 import { GAME_CONFIG } from '@/core/config';
-import { Mat4, type V3, X_AXIS, Y_AXIS, Z_AXIS, clamp, mix, sign, radians, degrees } from '@/graphics/Mat4';
+import { Mat4, type V3, X_AXIS, Y_AXIS, Z_AXIS, clamp, mix, sign, radians, degrees, lerpFactorDt } from '@/graphics/Mat4';
+import { v3, add, sub, mul, dot, len, cross, norm, mixV } from '@/graphics/vec';
+import type { Malha } from '@/graphics/Malha';
 
-export type Malha = { positions: Float32Array; colors: Float32Array; indices: Uint32Array };
 export type AlturaFn = (x: number, z: number) => number;
-
-const v3 = (x = 0, y = 0, z = 0): V3 => ({ x, y, z });
-const add = (a: V3, b: V3) => v3(a.x + b.x, a.y + b.y, a.z + b.z);
-const sub = (a: V3, b: V3) => v3(a.x - b.x, a.y - b.y, a.z - b.z);
-const mul = (a: V3, s: number) => v3(a.x * s, a.y * s, a.z * s);
-const dot = (a: V3, b: V3) => a.x * b.x + a.y * b.y + a.z * b.z;
-const len = (a: V3) => Math.hypot(a.x, a.y, a.z);
-const cross = (a: V3, b: V3) => v3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
-const norm = (a: V3) => { const l = len(a) || 1; return v3(a.x / l, a.y / l, a.z / l); };
-const mixV = (a: V3, b: V3, t: number) => v3(mix(a.x, b.x, t), mix(a.y, b.y, t), mix(a.z, b.z, t));
-
-const lerpFactorDt = (taxaPorFrame: number, dt60: number) => 1 - Math.pow(1 - clamp(taxaPorFrame, 0, 0.9999), dt60);
 
 /** Construtor de malha com winding corrigido (adicionarQuadComNormal) */
 class Builder {
@@ -99,28 +88,33 @@ export function gerarGeometriaCilindro(radius: number, height: number, sectors: 
     return { positions: new Float32Array(positions), colors: new Float32Array(colors), indices: new Uint32Array(indices) };
 }
 
+const estadoFisicaInicial = () => ({
+    position: v3(), velocity: v3(), lastVelocity: v3(),
+    velocityY: 0, forwardSpeed: 0, lateralSpeed: 0, lastForwardSpeed: 0,
+    yawAngle: 0, currentSteer: 0, currentGrip: 0,
+    derrapando: false, intensidadeDrift: 0,
+});
+const estadoSuspensaoInicial = () => ({
+    chassiPitchAngle: 0, chassiRollAngle: 0, chassiPitchVelocity: 0, chassiRollVelocity: 0,
+    terrenoPitchAngle: 0, terrenoRollAngle: 0,
+    compressaoPulo: 0, compressaoVel: 0, molaPouso: 0, molaPousoVel: 0,
+});
+const estadoPuloInicial = () => ({
+    noAr: false, segurando: false, segurandoAnterior: false,
+    buffer: 0, carga: 0, alturaChaoAnterior: 0, vyChaoAnterior: 0,
+    soloValido: false, pousouNoFrame: false,
+});
+const estadoRodasInicial = (radius: number) => ({
+    radius, steerAngle: 0, rollAngle: 0,
+    posContato: [v3(), v3(), v3(), v3()] as V3[],   // 0: FE, 1: FD, 2: TE, 3: TD
+    eixoLateral: [v3(), v3(), v3(), v3()] as V3[],
+});
+
 export class Veiculo {
-    fisica = {
-        position: v3(), velocity: v3(), lastVelocity: v3(),
-        velocityY: 0, forwardSpeed: 0, lateralSpeed: 0, lastForwardSpeed: 0,
-        yawAngle: 0, currentSteer: 0, currentGrip: 0,
-        derrapando: false, intensidadeDrift: 0,
-    };
-    suspensao = {
-        chassiPitchAngle: 0, chassiRollAngle: 0, chassiPitchVelocity: 0, chassiRollVelocity: 0,
-        terrenoPitchAngle: 0, terrenoRollAngle: 0,
-        compressaoPulo: 0, compressaoVel: 0, molaPouso: 0, molaPousoVel: 0,
-    };
-    pulo = {
-        noAr: false, segurando: false, segurandoAnterior: false,
-        buffer: 0, carga: 0, alturaChaoAnterior: 0, vyChaoAnterior: 0,
-        soloValido: false, pousouNoFrame: false,
-    };
-    rodas = {
-        radius: 1, steerAngle: 0, rollAngle: 0,
-        posContato: [v3(), v3(), v3(), v3()] as V3[],   // 0: FE, 1: FD, 2: TE, 3: TD
-        eixoLateral: [v3(), v3(), v3(), v3()] as V3[],
-    };
+    fisica = estadoFisicaInicial();
+    suspensao = estadoSuspensaoInicial();
+    pulo = estadoPuloInicial();
+    rodas = estadoRodasInicial(1);
     modelMatrix = new Mat4();
     readonly corRodas = [0.15, 0.15, 0.15];
 
@@ -134,23 +128,10 @@ export class Veiculo {
     }
 
     init() {
-        this.fisica = {
-            position: v3(), velocity: v3(), lastVelocity: v3(),
-            velocityY: 0, forwardSpeed: 0, lateralSpeed: 0, lastForwardSpeed: 0,
-            yawAngle: 0, currentSteer: 0, currentGrip: 0, derrapando: false, intensidadeDrift: 0,
-        };
-        this.suspensao = {
-            chassiPitchAngle: 0, chassiRollAngle: 0, chassiPitchVelocity: 0, chassiRollVelocity: 0,
-            terrenoPitchAngle: 0, terrenoRollAngle: 0, compressaoPulo: 0, compressaoVel: 0, molaPouso: 0, molaPousoVel: 0,
-        };
-        this.pulo = {
-            noAr: false, segurando: false, segurandoAnterior: false, buffer: 0, carga: 0,
-            alturaChaoAnterior: 0, vyChaoAnterior: 0, soloValido: false, pousouNoFrame: false,
-        };
-        this.rodas = {
-            radius: this.config.carro.rodas.raio, steerAngle: 0, rollAngle: 0,
-            posContato: [v3(), v3(), v3(), v3()], eixoLateral: [v3(), v3(), v3(), v3()],
-        };
+        this.fisica = estadoFisicaInicial();
+        this.suspensao = estadoSuspensaoInicial();
+        this.pulo = estadoPuloInicial();
+        this.rodas = estadoRodasInicial(this.config.carro.rodas.raio);
         this.fisica.position = v3(0, this.rodas.radius, 0);
         this.fisica.currentGrip = this.config.carro.fisica.aderenciaPista;
         this.modelMatrix = Mat4.translation(this.fisica.position);
@@ -167,7 +148,7 @@ export class Veiculo {
 
     private atualizarCompressao(dt: number) {
         const fis = this.config.carro.fisica, s = this.suspensao;
-        const limiteSup = Math.max(0, this.config.carro.dimensoes.alturachao * 0.95);
+        const limiteSup = this.limiteCompressao();
         const maxComp = clamp(fis.compressaoPulo, 0, limiteSup);
         const alvo = (!this.pulo.noAr && this.pulo.segurando) ? maxComp * this.pulo.carga : 0;
         const K = fis.suspensaoRigidez, C = fis.suspensaoAmortecimento;

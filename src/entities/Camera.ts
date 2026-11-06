@@ -2,7 +2,7 @@
 // Só a lógica; o Jogo.ts aplica posição/alvo na câmera do three.
 
 import { GAME_CONFIG } from '@/core/config';
-import { type V3, clamp, mix, radians } from '@/graphics/Mat4';
+import { type V3, clamp, mix, radians, normalizarAngulo, lerpFactorDt } from '@/graphics/Mat4';
 
 export interface EntradaMouse { x: number; y: number; direito: boolean; esquerdo: boolean }
 
@@ -54,18 +54,15 @@ export class CameraJogo {
             const deltaX = mouse.x - this.mouseAnteriorX;
             const deltaY = mouse.y - this.mouseAnteriorY;
             this.mouseAnteriorX = mouse.x; this.mouseAnteriorY = mouse.y;
-            this.anguloCameraYaw -= deltaX * (sensibilidade * 0.0174532925);
+            this.anguloCameraYaw -= deltaX * (radians(sensibilidade));
             this.anguloCameraPitch += deltaY * sensibilidade;
             this.anguloCameraPitch = clamp(this.anguloCameraPitch, -20, 80);
         } else {
             this.estavaArrastando = false;
             const velocidadeMinimaAlinhamento = 0.35;
             if (Math.abs(velocidadeCarro) > velocidadeMinimaAlinhamento) {
-                const taxaDt = 1 - Math.pow(1 - clamp(this.taxaRetornoOrbita, 0, 0.9999), dt60);
-                let diffYaw = targetYaw - this.anguloCameraYaw;
-                while (diffYaw < -3.14159265) diffYaw += 6.28318530;
-                while (diffYaw > 3.14159265) diffYaw -= 6.28318530;
-                this.anguloCameraYaw += diffYaw * taxaDt;
+                const diffYaw = normalizarAngulo(targetYaw - this.anguloCameraYaw);
+                this.anguloCameraYaw += diffYaw * lerpFactorDt(this.taxaRetornoOrbita, dt60);
             }
         }
 
@@ -80,8 +77,8 @@ export class CameraJogo {
             z: ancora.z + (-raio * cosP * Math.cos(this.anguloCameraYaw)),
         };
 
-        const fatorPos = 1 - Math.pow(1 - clamp(this.suavizacaoPos, 0, 0.9999), dt60);
-        const fatorTarget = 1 - Math.pow(1 - clamp(this.suavizacaoTarget, 0, 0.9999), dt60);
+        const fatorPos = lerpFactorDt(this.suavizacaoPos, dt60);
+        const fatorTarget = lerpFactorDt(this.suavizacaoTarget, dt60);
 
         this.cameraPos = { x: mix(this.cameraPos.x, posAlvo.x, fatorPos), y: mix(this.cameraPos.y, posAlvo.y, fatorPos), z: mix(this.cameraPos.z, posAlvo.z, fatorPos) };
         this.cameraTarget = { x: mix(this.cameraTarget.x, ancora.x, fatorTarget), y: mix(this.cameraTarget.y, ancora.y, fatorTarget), z: mix(this.cameraTarget.z, ancora.z, fatorTarget) };

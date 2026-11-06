@@ -80,6 +80,17 @@ export const degrees = (r: number) => r * 180 / Math.PI;
 export const clamp = (x: number, a: number, b: number) => Math.min(Math.max(x, a), b);
 export const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 export const sign = (x: number) => (x > 0 ? 1 : x < 0 ? -1 : 0);
+
+/** normaliza um ângulo (rad) para [-pi, pi] */
+export const normalizarAngulo = (a: number) => {
+    while (a > Math.PI) a -= 2 * Math.PI;
+    while (a < -Math.PI) a += 2 * Math.PI;
+    return a;
+};
+
+/** fator de interpolação por frame a 60 Hz, corrigido para o delta de tempo (dt60 = dt * 60) */
+export const lerpFactorDt = (taxaPorFrame: number, dt60: number) =>
+    1 - Math.pow(1 - clamp(taxaPorFrame, 0, 0.9999), dt60);
 export const smoothstep = (e0: number, e1: number, x: number) => {
     const t = clamp((x - e0) / (e1 - e0), 0, 1);
     return t * t * (3 - 2 * t);

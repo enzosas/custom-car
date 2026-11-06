@@ -6,13 +6,13 @@ import { Estrada } from './Estrada';
 import { Mt19937, uniformReal } from '@/core/Random';
 import { Mat4, X_AXIS, Y_AXIS, Z_AXIS, type V3, radians } from '@/graphics/Mat4';
 import { criarDistanciaPista } from './Floresta';
-import type { Malha } from '@/entities/Veiculo';
+import type { Malha } from '@/graphics/Malha';
 
 /** adicionarConeGeometria(): cone inclinado (tronco de cone) com rotação em X e Z */
 function adicionarCone(pos: number[], col: number[], idx: number[], offsetBase: V3,
                        raioChao: number, raioTopo: number, altura: number,
                        incXDeg: number, incZDeg: number, segmentos: number, cor: number[]) {
-    const step = 2 * 3.14159265359 / segmentos;
+    const step = 2 * Math.PI / segmentos;
     const rot = new Mat4().rotate(radians(incXDeg), X_AXIS).rotate(radians(incZDeg), Z_AXIS);
 
     const baseV: V3[] = [], topoV: V3[] = [];

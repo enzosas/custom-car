@@ -1,17 +1,19 @@
 // Jogo.ts - motor do jogo
 import * as THREE from 'three';
-import { GAME_CONFIG } from './config';
-import { Veiculo, type Malha } from '@/entities/Veiculo';
+import { GAME_CONFIG, PERFIL_CARRO_VERMELHO, PERFIL_CARRO_GLB, type PerfilCarro } from './config';
+import { Veiculo } from '@/entities/Veiculo';
 import { CameraJogo } from '@/entities/Camera';
 import { PilotoAutomatico } from '@/entities/PilotoAutomatico';
 import { Entrada } from './Input';
 import { type ControlesToque, criarControlesToque } from './ControlesToque';
-import { Mat4 } from '@/graphics/Mat4';
+import { type Mat4, lerpFactorDt } from '@/graphics/Mat4';
+import { geometriaDe } from '@/graphics/Malha';
 import { Renderer } from '@/graphics/Renderer';
 import { WorldBuilder } from '@/world/WorldBuilder';
+import { gerarGeometriaTufo } from '@/world/Grama';
 import { RastroPneu } from '@/graphics/RastroPneu';
 import { SistemaParticulas } from '@/graphics/Particulas';
-import { randGlobal, sementeAleatoria } from '@/core/Random';
+import { randGlobal } from '@/core/Random';
 import {
     criarUniformsCompartilhados,
     criarMaterialPrincipal,
@@ -21,27 +23,7 @@ import {
 } from '@/graphics/materialPrincipal';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-function geometriaDe(m: Malha): THREE.BufferGeometry {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(m.positions, 3));
-    g.setAttribute('color', new THREE.BufferAttribute(m.colors, 3));
-    g.setIndex(new THREE.BufferAttribute(m.indices, 1));
-    return g;
-}
-
 const mudou = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
-
-const CONFIG_CARRO_PADRAO = {
-    dimensoes: { largura: 10.0, comprimento: 20.0, alturachao: 2.0, alturaporta: 4.5, alturaparabrisa: 4.5, comprimentorodas: 13.0, largurarodas: 10.0, offsetchassi: 0.0, taxaBaseCockpitTras: 0.1, taxaTopoCockpitTras: 0.2, taxaTopoCockpitFrente: 0.6, taxaBaseCockpitFrente: 0.7 },
-    rodas: { raio: 2.0, largura: 1.5, segmentos: 16 },
-    fisica: { aceleracao: 0.03, aceleracaoFreio: 0.04, velmax: 7.0, velmaxre: -2.0, anguloVolanteMax: 0.7, velocidadeGiro: 0.03, taxaLerpVolante: 0.035, aderenciaFreioDeMao: 0.015, aderenciaPista: 0.03, atritoEscalar: 0.9999, atritoLinear: 0.001, arrastoQuadratico: 0.0, suspensaoRigidez: 150.0, suspensaoAmortecimento: 8.0, suspensaoInclinacaoMax: 8.0, velReferenciaGiro: 0.5, taxaRecuperacaoGrip: 0.02, forcaPulo: 70.0, gravidade: 150.0, fatorPuloMinimo: 0.55, tempoCargaPulo: 0.6, compressaoPulo: 1.4, reacaoPouso: 1.0, limiarDecolagem: 10.0, limiarDriftRastro: 0.9 }
-};
-
-const CONFIG_CARRO_GLB = {
-    dimensoes: { largura: 10.0, comprimento: 40.0, alturachao: 2.0, alturaporta: 4.5, alturaparabrisa: 4.5, comprimentorodas: 26.5, largurarodas: 15.9, offsetchassi: 0.100, taxaBaseCockpitTras: 0.1, taxaTopoCockpitTras: 0.2, taxaTopoCockpitFrente: 0.6, taxaBaseCockpitFrente: 0.7 },
-    rodas: { raio: 3.2, largura: 1.5, segmentos: 16 },
-    fisica: { aceleracao: 0.03, aceleracaoFreio: 0.04, velmax: 7.0, velmaxre: -2.0, anguloVolanteMax: 0.7, velocidadeGiro: 0.03, taxaLerpVolante: 0.035, aderenciaFreioDeMao: 0.015, aderenciaPista: 0.03, atritoEscalar: 0.9999, atritoLinear: 0.001, arrastoQuadratico: 0.0, suspensaoRigidez: 80.0, suspensaoAmortecimento: 8.0, suspensaoInclinacaoMax: 8.0, velReferenciaGiro: 0.5, taxaRecuperacaoGrip: 0.02, forcaPulo: 70.0, gravidade: 150.0, fatorPuloMinimo: 0.55, tempoCargaPulo: 0.6, compressaoPulo: 1.4, reacaoPouso: 1.0, limiarDecolagem: 10.0, limiarDriftRastro: 0.9 }
-};
 
 export interface JogoStats {
     fps: number;
@@ -57,7 +39,7 @@ export interface JogoOpcoes {
 
 export class Jogo {
     readonly config = GAME_CONFIG;
-    private configAnterior: any = JSON.parse(JSON.stringify(GAME_CONFIG));
+    private configAnterior: typeof GAME_CONFIG = structuredClone(GAME_CONFIG);
 
     private renderizador: Renderer;
     private world: WorldBuilder;
@@ -114,17 +96,24 @@ export class Jogo {
 
     private modoCarroGLB = false;
     private modeloGLBCache: THREE.Group | null = null;
-    private estadoCarroVermelho = JSON.parse(JSON.stringify(CONFIG_CARRO_PADRAO));
-    private estadoCarroGLB = JSON.parse(JSON.stringify(CONFIG_CARRO_GLB));
+    private estadoCarroVermelho: PerfilCarro = structuredClone(PERFIL_CARRO_VERMELHO);
+    private estadoCarroGLB: PerfilCarro = structuredClone(PERFIL_CARRO_GLB);
     private historicoFreioMao: number[] = [];
     private freioMaoPressionadoAnterior = false;
 
-    constructor(private canvas: HTMLCanvasElement, opcoes: JogoOpcoes = {}) {
+    constructor(canvas: HTMLCanvasElement, opcoes: JogoOpcoes = {}) {
         this.opcoes = opcoes;
         this.controlesToque = opcoes.controlesToque ?? criarControlesToque();
         this.renderizador = new Renderer(canvas, this.uniforms);
-        this.world = new WorldBuilder(this.uniforms, this.config);
+        this.world = new WorldBuilder(this.matOpaco, this.config);
         Entrada.iniciar(canvas);
+    }
+
+    /** copia um perfil de carro (dimensões, rodas, física) para o GAME_CONFIG, mantendo as referências dos objetos */
+    private aplicarPerfilCarro(perfil: PerfilCarro) {
+        Object.assign(this.config.carro.dimensoes, perfil.dimensoes);
+        Object.assign(this.config.carro.rodas, perfil.rodas);
+        Object.assign(this.config.carro.fisica, perfil.fisica);
     }
 
     setConfigAberto(aberto: boolean) { this.configAberto = aberto; }
@@ -132,9 +121,7 @@ export class Jogo {
     marcarConfigAlterada() { this.painelAlterado = true; }
 
     async iniciar(urlTerreno = './terreno.raw') {
-        Object.assign(this.config.carro.dimensoes, this.estadoCarroVermelho.dimensoes);
-        Object.assign(this.config.carro.rodas, this.estadoCarroVermelho.rodas);
-        Object.assign(this.config.carro.fisica, this.estadoCarroVermelho.fisica);
+        this.aplicarPerfilCarro(this.estadoCarroVermelho);
 
         const terrenoCarregado = await this.world.carregarTerreno(urlTerreno);
         if (this.descartado || !terrenoCarregado) return;
@@ -185,7 +172,7 @@ export class Jogo {
                 }
             });
             this.modeloGLBCache = modelo;
-        }, undefined, () => { console.log('carro.glb n o encontrado em /public.'); });
+        }, undefined, () => { console.log('carro.glb não encontrado em /public.'); });
 
         this.rastroMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.matRastro);
         this.rastroMesh.frustumCulled = false;
@@ -199,7 +186,7 @@ export class Jogo {
         if (Number.isFinite(s) && s > 0) this.world.seedPista = s >>> 0;
 
         this.regenerarPista(this.world.seedPista === 0, true);
-        this.configAnterior = JSON.parse(JSON.stringify(this.config));
+        this.configAnterior = structuredClone(this.config);
 
         this.lastTime = performance.now() / 1000;
         this.rodando = true;
@@ -232,17 +219,13 @@ export class Jogo {
 
     private alternarModoCarro() {
         if (this.modoCarroGLB) {
-            this.estadoCarroGLB = JSON.parse(JSON.stringify(this.config.carro));
+            this.estadoCarroGLB = structuredClone(this.config.carro);
         } else {
-            this.estadoCarroVermelho = JSON.parse(JSON.stringify(this.config.carro));
+            this.estadoCarroVermelho = structuredClone(this.config.carro);
         }
 
         this.modoCarroGLB = !this.modoCarroGLB;
-        const estadoDestino = this.modoCarroGLB ? this.estadoCarroGLB : this.estadoCarroVermelho;
-
-        Object.assign(this.config.carro.dimensoes, estadoDestino.dimensoes);
-        Object.assign(this.config.carro.rodas, estadoDestino.rodas);
-        Object.assign(this.config.carro.fisica, estadoDestino.fisica);
+        this.aplicarPerfilCarro(this.modoCarroGLB ? this.estadoCarroGLB : this.estadoCarroVermelho);
 
         this.veiculo.reconstruirGeometria();
         const geoRoda = geometriaDe(this.veiculo.gerarMalhaRoda());
@@ -273,7 +256,7 @@ export class Jogo {
             }
         }
 
-        this.configAnterior = JSON.parse(JSON.stringify(this.config));
+        this.configAnterior = structuredClone(this.config);
         this.opcoes.onConfigRecarregada?.();
         this.emitirStats();
     }
@@ -440,7 +423,7 @@ export class Jogo {
         }
 
         if (terrenoMudou) this.terrenoDefasado = true;
-        this.configAnterior = JSON.parse(JSON.stringify(c));
+        this.configAnterior = structuredClone(c);
     }
 
     private processarTrabalhoPendente() {
@@ -496,19 +479,19 @@ export class Jogo {
 
     private atualizarDinamicos(camRight: THREE.Vector3, camUp: THREE.Vector3) {
         const nR = this.rastroPneus.gerarGeometria(this.rastroBuf);
-        this.sincronizarBuffer(this.rastroMesh.geometry, 'position', this.rastroBuf.pos, 3, nR);
-        this.sincronizarBuffer(this.rastroMesh.geometry, 'color', this.rastroBuf.cor, 3, nR);
+        this.sincronizarBuffer(this.rastroMesh.geometry, 'position', this.rastroBuf.pos, 3);
+        this.sincronizarBuffer(this.rastroMesh.geometry, 'color', this.rastroBuf.cor, 3);
         this.rastroMesh.geometry.setDrawRange(0, nR);
         this.rastroMesh.visible = nR > 0;
 
         const nP = this.particulas.gerarGeometria({ x: camRight.x, y: camRight.y, z: camRight.z }, { x: camUp.x, y: camUp.y, z: camUp.z }, this.particulasBuf);
-        this.sincronizarBuffer(this.particulasMesh.geometry, 'position', this.particulasBuf.pos, 3, nP);
-        this.sincronizarBuffer(this.particulasMesh.geometry, 'aCor', this.particulasBuf.cor, 4, nP);
+        this.sincronizarBuffer(this.particulasMesh.geometry, 'position', this.particulasBuf.pos, 3);
+        this.sincronizarBuffer(this.particulasMesh.geometry, 'aCor', this.particulasBuf.cor, 4);
         this.particulasMesh.geometry.setDrawRange(0, nP);
         this.particulasMesh.visible = nP > 0;
     }
 
-    private sincronizarBuffer(geo: THREE.BufferGeometry, nome: string, arr: Float32Array, itemSize: number, _n: number) {
+    private sincronizarBuffer(geo: THREE.BufferGeometry, nome: string, arr: Float32Array, itemSize: number) {
         const atual = geo.getAttribute(nome) as THREE.BufferAttribute | undefined;
         if (!atual || atual.array !== arr) {
             const a = new THREE.BufferAttribute(arr, itemSize);
@@ -543,7 +526,6 @@ export class Jogo {
 
         if (Entrada.teclaUmaVez('KeyQ')) {
             this.wireframe = !this.wireframe;
-            this.world.setWireframe(this.wireframe);
             this.matOpaco.wireframe = this.wireframe;
             this.matRastro.wireframe = this.wireframe;
         }
@@ -640,8 +622,7 @@ export class Jogo {
             else targetOffY = -h * 0.25;
         }
 
-        const dt60 = deltaTime * 60;
-        const lerpCam = 1 - Math.pow(1 - 0.08, Math.min(dt60, 3.0));
+        const lerpCam = lerpFactorDt(0.08, Math.min(deltaTime * 60, 3.0));
         this.camOffsetX += (targetOffX - this.camOffsetX) * lerpCam;
         this.camOffsetY += (targetOffY - this.camOffsetY) * lerpCam;
 
@@ -722,7 +703,6 @@ export class Jogo {
             if (o.geometry) o.geometry.dispose();
         });
 
-        this.world.dispose();
         this.matOpaco.dispose();
         this.matRastro.dispose();
         this.matParticula.dispose();

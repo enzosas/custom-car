@@ -5,12 +5,9 @@ import { GAME_CONFIG } from '@/core/config';
 import { Terreno, type Vec3 } from './Terreno';
 import { Mt19937, uniformReal, sementeAleatoria } from '@/core/Random';
 import { clamp, smoothstep, mix } from '@/graphics/Mat4';
+import type { Malha } from '@/graphics/Malha';
 
-export interface MalhaPista {
-    positions: Float32Array;
-    colors: Float32Array;
-    indices: Uint32Array;
-}
+export type MalhaPista = Malha;
 
 const CATMULL = (p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, t: number): Vec3 => {
     const t2 = t * t, t3 = t2 * t;
@@ -102,8 +99,7 @@ export class Estrada {
             let dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
             let l = Math.hypot(dx, dy, dz) || 1; dx /= l; dy /= l; dz /= l;
             // lateral = normalize(cross(dir, up(0,1,0)))
-            let lx = dy * 0 - dz * 1, lz = dx * 1 - dy * 0; // cross(dir,(0,1,0)) = (-dz, 0, dx)
-            lx = -dz; lz = dx;
+            let lx = -dz, lz = dx; // cross(dir,(0,1,0)) = (-dz, 0, dx)
             l = Math.hypot(lx, 0, lz) || 1; lx /= l; lz /= l;
 
             const k = i * 6;

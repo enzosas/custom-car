@@ -6,19 +6,9 @@ import { Floresta } from './Floresta';
 import { Grama, gerarGeometriaTufo } from './Grama';
 import { gerarGeometriasArvore } from './Arvore';
 import { sementeAleatoria } from '@/core/Random';
-import type { Malha } from '@/entities/Veiculo';
-import type { UniformsCompartilhados } from '@/graphics/materialPrincipal';
-import { criarMaterialPrincipal } from '@/graphics/materialPrincipal';
+import { geometriaDe } from '@/graphics/Malha';
 
 const COR_GRAMA = [0.34, 0.7, 0.56];
-
-function geometriaDe(m: Malha): THREE.BufferGeometry {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(m.positions, 3));
-    g.setAttribute('color', new THREE.BufferAttribute(m.colors, 3));
-    g.setIndex(new THREE.BufferAttribute(m.indices, 1));
-    return g;
-}
 
 export class WorldBuilder {
     public terreno = new Terreno();
@@ -40,12 +30,10 @@ export class WorldBuilder {
     private gramaCap = 0;
 
     private terrenoPos!: THREE.BufferAttribute;
-    private matOpaco: THREE.ShaderMaterial;
     public seedPista = 0;
 
-    constructor(uniforms: UniformsCompartilhados, private config = GAME_CONFIG) {
-        this.matOpaco = criarMaterialPrincipal(uniforms);
-    }
+    /** `matOpaco` é compartilhado com o Jogo (quem o cria também o descarta). */
+    constructor(private matOpaco: THREE.ShaderMaterial, private config = GAME_CONFIG) {}
 
     // 1. Carregar Terreno Base
     async carregarTerreno(urlTerreno: string): Promise<boolean> {
@@ -190,11 +178,4 @@ export class WorldBuilder {
         return h;
     };
 
-    setWireframe(wireframe: boolean) {
-        this.matOpaco.wireframe = wireframe;
-    }
-
-    dispose() {
-        this.matOpaco.dispose();
-    }
 }

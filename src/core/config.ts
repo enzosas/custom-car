@@ -1,56 +1,81 @@
 // config.ts
 
+const FISICA_BASE = {
+    aceleracao: 0.03,
+    aceleracaoFreio: 0.04,
+    velmax: 7.0,
+    velmaxre: -2.0,
+    anguloVolanteMax: 0.7,
+    velocidadeGiro: 0.03,
+    taxaLerpVolante: 0.035,
+    aderenciaFreioDeMao: 0.015,
+    aderenciaPista: 0.03,
+    atritoEscalar: 0.9999,
+    atritoLinear: 0.001,
+    arrastoQuadratico: 0.0,
+    suspensaoRigidez: 80.0,
+    suspensaoAmortecimento: 8.0,
+    suspensaoInclinacaoMax: 8.0,
+    velReferenciaGiro: 0.5,
+    taxaRecuperacaoGrip: 0.02,
+    forcaPulo: 70.0,
+    gravidade: 150.0,
+    fatorPuloMinimo: 0.55,
+    tempoCargaPulo: 0.6,
+    compressaoPulo: 1.4,
+    reacaoPouso: 1.0,
+    limiarDecolagem: 10.0,
+    limiarDriftRastro: 0.9,
+};
+
+const COCKPIT_BASE = {
+    taxaBaseCockpitTras: 0.1,
+    taxaTopoCockpitTras: 0.2,
+    taxaTopoCockpitFrente: 0.6,
+    taxaBaseCockpitFrente: 0.7,
+};
+
+/** Carro procedural (o "vermelho") */
+export const PERFIL_CARRO_VERMELHO = {
+    dimensoes: {
+        largura: 10.0,
+        comprimento: 20.0,
+        alturachao: 2.0,
+        alturaporta: 4.5,
+        alturaparabrisa: 4.5,
+        comprimentorodas: 13.0,
+        largurarodas: 10.0,
+        offsetchassi: 0.0,
+        ...COCKPIT_BASE,
+    },
+    rodas: { raio: 2.0, largura: 1.5, segmentos: 16 },
+    fisica: { ...FISICA_BASE, suspensaoRigidez: 150.0 },
+};
+
+/** Carro carregado de um modelo .glb */
+export const PERFIL_CARRO_GLB = {
+    dimensoes: {
+        largura: 10.0,
+        comprimento: 40.0,
+        alturachao: 2.0,
+        alturaporta: 4.5,
+        alturaparabrisa: 4.5,
+        comprimentorodas: 26.5,
+        largurarodas: 15.9,
+        offsetchassi: 0.100,
+        ...COCKPIT_BASE,
+    },
+    rodas: { raio: 3.2, largura: 1.5, segmentos: 16 },
+    fisica: { ...FISICA_BASE },
+};
+
+export type PerfilCarro = typeof PERFIL_CARRO_VERMELHO;
+
 export const GAME_CONFIG = {
     pilotoAutomaticoOn: false,
 
-    carro: {
-        dimensoes: {
-            largura: 10.0,
-            comprimento: 40.0,
-            alturachao: 2.0,
-            alturaporta: 4.5,
-            alturaparabrisa: 4.5,
-            comprimentorodas: 26.5,
-            largurarodas: 16.5,
-            offsetchassi: 0.100,
-            taxaBaseCockpitTras: 0.1,
-            taxaTopoCockpitTras: 0.2,
-            taxaTopoCockpitFrente: 0.6,
-            taxaBaseCockpitFrente: 0.7,
-        },
-        rodas: {
-            raio: 3.2,
-            largura: 1.5,
-            segmentos: 16,
-        },
-        fisica: {
-            aceleracao: 0.03,
-            aceleracaoFreio: 0.04,
-            velmax: 7.0,
-            velmaxre: -2.0,
-            anguloVolanteMax: 0.7,
-            velocidadeGiro: 0.03,
-            taxaLerpVolante: 0.035,
-            aderenciaFreioDeMao: 0.015,
-            aderenciaPista: 0.03,
-            atritoEscalar: 0.9999,
-            atritoLinear: 0.001,
-            arrastoQuadratico: 0.0,
-            suspensaoRigidez: 80.0,
-            suspensaoAmortecimento: 8.0,
-            suspensaoInclinacaoMax: 8.0,
-            velReferenciaGiro: 0.5,
-            taxaRecuperacaoGrip: 0.02,
-            forcaPulo: 70.0,
-            gravidade: 150.0,
-            fatorPuloMinimo: 0.55,
-            tempoCargaPulo: 0.6,
-            compressaoPulo: 1.4,
-            reacaoPouso: 1.0,
-            limiarDecolagem: 10.0,
-            limiarDriftRastro: 0.9,
-        }
-    },
+    // o jogo sempre começa no carro vermelho; o Jogo troca para o perfil GLB com a tecla X
+    carro: structuredClone(PERFIL_CARRO_VERMELHO) as PerfilCarro,
 
     terreno: {
         parametros: {
@@ -143,103 +168,5 @@ export const GAME_CONFIG = {
             margemLinha: 12.0,
             raioRefLinha: 600.0,
         }
-    }
-};
-
-const CONFIG_CARRO_PADRAO = {
-    dimensoes: {
-        largura: 10.0,
-        comprimento: 20.0,
-        alturachao: 2.0,
-        alturaporta: 4.5,
-        alturaparabrisa: 4.5,
-        comprimentorodas: 13.0,
-        largurarodas: 10.0,
-        offsetchassi: 0.0,
-        taxaBaseCockpitTras: 0.1,
-        taxaTopoCockpitTras: 0.2,
-        taxaTopoCockpitFrente: 0.6,
-        taxaBaseCockpitFrente: 0.7,
-    },
-    rodas: {
-        raio: 2.0,
-        largura: 1.5,
-        segmentos: 16,
-    },
-    fisica: {
-        aceleracao: 0.03,
-        aceleracaoFreio: 0.04,
-        velmax: 7.0,
-        velmaxre: -2.0,
-        anguloVolanteMax: 0.7,
-        velocidadeGiro: 0.03,
-        taxaLerpVolante: 0.035,
-        aderenciaFreioDeMao: 0.015,
-        aderenciaPista: 0.03,
-        atritoEscalar: 0.9999,
-        atritoLinear: 0.001,
-        arrastoQuadratico: 0.0,
-        suspensaoRigidez: 150.0,
-        suspensaoAmortecimento: 8.0,
-        suspensaoInclinacaoMax: 8.0,
-        velReferenciaGiro: 0.5,
-        taxaRecuperacaoGrip: 0.02,
-        forcaPulo: 70.0,
-        gravidade: 150.0,
-        fatorPuloMinimo: 0.55,
-        tempoCargaPulo: 0.6,
-        compressaoPulo: 1.4,
-        reacaoPouso: 1.0,
-        limiarDecolagem: 10.0,
-        limiarDriftRastro: 0.9,
-    }
-};
-
-const CONFIG_CARRO_GLB = {
-    dimensoes: {
-        largura: 10.0,
-        comprimento: 40.0,
-        alturachao: 2.0,
-        alturaporta: 4.5,
-        alturaparabrisa: 4.5,
-        comprimentorodas: 26.5,
-        largurarodas: 15.9,
-        offsetchassi: 0.100,
-        taxaBaseCockpitTras: 0.1,
-        taxaTopoCockpitTras: 0.2,
-        taxaTopoCockpitFrente: 0.6,
-        taxaBaseCockpitFrente: 0.7,
-    },
-    rodas: {
-        raio: 3.2,
-        largura: 1.5,
-        segmentos: 16,
-    },
-    fisica: {
-        aceleracao: 0.03,
-        aceleracaoFreio: 0.04,
-        velmax: 7.0,
-        velmaxre: -2.0,
-        anguloVolanteMax: 0.7,
-        velocidadeGiro: 0.03,
-        taxaLerpVolante: 0.035,
-        aderenciaFreioDeMao: 0.015,
-        aderenciaPista: 0.03,
-        atritoEscalar: 0.9999,
-        atritoLinear: 0.001,
-        arrastoQuadratico: 0.0,
-        suspensaoRigidez: 80.0,
-        suspensaoAmortecimento: 8.0,
-        suspensaoInclinacaoMax: 8.0,
-        velReferenciaGiro: 0.5,
-        taxaRecuperacaoGrip: 0.02,
-        forcaPulo: 70.0,
-        gravidade: 150.0,
-        fatorPuloMinimo: 0.55,
-        tempoCargaPulo: 0.6,
-        compressaoPulo: 1.4,
-        reacaoPouso: 1.0,
-        limiarDecolagem: 10.0,
-        limiarDriftRastro: 0.9,
     }
 };
