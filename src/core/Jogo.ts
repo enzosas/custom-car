@@ -270,6 +270,7 @@ export class Jogo {
             this.wireframe = !this.wireframe;
             this.matOpaco.wireframe = this.wireframe;
             this.efeitos.setWireframe(this.wireframe);
+            this.carro.setWireframe(this.wireframe);
         }
         if (Entrada.teclaUmaVez('KeyR')) this.regenerarPista(true, true);
 
@@ -326,6 +327,7 @@ export class Jogo {
 
         this.renderizador.camera.updateProjectionMatrix();
         atualizarLuz(this.uniforms);
+        this.renderizador.sincronizarLuzes();
 
         const l = this.config.luz.parametros;
         const lightDir = new THREE.Vector3(l.dirX, l.dirY, l.dirZ);

@@ -27,15 +27,26 @@ function liberarModelo(raiz: THREE.Object3D) {
     });
 }
 
-/** ajustes para qualquer modelo carregado: sem culling (o chassi não tem bounding box confiável) e textura em sRGB */
-function prepararModelo(modelo: THREE.Object3D) {
-    modelo.traverse((child) => {
-        const mesh = child as THREE.Mesh;
-        if (!mesh.isMesh) return;
-        mesh.frustumCulled = false;
-        const mat = mesh.material as THREE.MeshStandardMaterial | undefined;
-        if (mat?.map) mat.map.colorSpace = THREE.SRGBColorSpace;
+/**
+ * Os materiais PBR do .glb (MeshStandardMaterial) dependem da câmera (brilho/metal) e ignoram o specular/shininess
+ * do jogo. Convertidos para Phong (Blinn-Phong, como o shader do jogo) o carro reage à mesma luz que o resto.
+ * Perde-se metalness/roughness; cor, textura, normal map, emissivo e transparência são mantidos.
+ * Ponha `false` para manter os materiais originais do arquivo.
+ */
+const CONVERTER_MATERIAIS_PARA_PHONG = true;
+
+function paraPhong(orig: THREE.Material): THREE.Material {
+    const o = orig as THREE.MeshStandardMaterial;
+    if (!o.isMeshStandardMaterial) return orig;   // inclui MeshPhysicalMaterial
+    const m = new THREE.MeshPhongMaterial({
+        name: o.name, color: o.color, map: o.map, vertexColors: o.vertexColors,
+        side: o.side, transparent: o.transparent, opacity: o.opacity, depthWrite: o.depthWrite,
+        alphaMap: o.alphaMap, alphaTest: o.alphaTest,
+        emissive: o.emissive, emissiveMap: o.emissiveMap, emissiveIntensity: o.emissiveIntensity,
+        normalMap: o.normalMap, aoMap: o.aoMap, aoMapIntensity: o.aoMapIntensity,
     });
+    m.normalScale.copy(o.normalScale);
+    return m;
 }
 
 export class CarroVisual {
@@ -53,6 +64,8 @@ export class CarroVisual {
     private modeloGLBCache: THREE.Group | null = null;
     private descartado = false;
     private rodasVisiveis: boolean;
+    private wireframe = false;
+    private readonly materiaisPhong = new Set<THREE.MeshPhongMaterial>();
 
     // temporários reutilizados a cada frame (evita alocar no loop)
     private readonly tmpEscala = new THREE.Vector3();
@@ -94,7 +107,7 @@ export class CarroVisual {
     carregarModeloPadrao(url = './carro.glb') {
         new GLTFLoader().load(url, (gltf) => {
             if (this.descartado) return;
-            prepararModelo(gltf.scene);
+            this.prepararModelo(gltf.scene);
             this.modeloGLBCache = gltf.scene;
         }, undefined, () => { console.log('carro.glb não encontrado em /public.'); });
     }
@@ -104,7 +117,7 @@ export class CarroVisual {
         const buffer = await arquivo.arrayBuffer();
         const gltf = await new GLTFLoader().parseAsync(buffer, '');
         if (this.descartado) return;
-        prepararModelo(gltf.scene);
+        this.prepararModelo(gltf.scene);
         const anterior = this.modeloGLBCache;
         this.modeloGLBCache = gltf.scene;
         if (anterior) liberarModelo(anterior);
@@ -128,6 +141,12 @@ export class CarroVisual {
         this.chassiProcedural.geometry.dispose();
         this.chassiProcedural.geometry = geometriaDe(this.veiculo.gerarMalhaChassi());
         this.chassi.add(this.chassiProcedural);
+    }
+
+    /** liga/desliga o wireframe também nos materiais do modelo .glb (os procedurais seguem o material do jogo) */
+    setWireframe(ativo: boolean) {
+        this.wireframe = ativo;
+        this.aplicarWireframe();
     }
 
     /** mostra/esconde as rodas (as procedurais ou as do modelo .glb, conforme o modo atual) */
@@ -158,6 +177,12 @@ export class CarroVisual {
 
     /** copia a pose da física (chassi e 4 rodas) para os objetos da cena */
     atualizar() {
+        const luz = this.config.luz.parametros;
+        for (const m of this.materiaisPhong) {
+            m.shininess = luz.shininess;
+            m.specular.setScalar(luz.intensidadeEspecular);
+        }
+
         this.aplicarMatriz(this.chassi, this.veiculo.matrizChassi());
 
         this.veiculo.matrizesRodas().forEach((m, i) => {
@@ -227,6 +252,53 @@ export class CarroVisual {
 
         modelo.matrixAutoUpdate = true;
         this.chassi.add(modelo);
+        this.aplicarWireframe();
+    }
+
+    /** ajustes para qualquer modelo carregado: sem luzes embutidas, sem culling e materiais no padrão do jogo */
+    private prepararModelo(modelo: THREE.Object3D) {
+        this.materiaisPhong.clear();
+
+        // luzes do arquivo (KHR_lights_punctual) viram "sóis" extras que andam junto com o carro
+        const luzes: THREE.Object3D[] = [];
+        modelo.traverse((o) => { if ((o as THREE.Light).isLight) luzes.push(o); });
+        luzes.forEach((l) => l.removeFromParent());
+
+        const convertidos = new Map<THREE.Material, THREE.Material>();
+        const converter = (mat: THREE.Material) => {
+            if (!CONVERTER_MATERIAIS_PARA_PHONG) return mat;
+            let novo = convertidos.get(mat);
+            if (!novo) {
+                novo = paraPhong(mat);
+                convertidos.set(mat, novo);
+                if (novo !== mat) mat.dispose();
+            }
+            return novo;
+        };
+
+        modelo.traverse((child) => {
+            const mesh = child as THREE.Mesh;
+            if (!mesh.isMesh) return;
+            mesh.frustumCulled = false;
+            mesh.material = Array.isArray(mesh.material) ? mesh.material.map(converter) : converter(mesh.material);
+            const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            for (const m of mats) {
+                if ((m as THREE.MeshPhongMaterial).isMeshPhongMaterial) this.materiaisPhong.add(m as THREE.MeshPhongMaterial);
+                const mapa = (m as THREE.MeshStandardMaterial).map;
+                if (mapa) mapa.colorSpace = THREE.SRGBColorSpace;
+            }
+        });
+    }
+
+    private aplicarWireframe() {
+        for (const raiz of [this.modeloAtual, this.rodasGLBGroup]) {
+            raiz?.traverse((o) => {
+                const mesh = o as THREE.Mesh;
+                if (!mesh.isMesh) return;
+                const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                for (const m of mats) (m as THREE.MeshPhongMaterial).wireframe = this.wireframe;
+            });
+        }
     }
 
     private encontrarPorNome(modelo: THREE.Object3D, nomeBuscado: string): THREE.Object3D | null {

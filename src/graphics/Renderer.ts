@@ -6,11 +6,21 @@ import type { UniformsCompartilhados } from './materialPrincipal';
 const NEAR_PLANE = 0.3;
 const FAR_PLANE = 15000;
 
+/**
+ * As luzes do three (usadas só por materiais embutidos, como os do .glb) seguem os mesmos parâmetros do shader
+ * do jogo. O three trabalha em unidades físicas (o difuso é dividido por pi), então a intensidade do jogo
+ * é multiplicada por pi. Ajuste aqui se o carro ficar mais claro/escuro que o resto.
+ */
+const ESCALA_LUZ_THREE = Math.PI;
+
 export class Renderer {
     public renderer: THREE.WebGLRenderer;
     public scene: THREE.Scene;
     public camera: THREE.PerspectiveCamera;
     public sombra: ShadowMap;
+
+    private readonly luzAmbiente = new THREE.AmbientLight(0xffffff, 1);
+    private readonly luzSol = new THREE.DirectionalLight(0xffffff, 1);
 
     constructor(private canvas: HTMLCanvasElement, uniforms: UniformsCompartilhados) {
         // Inicialização WebGL
@@ -37,13 +47,19 @@ export class Renderer {
     }
 
     private configurarLuzes() {
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
-        this.scene.add(ambientLight);
+        this.scene.add(this.luzAmbiente);
+        this.scene.add(this.luzSol);   // o alvo padrão é a origem: a direção é só a posição normalizada
+        this.sincronizarLuzes();
+    }
 
-        const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
+    /** copia a config de luz do jogo (direção, cor, intensidades) para as luzes do three; chamar a cada frame */
+    public sincronizarLuzes() {
         const l = GAME_CONFIG.luz.parametros;
-        dirLight.position.set(l.dirX, l.dirY, l.dirZ).normalize().multiplyScalar(500);
-        this.scene.add(dirLight);
+        this.luzAmbiente.color.setRGB(l.corR, l.corG, l.corB);
+        this.luzAmbiente.intensity = l.intensidadeAmbiente * ESCALA_LUZ_THREE;
+        this.luzSol.color.setRGB(l.corR, l.corG, l.corB);
+        this.luzSol.intensity = l.intensidadeDifusa * ESCALA_LUZ_THREE;
+        this.luzSol.position.set(l.dirX, l.dirY, l.dirZ).normalize().multiplyScalar(500);
     }
 
     private redimensionar = () => {
