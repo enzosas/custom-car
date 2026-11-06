@@ -73,15 +73,12 @@ export type PerfilCarro = typeof PERFIL_CARRO_VERMELHO;
 
 export const GAME_CONFIG = {
     pilotoAutomaticoOn: false,
-
-    // o jogo sempre começa no carro vermelho; o Jogo troca para o perfil GLB com a tecla X
+    // o jogo sempre come a no carro vermelho; o Jogo troca para o perfil GLB com a tecla X
     carro: structuredClone(PERFIL_CARRO_VERMELHO) as PerfilCarro,
-
     /** interruptores (liga/desliga) do painel; cada chave aqui vira uma linha de switch via `interruptores` em painelCampos.ts */
     opcoes: {
         rodasVisiveis: true,
     },
-
     terreno: {
         parametros: {
             ptcontrole: 10,
@@ -97,7 +94,6 @@ export const GAME_CONFIG = {
             fatorOpacidade: 1.0,
         }
     },
-
     arvore: {
         arvores: {
             quantidade: 8000,
@@ -112,7 +108,6 @@ export const GAME_CONFIG = {
             distanciaEstrada: 20.0,
         }
     },
-
     grama: {
         grama: {
             quantidade: 16000,
@@ -122,7 +117,6 @@ export const GAME_CONFIG = {
             distanciaEstrada: 30.0,
         }
     },
-
     estrada: {
         estrada: {
             largura: 80.0,
@@ -132,7 +126,6 @@ export const GAME_CONFIG = {
             offsetElevacao: 0.7,
         }
     },
-
     luz: {
         parametros: {
             dirX: 0.35,
@@ -147,7 +140,6 @@ export const GAME_CONFIG = {
             shininess: 20.0,
         }
     },
-
     camera: {
         parametros: {
             distanciaRaioBase: 80.0,
@@ -156,9 +148,11 @@ export const GAME_CONFIG = {
             suavizacaoTarget: 1.0,
             taxaRetornoOrbita: 0.03,
             sensibilidadeMouse: 0.35,
+            offsetX: 0.0,
+            offsetY: 0.0,
+            offsetZ: 0.0,
         }
     },
-
     pilotoAutomatico: {
         parametros: {
             lookaheadBase: 80.0,

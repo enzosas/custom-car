@@ -1,5 +1,5 @@
-// Camera.ts — port de Camera.h (câmera orbital de perseguição com amortecimento).
-// Só a lógica; o Jogo.ts aplica posição/alvo na câmera do three.
+// Camera.ts   port de Camera.h (c mera orbital de persegui o com amortecimento).
+// S  a l gica; o Jogo.ts aplica posi o/alvo na c mera do three.
 
 import { GAME_CONFIG } from '@/core/config';
 import { type V3, clamp, mix, radians, normalizarAngulo, lerpFactorDt } from '@/graphics/Mat4';
@@ -38,12 +38,13 @@ export class CameraJogo {
     }
 
     update(deltaTime: number, mouse: EntradaMouse, targetPos: V3, targetYaw: number, alturaTeto: number,
-           _throttle: number, velocidadeCarro: number, mouseSobreUI = false,
-           alturaFn?: (x: number, z: number) => number) {
+        _throttle: number, velocidadeCarro: number, mouseSobreUI = false,
+        alturaFn?: (x: number, z: number) => number) {
         const dt = clamp(deltaTime, 0, 0.1);
         const dt60 = dt * 60;
 
         this.sincronizar();
+
         const sensibilidade = this.config.camera.parametros.sensibilidadeMouse;
 
         if (mouse.direito && !mouseSobreUI) {
@@ -54,6 +55,7 @@ export class CameraJogo {
             const deltaX = mouse.x - this.mouseAnteriorX;
             const deltaY = mouse.y - this.mouseAnteriorY;
             this.mouseAnteriorX = mouse.x; this.mouseAnteriorY = mouse.y;
+
             this.anguloCameraYaw -= deltaX * (radians(sensibilidade));
             this.anguloCameraPitch += deltaY * sensibilidade;
             this.anguloCameraPitch = clamp(this.anguloCameraPitch, -20, 80);
@@ -66,7 +68,26 @@ export class CameraJogo {
             }
         }
 
-        const ancora: V3 = { x: targetPos.x, y: targetPos.y + alturaTeto, z: targetPos.z };
+        const pConf = this.config.camera.parametros;
+        const offX = pConf.offsetX ?? 0;
+        const offY = pConf.offsetY ?? 0;
+        const offZ = pConf.offsetZ ?? 0;
+
+        // Cálculos do offset para ele ser relativo à direção em que o carro está apontando
+        const cY = Math.cos(targetYaw);
+        const sY = Math.sin(targetYaw);
+
+        // Local X (lados), Local Y (altura), Local Z (frente/trás)
+        const globalOffX = offX * cY + offZ * sY;
+        const globalOffY = offY;
+        const globalOffZ = offX * (-sY) + offZ * cY;
+
+        const ancora: V3 = {
+            x: targetPos.x + globalOffX,
+            y: targetPos.y + alturaTeto + globalOffY,
+            z: targetPos.z + globalOffZ
+        };
+
         const raio = this.distanciaRaioBase * this.fatorZoom;
         const radPitch = radians(this.anguloCameraPitch);
         const cosP = Math.cos(radPitch), sinP = Math.sin(radPitch);
@@ -95,7 +116,7 @@ export class CameraJogo {
         this.fatorZoom = clamp(this.fatorZoom, 0.1, 400);
     }
 
-    /** vetor "up" de referência do lookAt (evita singularidade na vertical) */
+    /** vetor "up" de refer ncia do lookAt (evita singularidade na vertical) */
     getUpRef(): V3 {
         const dx = this.cameraTarget.x - this.cameraPos.x, dy = this.cameraTarget.y - this.cameraPos.y, dz = this.cameraTarget.z - this.cameraPos.z;
         const l = Math.hypot(dx, dy, dz) || 1;
