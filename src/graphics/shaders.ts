@@ -30,6 +30,7 @@ varying vec4 vFragPosLightSpace;
 uniform vec3  uLightDir;
 uniform vec3  uLightColor;
 uniform vec3  uSkyColor;
+uniform float uNeblina;
 uniform float uAlpha;
 uniform float uAmbient;
 uniform float uDiffuse;
@@ -71,7 +72,6 @@ void main() {
     vec3 lDir = normalize(uLightDir);
     vec3 viewDir = normalize(cameraPosition - vFragPos);
     
-    // Agora o ambiente recebe luz rebatida diretamente da Cor do Céu!
     vec3 ambient = uAmbient * uSkyColor * vColor;
     
     float diff = max(dot(normal, lDir), 0.0);
@@ -86,10 +86,10 @@ void main() {
     
     vec3 result = ambient + (1.0 - shadow) * (diffuse + specular);
     
-    // Fog usa também a cor do céu!
     float distCam = length(cameraPosition - vFragPos);
     float fogFactor = clamp((distCam - 5000.0) / (15000.0 - 5000.0), 0.0, 1.0);
-    result = mix(result, uSkyColor, fogFactor);
+    
+    result = mix(result, uSkyColor, fogFactor * uNeblina);
     
     gl_FragColor = vec4(result, uAlpha);
 }
@@ -111,17 +111,40 @@ export const fragmentProfundidade = /* glsl */ `
 void main() { gl_FragColor = vec4(1.0); }
 `;
 
-// Part culas: shader embutido do SistemaParticulas (MVP * pos, cor rgba direta)
+// Partículas agora recebem a posição no mundo para o cálculo da neblina
 export const vertexParticula = /* glsl */ `
 attribute vec4 aCor;
 varying vec4 vCor;
+varying vec3 vFragPos;
+
 void main() {
     vCor = aCor;
-    gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0);
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vFragPos = worldPos.xyz;
+    gl_Position = projectionMatrix * viewMatrix * worldPos;
 }
 `;
 
 export const fragmentParticula = /* glsl */ `
 varying vec4 vCor;
-void main() { gl_FragColor = vCor; }
+varying vec3 vFragPos;
+
+uniform vec3 uLightColor;
+uniform vec3 uSkyColor;
+uniform float uAmbient;
+uniform float uDiffuse;
+uniform float uNeblina;
+
+void main() {
+    // Calculamos a luz ambiente (céu) + difusa (sol) para colorir a partícula
+    vec3 iluminacao = (uAmbient * uSkyColor) + (uDiffuse * uLightColor * 0.8);
+    vec3 result = vCor.rgb * iluminacao;
+
+    // Aplicamos a mesma neblina (fog) usada no terreno
+    float distCam = length(cameraPosition - vFragPos);
+    float fogFactor = clamp((distCam - 5000.0) / (15000.0 - 5000.0), 0.0, 1.0);
+    result = mix(result, uSkyColor, fogFactor * uNeblina);
+
+    gl_FragColor = vec4(result, vCor.a);
+}
 `;

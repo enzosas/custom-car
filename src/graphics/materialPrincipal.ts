@@ -13,6 +13,7 @@ export function criarUniformsCompartilhados() {
         uLightDir: { value: new THREE.Vector3(l.dirX, l.dirY, l.dirZ) },
         uLightColor: { value: new THREE.Vector3(l.corR, l.corG, l.corB) },
         uSkyColor: { value: new THREE.Vector3(l.ceuR, l.ceuG, l.ceuB) },
+        uNeblina: { value: l.neblina },
         uAmbient: { value: l.intensidadeAmbiente },
         uDiffuse: { value: l.intensidadeDifusa },
         uSpecular: { value: l.intensidadeEspecular },
@@ -31,6 +32,7 @@ export function atualizarLuz(u: UniformsCompartilhados) {
     u.uLightDir.value.set(l.dirX, l.dirY, l.dirZ);
     u.uLightColor.value.set(l.corR, l.corG, l.corB);
     u.uSkyColor.value.set(l.ceuR, l.ceuG, l.ceuB);
+    u.uNeblina.value = l.neblina;
     u.uAmbient.value = l.intensidadeAmbiente;
     u.uDiffuse.value = l.intensidadeDifusa;
     u.uSpecular.value = l.intensidadeEspecular;
@@ -74,12 +76,13 @@ export function criarMaterialProfundidade(u: UniformsCompartilhados): THREE.Shad
     });
 }
 
-export function criarMaterialParticula(): THREE.ShaderMaterial {
+export function criarMaterialParticula(u: UniformsCompartilhados): THREE.ShaderMaterial {
     return new THREE.ShaderMaterial({
         vertexShader: vertexParticula,
         fragmentShader: fragmentParticula,
         side: THREE.DoubleSide,
         transparent: true,
         depthWrite: false,
+        uniforms: u, // Partilha os mesmos uniforms de luz e ambiente
     });
 }

@@ -1,4 +1,4 @@
-// EfeitosDrift.ts - efeitos visuais gerados pelo carro: marcas de pneu, fumaça de drift e pedaços de grama.
+// EfeitosDrift.ts - efeitos visuais gerados pelo carro: marcas de pneu, fuma a de drift e peda os de grama.
 import * as THREE from 'three';
 import { GAME_CONFIG } from '@/core/config';
 import { randGlobal } from '@/core/Random';
@@ -19,8 +19,10 @@ export class EfeitosDrift {
 
     private readonly matRastro: THREE.ShaderMaterial;
     private readonly matParticula: THREE.ShaderMaterial;
+
     private readonly rastroMesh: THREE.Mesh;
     private readonly particulasMesh: THREE.Mesh;
+
     private readonly rastroBuf: Buffers = { pos: new Float32Array(0), cor: new Float32Array(0) };
     private readonly particulasBuf: Buffers = { pos: new Float32Array(0), cor: new Float32Array(0) };
 
@@ -30,13 +32,14 @@ export class EfeitosDrift {
         scene: THREE.Scene,
         uniforms: UniformsCompartilhados,
         private readonly veiculo: Veiculo,
-        /** diz se o ponto (x,z) está sobre o asfalto: fumaça só no asfalto, grama só fora dele */
+        /** diz se o ponto (x,z) est  sobre o asfalto: fuma  no asfalto, grama s  fora dele */
         private readonly estaNoAsfalto: (x: number, z: number) => boolean,
         config = GAME_CONFIG,
     ) {
         this.rastroPneus = new RastroPneu(config.carro.rodas.largura, 8.0);
         this.matRastro = criarMaterialRastro(uniforms);
-        this.matParticula = criarMaterialParticula();
+        // Agora passamos os uniforms para o material das partículas
+        this.matParticula = criarMaterialParticula(uniforms);
 
         this.rastroMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.matRastro);
         this.rastroMesh.frustumCulled = false;
@@ -48,19 +51,20 @@ export class EfeitosDrift {
     }
 
     setLarguraRastro(largura: number) { this.rastroPneus.setLargura(largura); }
+
     setWireframe(ativo: boolean) { this.matRastro.wireframe = ativo; }
 
-    /** esconde/mostra tudo (usado no passe de sombra, que não deve desenhar efeitos) */
+    /** esconde/mostra tudo (usado no passe de sombra, que n o deve desenhar efeitos) */
     setVisivel(visivel: boolean) {
         this.rastroMesh.visible = visivel;
         this.particulasMesh.visible = visivel;
     }
 
-    /** simulação: atualiza o que já existe e emite novos pontos de rastro / partículas */
+    /** simula o: atualiza o que j  existe e emite novos pontos de rastro / part culas */
     atualizar(dt: number) {
         const v = this.veiculo;
-
         this.rastroPneus.update(dt);
+
         if (v.estaDerrapando()) {
             const intensidade = v.getIntensidadeDrift();
             for (let roda = 2; roda < 4; ++roda) {  // rodas traseiras: fitas 0 e 1
@@ -96,7 +100,7 @@ export class EfeitosDrift {
         }
     }
 
-    /** copia o estado atual para as malhas (camRight/camUp orientam as partículas, que são billboards) */
+    /** copia o estado atual para as malhas (camRight/camUp orientam as part culas, que s o billboards) */
     atualizarGeometria(camRight: THREE.Vector3, camUp: THREE.Vector3) {
         const nR = this.rastroPneus.gerarGeometria(this.rastroBuf);
         this.sincronizarBuffer(this.rastroMesh.geometry, 'position', this.rastroBuf.pos, 3);
