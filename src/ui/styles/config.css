@@ -66,6 +66,57 @@
 
 .painel-item.mobile.secao { margin-top: 10px; }
 
+/* interruptor liga/desliga (SwitchRow): trilho afundado como a aba ativa; azul do arrasto quando ligado */
+.painel-switch {
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: pan-y;
+    font-family: Arial, Helvetica, sans-serif;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: rgba(0, 0, 0, 0.7);
+    flex-shrink: 0;
+}
+
+.painel-switch.mobile { height: 30px; font-size: 15px; }
+.painel-switch.desktop { height: 32px; font-size: 19.7px; }
+
+.painel-switch .trilho {
+    position: relative;
+    width: 48px;
+    height: 26px;
+    border-radius: 13px;
+    flex-shrink: 0;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.3);
+    box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.15), inset -3px -3px 6px rgba(255, 255, 255, 0.3);
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.painel-switch .trilho::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);
+    transition: transform 0.15s ease;
+}
+
+.painel-switch.ligado .trilho {
+    background: rgba(0, 85, 170, 0.75);
+    box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.3), inset -2px -2px 4px rgba(255, 255, 255, 0.2);
+}
+
+.painel-switch.ligado .trilho::after { transform: translateX(22px); }
+
 /* ---------- mobile ---------- */
 .painel-config-root {
     position: absolute;

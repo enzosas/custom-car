@@ -52,6 +52,7 @@ export class CarroVisual {
     private bboxOriginal = new THREE.Box3();
     private modeloGLBCache: THREE.Group | null = null;
     private descartado = false;
+    private rodasVisiveis: boolean;
 
     // temporários reutilizados a cada frame (evita alocar no loop)
     private readonly tmpEscala = new THREE.Vector3();
@@ -62,6 +63,8 @@ export class CarroVisual {
         material: THREE.Material,
         private readonly config = GAME_CONFIG,
     ) {
+        this.rodasVisiveis = config.opcoes.rodasVisiveis;
+
         this.chassi.matrixAutoUpdate = false;
         this.chassi.frustumCulled = false;
         scene.add(this.chassi);
@@ -82,6 +85,7 @@ export class CarroVisual {
             this.rodasProcedurais.push(m);
             scene.add(m);
         }
+        this.atualizarVisibilidadeRodas();
     }
 
     // ---------- carregamento do modelo .glb ----------
@@ -119,11 +123,17 @@ export class CarroVisual {
         this.limparChassi();
         this.modeloAtual = null;
         this.limparRodasGLB();
-        this.rodasProcedurais.forEach((m) => { m.visible = true; });
+        this.atualizarVisibilidadeRodas();
 
         this.chassiProcedural.geometry.dispose();
         this.chassiProcedural.geometry = geometriaDe(this.veiculo.gerarMalhaChassi());
         this.chassi.add(this.chassiProcedural);
+    }
+
+    /** mostra/esconde as rodas (as procedurais ou as do modelo .glb, conforme o modo atual) */
+    setRodasVisiveis(visiveis: boolean) {
+        this.rodasVisiveis = visiveis;
+        this.atualizarVisibilidadeRodas();
     }
 
     /** reconstrói a geometria das rodas (após mudar raio, largura ou segmentos) */
@@ -176,6 +186,12 @@ export class CarroVisual {
         obj.matrixWorldNeedsUpdate = true;
     }
 
+    private atualizarVisibilidadeRodas() {
+        const usandoRodasGLB = this.rodasGLB.some((r) => r);
+        this.rodasProcedurais.forEach((m) => { m.visible = this.rodasVisiveis && !usandoRodasGLB; });
+        this.rodasGLBGroup.visible = this.rodasVisiveis;
+    }
+
     private limparChassi() {
         while (this.chassi.children.length > 0) this.chassi.remove(this.chassi.children[0]);
     }
@@ -189,7 +205,6 @@ export class CarroVisual {
     private aplicarModelo(modelo: THREE.Object3D) {
         this.limparChassi();
         this.limparRodasGLB();
-        this.rodasProcedurais.forEach((m) => { m.visible = true; });
 
         modelo.position.set(0, 0, 0);
         modelo.rotation.set(0, 0, 0);
@@ -198,12 +213,13 @@ export class CarroVisual {
 
         const rodas = ['wheelfl', 'wheelfr', 'wheelrl', 'wheelrr'].map((nome) => this.encontrarPorNome(modelo, nome));
         if (rodas.every((r) => r)) {
-            this.rodasProcedurais.forEach((m) => { m.visible = false; });
             // 1. extrair as rodas ANTES de medir o carro
             (rodas as THREE.Object3D[]).forEach((r, i) => this.extrairRoda(r, i));
             // 2. só agora medimos a caixa do carro (sem as rodas)
             modelo.updateMatrixWorld(true);
         }
+
+        this.atualizarVisibilidadeRodas();  // com rodas extraídas do .glb, as procedurais ficam escondidas
 
         this.bboxOriginal = new THREE.Box3().setFromObject(modelo);
         this.modeloAtual = modelo;

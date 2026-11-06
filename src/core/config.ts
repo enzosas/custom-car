@@ -77,6 +77,11 @@ export const GAME_CONFIG = {
     // o jogo sempre começa no carro vermelho; o Jogo troca para o perfil GLB com a tecla X
     carro: structuredClone(PERFIL_CARRO_VERMELHO) as PerfilCarro,
 
+    /** interruptores (liga/desliga) do painel; cada chave aqui vira uma linha de switch via `interruptores` em painelCampos.ts */
+    opcoes: {
+        rodasVisiveis: true,
+    },
+
     terreno: {
         parametros: {
             ptcontrole: 10,

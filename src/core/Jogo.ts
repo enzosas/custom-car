@@ -190,6 +190,7 @@ export class Jogo {
         const carroMudou = mudou(c.carro.dimensoes, a.carro.dimensoes) || mudou(c.carro.rodas, a.carro.rodas);
         const arvoreMudou = mudou(c.arvore.arvores, a.arvore.arvores);
         const gramaMudou = mudou(c.grama.grama, a.grama.grama);
+        const opcoesMudou = mudou(c.opcoes, a.opcoes);
         const terrenoMudou = mudou(c.terreno.parametros, a.terreno.parametros) || mudou(c.estrada.estrada, a.estrada.estrada);
 
         if (carroMudou) {
@@ -205,6 +206,7 @@ export class Jogo {
             this.vegetacaoPendente = true;
         }
 
+        if (opcoesMudou) this.carro.setRodasVisiveis(c.opcoes.rodasVisiveis);
         if (terrenoMudou) this.terrenoDefasado = true;
         this.configAnterior = structuredClone(c);
     }
