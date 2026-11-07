@@ -29,7 +29,8 @@ varying vec4 vFragPosLightSpace;
 
 uniform vec3  uLightDir;
 uniform vec3  uLightColor;
-uniform vec3  uSkyColor;
+uniform vec3  uAmbientColor;
+uniform vec3  uFogColor;
 uniform float uNeblina;
 uniform float uAlpha;
 uniform float uAmbient;
@@ -72,7 +73,7 @@ void main() {
     vec3 lDir = normalize(uLightDir);
     vec3 viewDir = normalize(cameraPosition - vFragPos);
     
-    vec3 ambient = uAmbient * uSkyColor * vColor;
+    vec3 ambient = uAmbient * uAmbientColor * vColor;
     
     float diff = max(dot(normal, lDir), 0.0);
     vec3 diffuse = uDiffuse * diff * uLightColor * vColor;
@@ -89,7 +90,7 @@ void main() {
     float distCam = length(cameraPosition - vFragPos);
     float fogFactor = clamp((distCam - 5000.0) / (15000.0 - 5000.0), 0.0, 1.0);
     
-    result = mix(result, uSkyColor, fogFactor * uNeblina);
+    result = mix(result, uFogColor, clamp(fogFactor * uNeblina, 0.0, 1.0));
     
     gl_FragColor = vec4(result, uAlpha);
 }
@@ -130,20 +131,21 @@ varying vec4 vCor;
 varying vec3 vFragPos;
 
 uniform vec3 uLightColor;
-uniform vec3 uSkyColor;
+uniform vec3 uAmbientColor;
+uniform vec3 uFogColor;
 uniform float uAmbient;
 uniform float uDiffuse;
 uniform float uNeblina;
 
 void main() {
     // Calculamos a luz ambiente (céu) + difusa (sol) para colorir a partícula
-    vec3 iluminacao = (uAmbient * uSkyColor) + (uDiffuse * uLightColor * 0.8);
+    vec3 iluminacao = (uAmbient * uAmbientColor) + (uDiffuse * uLightColor * 0.8);
     vec3 result = vCor.rgb * iluminacao;
 
     // Aplicamos a mesma neblina (fog) usada no terreno
     float distCam = length(cameraPosition - vFragPos);
     float fogFactor = clamp((distCam - 5000.0) / (15000.0 - 5000.0), 0.0, 1.0);
-    result = mix(result, uSkyColor, fogFactor * uNeblina);
+    result = mix(result, uFogColor, clamp(fogFactor * uNeblina, 0.0, 1.0));
 
     gl_FragColor = vec4(result, vCor.a);
 }

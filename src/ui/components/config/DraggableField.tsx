@@ -14,7 +14,10 @@ interface Props {
 
 export function DraggableField({ def, objeto, modo, onAlterado }: Props) {
     const alvo = useMemo<Alvo>(
-        () => ({ obj: objeto, chave: def.nome, tipo: def.tipo, fator: def.fator }),
+        () => ({
+            obj: objeto, chave: def.nome, tipo: def.tipo, fator: def.fator,
+            passo: def.passo, min: def.min, max: def.max, ciclico: def.ciclico,
+        }),
         [objeto, def],
     );
     const sessao = useRef<SessaoArrasto | null>(null);

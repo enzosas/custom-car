@@ -1,13 +1,35 @@
 // painelCampos.ts   GERADO a partir das macros de Config.h (gerarAbasAutomaticas).
 // fator = divisor de exibi o (REGISTRAR_CAMPO=1, _ESCALA=15, _VELOCIDADE=0.25, _ACELERACAO=0.004).
 
-export interface CampoDef { nome: string; tipo: 'float' | 'uint'; fator: number }
+export interface CampoDef {
+    nome: string; tipo: 'float' | 'uint'; fator: number;
+    /** passo fixo por pixel de arrasto (shift = 10x). Sem isso, o passo é proporcional ao valor atual. */
+    passo?: number;
+    min?: number; max?: number;
+    /** matiz: ao passar de `max` volta para `min` */
+    ciclico?: boolean;
+}
 
 /** linha liga/desliga: `nome`   uma chave booleana do objeto em `caminho` (escrita  o; n o vem do gerador) */
 export interface InterruptorDef { nome: string; rotulo: string }
 
-export interface SecaoDef { titulo: string; caminho: string[]; campos: CampoDef[]; interruptores?: InterruptorDef[] }
+/** chaves (H, S, V) de um grupo de cor HSV do objeto da seção; o painel mostra uma amostra da cor */
+export interface AmostraHSV { h: string; s: string; v: string }
+
+export interface SecaoDef { titulo: string; caminho: string[]; campos: CampoDef[]; interruptores?: InterruptorDef[]; amostra?: AmostraHSV }
 export interface AbaDef { titulo: string; secoes: SecaoDef[] }
+
+// ---- cores em HSV (luz config) ----
+// H em graus (0-360, dá a volta), S e V de 0 a 1. `prefixo` + H/S/V são as chaves em GAME_CONFIG.luz.parametros.
+const camposHSV = (p: string): CampoDef[] => [
+  { nome: `${p}H`, tipo: 'float', fator: 1.0, passo: 0.5, min: 0, max: 360, ciclico: true },
+  { nome: `${p}S`, tipo: 'float', fator: 1.0, passo: 0.003, min: 0, max: 1 },
+  { nome: `${p}V`, tipo: 'float', fator: 1.0, passo: 0.003, min: 0, max: 1 },
+];
+const secaoCor = (titulo: string, p: string, extras: CampoDef[] = []): SecaoDef => ({
+  titulo, caminho: ['luz', 'parametros'], campos: [...camposHSV(p), ...extras],
+  amostra: { h: `${p}H`, s: `${p}S`, v: `${p}V` },
+});
 
 export const ABAS: AbaDef[] = [
   {
@@ -51,7 +73,11 @@ export const ABAS: AbaDef[] = [
   },
   {
     titulo: 'luz config', secoes: [
-      { titulo: 'parametros', caminho: ['luz', 'parametros'], campos: [{ nome: 'dirX', tipo: 'float', fator: 1.0 }, { nome: 'dirY', tipo: 'float', fator: 1.0 }, { nome: 'dirZ', tipo: 'float', fator: 1.0 }, { nome: 'corR', tipo: 'float', fator: 1.0 }, { nome: 'corG', tipo: 'float', fator: 1.0 }, { nome: 'corB', tipo: 'float', fator: 1.0 }, { nome: 'ceuR', tipo: 'float', fator: 1.0 }, { nome: 'ceuG', tipo: 'float', fator: 1.0 }, { nome: 'ceuB', tipo: 'float', fator: 1.0 }, { nome: 'intensidadeAmbiente', tipo: 'float', fator: 1.0 }, { nome: 'intensidadeDifusa', tipo: 'float', fator: 1.0 }, { nome: 'intensidadeEspecular', tipo: 'float', fator: 1.0 }, { nome: 'shininess', tipo: 'float', fator: 1.0 }] },
+      { titulo: 'sol (direcao)', caminho: ['luz', 'parametros'], campos: [{ nome: 'dirX', tipo: 'float', fator: 1.0 }, { nome: 'dirY', tipo: 'float', fator: 1.0 }, { nome: 'dirZ', tipo: 'float', fator: 1.0 }] },
+      secaoCor('sol (cor)', 'cor'),
+      secaoCor('ceu (fundo e neblina)', 'ceu', [{ nome: 'neblina', tipo: 'float', fator: 1.0, passo: 0.005, min: 0, max: 1 }]),
+      secaoCor('ambiente', 'ambiente'),
+      { titulo: 'intensidades', caminho: ['luz', 'parametros'], campos: [{ nome: 'intensidadeAmbiente', tipo: 'float', fator: 1.0 }, { nome: 'intensidadeDifusa', tipo: 'float', fator: 1.0 }, { nome: 'intensidadeEspecular', tipo: 'float', fator: 1.0 }, { nome: 'shininess', tipo: 'float', fator: 1.0 }] },
     ]
   },
   {

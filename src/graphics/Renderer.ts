@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GAME_CONFIG } from '@/core/config';
 import { ShadowMap } from './ShadowMap';
+import { corSol, corCeu, corAmbiente } from './cor';
 import type { UniformsCompartilhados } from './materialPrincipal';
 
 const NEAR_PLANE = 0.3;
@@ -20,6 +21,7 @@ export class Renderer {
     public sombra: ShadowMap;
 
     private readonly luzAmbiente = new THREE.AmbientLight(0xffffff, 1);
+    private readonly corCeuTmp = new THREE.Color();
     private readonly luzSol = new THREE.DirectionalLight(0xffffff, 1);
 
     constructor(private canvas: HTMLCanvasElement, uniforms: UniformsCompartilhados) {
@@ -55,17 +57,17 @@ export class Renderer {
     public sincronizarLuzes() {
         const l = GAME_CONFIG.luz.parametros;
 
-        // A Luz Ambiente de materiais nativos (.glb) agora recebe diretamente a cor do céu
-        this.luzAmbiente.color.setRGB(l.ceuR, l.ceuG, l.ceuB);
+        // Luz ambiente dos materiais nativos (.glb): cor própria, independente do céu
+        this.luzAmbiente.color.setRGB(...corAmbiente(l));
         this.luzAmbiente.intensity = l.intensidadeAmbiente * ESCALA_LUZ_THREE;
 
         // A luz do Sol contínua independente
-        this.luzSol.color.setRGB(l.corR, l.corG, l.corB);
+        this.luzSol.color.setRGB(...corSol(l));
         this.luzSol.intensity = l.intensidadeDifusa * ESCALA_LUZ_THREE;
         this.luzSol.position.set(l.dirX, l.dirY, l.dirZ).normalize().multiplyScalar(500);
 
-        // Atualizamos também o clearColor do WebGLRenderer a cada frame para o céu ficar sempre certo
-        this.renderer.setClearColor(new THREE.Color().setRGB(l.ceuR, l.ceuG, l.ceuB, THREE.SRGBColorSpace), 1);
+        // O céu agora só define o fundo da tela: não entra em nenhuma conta de iluminação
+        this.renderer.setClearColor(this.corCeuTmp.setRGB(...corCeu(l), THREE.SRGBColorSpace), 1);
     }
 
     private redimensionar = () => {

@@ -127,16 +127,25 @@ export const GAME_CONFIG = {
         }
     },
     luz: {
+        // Todas as cores são HSV: H em graus (0-360), S e V de 0 a 1.
+        // Cada papel tem a sua própria cor, para o céu poder ser azul sem tingir o resto do mapa.
         parametros: {
             dirX: 0.35,
             dirY: 0.85,
             dirZ: 0.35,
-            corR: 1.0,
-            corG: 1.0,
-            corB: 1.0,
-            ceuR: 0.80,
-            ceuG: 0.85,
-            ceuB: 0.90,
+            // sol (difuso + especular)
+            corH: 0.0,
+            corS: 0.0,
+            corV: 1.0,
+            // céu: fundo da tela (clearColor) e também a cor da neblina; não ilumina nada
+            ceuH: 210.0,
+            ceuS: 0.1111,
+            ceuV: 0.90,
+            neblina: 1.0,           // intensidade da neblina (0 desliga); a cor é a do céu
+            // luz ambiente (uniforme, não depende da direção da face)
+            ambienteH: 210.0,
+            ambienteS: 0.1111,
+            ambienteV: 0.90,
             intensidadeAmbiente: 0.5,
             intensidadeDifusa: 0.45,
             intensidadeEspecular: 0.05,

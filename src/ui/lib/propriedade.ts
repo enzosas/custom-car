@@ -8,6 +8,12 @@ export interface Alvo {
     chave: string;
     tipo: CampoDef['tipo'];
     fator: number;
+    /** passo fixo por pixel (shift = 10x); se ausente, o passo é proporcional ao valor atual */
+    passo?: number;
+    min?: number;
+    max?: number;
+    /** com min/max: o valor dá a volta (ex.: matiz 0-360) em vez de travar nos limites */
+    ciclico?: boolean;
 }
 
 /** Estado de uma sessão de arrasto (do pointerdown ao pointerup). */
@@ -39,7 +45,17 @@ export function arrastar(a: Alvo, s: SessaoArrasto, deltaX: number, acelerado: b
     const taxa = acelerado ? 1.0 : 0.10;
     let mudancaPorPixel = (s.base * taxa) / 100;
 
-    if (a.tipo === 'float') {
+    if (a.tipo === 'float' && a.passo !== undefined) {
+        let v = a.obj[a.chave] + deltaX * a.passo * (acelerado ? 10 : 1);
+        if (a.min !== undefined && a.max !== undefined && a.ciclico) {
+            const faixa = a.max - a.min;
+            v = a.min + ((((v - a.min) % faixa) + faixa) % faixa);
+        } else {
+            if (a.min !== undefined) v = Math.max(a.min, v);
+            if (a.max !== undefined) v = Math.min(a.max, v);
+        }
+        a.obj[a.chave] = v;
+    } else if (a.tipo === 'float') {
         if (Math.abs(mudancaPorPixel) < 0.001) mudancaPorPixel = 0.01;
         a.obj[a.chave] += deltaX * mudancaPorPixel * a.fator;
     } else {

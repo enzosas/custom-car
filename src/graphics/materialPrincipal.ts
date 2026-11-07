@@ -1,6 +1,7 @@
 // materialPrincipal.ts   materiais do jogo (shader principal, rastro, profundidade, part culas).
 import * as THREE from 'three';
 import { GAME_CONFIG } from '@/core/config';
+import { corSol, corCeu, corAmbiente } from './cor';
 import {
     vertexPrincipal, fragmentPrincipal, vertexProfundidade, fragmentProfundidade,
     vertexParticula, fragmentParticula,
@@ -11,8 +12,9 @@ export function criarUniformsCompartilhados() {
     const l = GAME_CONFIG.luz.parametros;
     return {
         uLightDir: { value: new THREE.Vector3(l.dirX, l.dirY, l.dirZ) },
-        uLightColor: { value: new THREE.Vector3(l.corR, l.corG, l.corB) },
-        uSkyColor: { value: new THREE.Vector3(l.ceuR, l.ceuG, l.ceuB) },
+        uLightColor: { value: new THREE.Vector3(...corSol(l)) },
+        uAmbientColor: { value: new THREE.Vector3(...corAmbiente(l)) },
+        uFogColor: { value: new THREE.Vector3(...corCeu(l)) },
         uNeblina: { value: l.neblina },
         uAmbient: { value: l.intensidadeAmbiente },
         uDiffuse: { value: l.intensidadeDifusa },
@@ -30,8 +32,9 @@ export type UniformsCompartilhados = ReturnType<typeof criarUniformsCompartilhad
 export function atualizarLuz(u: UniformsCompartilhados) {
     const l = GAME_CONFIG.luz.parametros;
     u.uLightDir.value.set(l.dirX, l.dirY, l.dirZ);
-    u.uLightColor.value.set(l.corR, l.corG, l.corB);
-    u.uSkyColor.value.set(l.ceuR, l.ceuG, l.ceuB);
+    u.uLightColor.value.set(...corSol(l));
+    u.uAmbientColor.value.set(...corAmbiente(l));
+    u.uFogColor.value.set(...corCeu(l)); // neblina sempre na cor do céu
     u.uNeblina.value = l.neblina;
     u.uAmbient.value = l.intensidadeAmbiente;
     u.uDiffuse.value = l.intensidadeDifusa;
