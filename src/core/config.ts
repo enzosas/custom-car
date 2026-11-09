@@ -7,7 +7,7 @@ const FISICA_BASE = {
     velmaxre: -2.0,
     anguloVolanteMax: 0.7,
     velocidadeGiro: 0.03,
-    taxaLerpVolante: 0.035,
+    taxaLerpVolante: 0.025,
     aderenciaFreioDeMao: 0.015,
     aderenciaPista: 0.03,
     atritoEscalar: 0.9999,
