@@ -24,6 +24,9 @@ const FISICA_BASE = {
     tempoCargaPulo: 0.6,
     compressaoPulo: 1.4,
     reacaoPouso: 1.0,
+    // reação do chassi ao relevo (só visual; 0 desliga e o chassi acompanha o terreno de forma rígida)
+    reacaoTerrenoAngular: 0.5,    // quanto o chassi "fica para trás" nas mudanças de inclinação do terreno (pitch/roll)
+    reacaoTerrenoVertical: 0.15,  // quanto a carroceria comprime/alivia em vales e cristas
     limiarDecolagem: 10.0,
     limiarDriftRastro: 0.9,
 };

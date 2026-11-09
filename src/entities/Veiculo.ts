@@ -97,6 +97,7 @@ const estadoFisicaInicial = () => ({
 const estadoSuspensaoInicial = () => ({
     chassiPitchAngle: 0, chassiRollAngle: 0, chassiPitchVelocity: 0, chassiRollVelocity: 0,
     terrenoPitchAngle: 0, terrenoRollAngle: 0,
+    soloPitchSuave: 0, soloRollSuave: 0, vySoloSuave: 0,   // referências suavizadas do relevo (reação do chassi)
     compressaoPulo: 0, compressaoVel: 0, molaPouso: 0, molaPousoVel: 0,
 });
 const estadoPuloInicial = () => ({
@@ -118,7 +119,7 @@ export class Veiculo {
     modelMatrix = new Mat4();
     readonly corRodas = [0.15, 0.15, 0.15];
 
-    constructor(private config = GAME_CONFIG) {}
+    constructor(private config = GAME_CONFIG) { }
 
     // ---------- geometria ----------
     gerarMalhaChassi() { return gerarGeometriaChassi(this.config); }
@@ -228,8 +229,53 @@ export class Veiculo {
                 p.pousouNoFrame = true;
             }
         }
+        this.reagirAoRelevoVertical(vyChao, soloConhecido, dt, g);
         this.atualizarCompressao(dt);
         this.atualizarMolaPouso(dt);
+    }
+
+    /**
+     * Reação do chassi ao relevo, parte vertical (só visual: mexe na mola da carroceria, não na posição do carro).
+     * Modelo de "um quarto de carro": a carroceria é uma massa na mola e o solo é a base que se move. Quando o solo
+     * acelera para cima (fundo de vale, início de subida) a carroceria fica para trás e comprime; quando acelera
+     * para baixo (crista) ela alivia e sobe. A aceleração vem da velocidade vertical do solo, já suavizada.
+     */
+    private reagirAoRelevoVertical(vyChao: number, soloConhecido: boolean, dt: number, g: number) {
+        const fis = this.config.carro.fisica, s = this.suspensao, p = this.pulo;
+        if (p.noAr || !soloConhecido || p.pousouNoFrame) {
+            s.vySoloSuave = soloConhecido ? vyChao : 0;   // sem referência confiável: só acompanha, sem empurrar
+            return;
+        }
+        const antes = s.vySoloSuave;
+        s.vySoloSuave = mix(antes, vyChao, lerpFactorDt(0.25, dt * 60));
+
+        const ganho = Math.max(0, fis.reacaoTerrenoVertical);
+        if (ganho <= 0) return;
+        const limite = 3 * Math.max(g, 50);               // evita picos nos "joelhos" entre triângulos do terreno
+        const aSolo = clamp((s.vySoloSuave - antes) / dt, -limite, limite);
+        s.molaPousoVel += aSolo * ganho * dt;
+    }
+
+    /**
+     * Reação do chassi ao relevo, parte angular (pitch/roll). O chassi "fica para trás" quando a inclinação do
+     * terreno muda: recebe um deslocamento contrário à mudança e a mola do chassi o traz de volta (com um pequeno
+     * balanço). A referência é a inclinação do terreno suavizada, que só segue o relevo; por isso a transição
+     * ar -> chão não conta (ela já é tratada pelo impulso de aterrissagem).
+     */
+    private reagirAoRelevoAngular(pitchAlvo: number, rollAlvo: number, dt60: number, primeiroFrame: boolean) {
+        const fis = this.config.carro.fisica, s = this.suspensao;
+        const pAnt = s.soloPitchSuave, rAnt = s.soloRollSuave;
+        if (primeiroFrame) { s.soloPitchSuave = pitchAlvo; s.soloRollSuave = rollAlvo; return; }
+
+        const fator = lerpFactorDt(0.15, dt60);
+        s.soloPitchSuave = mix(pAnt, pitchAlvo, fator);
+        s.soloRollSuave = mix(rAnt, rollAlvo, fator);
+
+        const ganho = Math.max(0, fis.reacaoTerrenoAngular);
+        if (ganho <= 0) return;
+        const lim = Math.max(0, fis.suspensaoInclinacaoMax) * 1.5;
+        s.chassiPitchAngle = clamp(s.chassiPitchAngle - (s.soloPitchSuave - pAnt) * ganho, -lim, lim);
+        s.chassiRollAngle = clamp(s.chassiRollAngle - (s.soloRollSuave - rAnt) * ganho, -lim, lim);
     }
 
     // ---------- direção e aceleração ----------
@@ -358,6 +404,7 @@ export class Veiculo {
             const hTE = alturaFn(posTE.x, posTE.z), hTD = alturaFn(posTD.x, posTD.z);
 
             const alturaMediaSolo = (hFE + hFD + hTE + hTD) * 0.25;
+            const primeiroFrameSolo = !this.pulo.soloValido;   // início ou depois de reposicionar o carro
             this.atualizarVertical(alturaMediaSolo + r.radius, dt);
 
             const deltaZ = Math.max(0.001, dim.comprimentorodas);
@@ -376,7 +423,9 @@ export class Veiculo {
                 const fator = lerpFactorDt(0.20, dt60);
                 s.terrenoPitchAngle = mix(s.terrenoPitchAngle, pitchAlvo, fator);
                 s.terrenoRollAngle = mix(s.terrenoRollAngle, rollAlvo, fator);
+                this.reagirAoRelevoAngular(pitchAlvo, rollAlvo, dt60, primeiroFrameSolo);
             } else {
+                s.soloPitchSuave = pitchAlvo; s.soloRollSuave = rollAlvo;
                 const velHorizontal = len(f.velocity) * 60;
                 const fatorAtitude = clamp(velHorizontal / 150, 0, 1);
                 const pitchAr = clamp(-degrees(Math.atan2(f.velocityY, Math.max(velHorizontal, 1))), -25, 25) * fatorAtitude;
