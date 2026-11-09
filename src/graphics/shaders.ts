@@ -17,6 +17,7 @@ void main() {
     vec4 worldPos = model * vec4(position, 1.0);
     vFragPos = worldPos.xyz;
     vColor = color;
+
     vFragPosLightSpace = uLightSpaceMatrix * worldPos;
     gl_Position = projectionMatrix * viewMatrix * worldPos;
 }
@@ -26,7 +27,6 @@ export const fragmentPrincipal = /* glsl */ `
 varying vec3 vFragPos;
 varying vec3 vColor;
 varying vec4 vFragPosLightSpace;
-
 uniform vec3  uLightDir;
 uniform vec3  uLightColor;
 uniform vec3  uAmbientColor;

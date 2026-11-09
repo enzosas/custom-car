@@ -1,11 +1,11 @@
 // Grama.ts — port de Grama.h: tufos de grama (3 cones inclinados) instanciados sobre o terreno.
 
 import { GAME_CONFIG } from '@/core/config';
-import { Terreno } from './Terreno';
-import { Estrada } from './Estrada';
+import type { Terreno } from './Terreno';
+import type { Estrada } from './Estrada';
 import { Mt19937, uniformReal } from '@/core/Random';
+import { AREA_REF, sementeChunk } from './Ruido';
 import { Mat4, X_AXIS, Y_AXIS, Z_AXIS, type V3, radians } from '@/graphics/Mat4';
-import { criarDistanciaPista } from './Floresta';
 import type { Malha } from '@/graphics/Malha';
 
 /** adicionarConeGeometria(): cone inclinado (tronco de cone) com rotação em X e Z */
@@ -63,37 +63,52 @@ export function gerarGeometriaTufo(config = GAME_CONFIG): Malha {
     return { positions: new Float32Array(pos), colors: new Float32Array(col), indices: new Uint32Array(idx) };
 }
 
+interface DadosChunk {
+    x: number; z: number;
+    raio: number;
+    n: number;
+    posicoes: Float32Array;
+    matrizes: Float32Array;
+}
+
+/** Como a Floresta: os tufos nascem e somem junto com os chunks do terreno. */
 export class Grama {
-    posicoes = new Float32Array(0);
-    matrizes = new Float32Array(0);
     quantidade = 0;
+    private chunks = new Map<string, DadosChunk>();
+    private seed = 1;
 
     constructor(private config = GAME_CONFIG) {}
 
-    gerarGrama(terreno: Terreno, estrada?: Estrada) {
-        const qtdAlvo = this.config.grama.grama.quantidade;
-        const pos: number[] = [], mats: number[] = [];
+    definirSeed(seed: number) { this.seed = seed >>> 0; this.limpar(); }
 
-        const espacamento = this.config.terreno.parametros.espacamento * 0.005;
-        const metadeTamanho = (256 * espacamento) * 0.45;
-        const rng = new Mt19937(9999);
+    limpar() { this.chunks.clear(); this.quantidade = 0; }
+
+    remover(chave: string) {
+        const d = this.chunks.get(chave);
+        if (!d) return;
+        this.quantidade -= d.n;
+        this.chunks.delete(chave);
+    }
+
+    /** `quantidade` tufos por AREA_REF (mesma densidade do mapa antigo), sorteados com o RNG do chunk */
+    adicionarChunk(chave: string, cx: number, cz: number, tam: number, terreno: Terreno, estrada?: Estrada) {
+        this.remover(chave);
+        const x0 = cx * tam, z0 = cz * tam;
+        const tentativas = Math.round(this.config.grama.grama.quantidade * (tam * tam) / AREA_REF);
+        const rng = new Mt19937(sementeChunk(this.seed, cx, cz, 0x6a3d));
 
         const meiaLarguraPista = this.config.estrada.estrada.largura * 0.5;
         const distMinimaPista = meiaLarguraPista + this.config.grama.grama.distanciaEstrada;
-        const distMinimaPistaSq = distMinimaPista * distMinimaPista;
-        const curva = estrada ? estrada.getPontosCurva() : null;
-        const distPista = curva && curva.length > 0 ? criarDistanciaPista(curva) : null;
 
-        const maxTentativas = qtdAlvo * 6;
-        let tentativas = 0, count = 0;
+        const pos: number[] = [], mats: number[] = [];
+        let count = 0;
 
-        while (count < qtdAlvo && tentativas < maxTentativas) {
-            tentativas++;
-            const x = uniformReal(rng, -metadeTamanho, metadeTamanho);
-            const z = uniformReal(rng, -metadeTamanho, metadeTamanho);
+        for (let t = 0; t < tentativas; ++t) {
+            const x = x0 + uniformReal(rng, 0, tam);
+            const z = z0 + uniformReal(rng, 0, tam);
 
             if (Math.abs(x) < 25 && Math.abs(z) < 25) continue;
-            if (distPista && distPista(x, z) < distMinimaPistaSq) continue;
+            if (estrada && estrada.distanciaEixo(x, z) < distMinimaPista) continue;
 
             const y = terreno.obterAlturaMundo(x, z) - 0.2;
             pos.push(x, y, z);
@@ -104,21 +119,30 @@ export class Grama {
             mats.push(...m.m);
             count++;
         }
-        this.quantidade = count;
-        this.posicoes = new Float32Array(pos);
-        this.matrizes = new Float32Array(mats);
+
+        this.chunks.set(chave, {
+            x: x0 + tam * 0.5, z: z0 + tam * 0.5, raio: tam * 0.7072, n: count,
+            posicoes: new Float32Array(pos), matrizes: new Float32Array(mats),
+        });
+        this.quantidade += count;
     }
 
     /** copia para `lote` as instâncias dentro do raio de visão; devolve a contagem */
     selecionar(pontoRef: V3, isShadowPass: boolean, lote: Float32Array): number {
-        const raioSq = isShadowPass ? 100 * 100 : 2000 * 2000;
-        const P = this.posicoes, M = this.matrizes;
+        const alcance = isShadowPass ? 100 : 2000;
+        const raioSq = alcance * alcance;
         let n = 0;
-        for (let i = 0; i < this.quantidade; ++i) {
-            const dx = P[i * 3] - pontoRef.x, dy = P[i * 3 + 1] - pontoRef.y, dz = P[i * 3 + 2] - pontoRef.z;
-            if (dx * dx + dy * dy + dz * dz > raioSq) continue;
-            lote.set(M.subarray(i * 16, i * 16 + 16), n * 16);
-            n++;
+        for (const d of this.chunks.values()) {
+            const cdx = d.x - pontoRef.x, cdz = d.z - pontoRef.z, lim = alcance + d.raio;
+            if (cdx * cdx + cdz * cdz > lim * lim) continue;
+
+            const P = d.posicoes, M = d.matrizes;
+            for (let i = 0; i < d.n; ++i) {
+                const dx = P[i * 3] - pontoRef.x, dy = P[i * 3 + 1] - pontoRef.y, dz = P[i * 3 + 2] - pontoRef.z;
+                if (dx * dx + dy * dy + dz * dz > raioSq) continue;
+                lote.set(M.subarray(i * 16, i * 16 + 16), n * 16);
+                n++;
+            }
         }
         return n;
     }

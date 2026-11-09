@@ -1,79 +1,158 @@
 // Terreno.ts
-// Port 1:1 de Terreno.h (sem dependência de three.js, para ser testável).
-// Guarda o heightmap subamostrado e expõe geração de malha, altura em coordenadas
-// de mundo (interpolação baricêntrica) e aplainamento sobre um caminho.
+// Terreno infinito: a altura é uma FUNÇÃO de (x, z) (ruído fractal com semente), sem heightmap em arquivo.
+// O mundo é dividido em chunks quadrados de `celulasPorChunk` células; este arquivo só sabe calcular a altura
+// em qualquer ponto e preencher os vértices de um chunk (quem cria/descarta as malhas é o WorldBuilder).
+// A física e o visual usam a mesma função, então sempre concordam.
 
 import { GAME_CONFIG } from '@/core/config';
+import { PerlinNoise2D, ruidoFractal, ruidoCristas } from './Ruido';
+import type { Estrada } from './Estrada';
 
 export type Vec3 = { x: number; y: number; z: number };
 
-import { smoothstep } from '@/graphics/Mat4';
+// O relevo combina três camadas, todas em [0, 1]:
+//   colinas : fractal suave (o "morro" local, comprimentoOnda)
+//   regiao  : ruído de escala enorme (comprimentoRegiao) que separa planícies baixas de terras altas
+//   cristas : ruído "ridged" (picos afiados), que só aparece nas regiões altas e forma as montanhas
+// Os valores abaixo foram medidos: ~55% do mapa fica em planícies/vales, ~26% em morros e ~16% em
+// montanhas, com 99% da área abaixo de 0.27 de inclinação.
+const CONTRASTE_COLINAS = 2.2;   // o fractal fica concentrado perto de 0.5; abre a faixa para usar 0..1
+const CONTRASTE_REGIAO = 2.4;
+const NIVEL_BASE = 0.06;         // altura das planícies mais baixas
+const NIVEL_REGIAO = 0.30;       // quanto as terras altas sobem acima disso
+const RELEVO_MIN = 0.20;         // amplitude dos morros nas planícies...
+const RELEVO_REGIAO = 0.16;      // ...e quanto ela cresce nas terras altas
+const MONTANHA_INICIO = 0.45;    // a partir de que "altitude regional" as cristas começam a aparecer
+const MONTANHA_PLENA = 0.80;
+const GANHO_CRISTAS = 1.8;
+const FORCA_MONTANHA = 0.71;     // altura das cristas
+const COMPRIMENTO_REGIAO = 23030; // tamanho das regiões (planície x terras altas)
+const JOELHO = 0.78;             // acima disso o relevo satura suavemente (sem topos achatados)
+
+const limitar = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
+const suave = (a: number, b: number, x: number) => { const t = limitar((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+interface ParamRelevo {
+    fColinas: number; fRegiao: number; fCristas: number;
+    oitavas: number; persistencia: number; escala: number;
+}
 
 export class Terreno {
-    larguraOriginal = 1024;
-    profundidadeOriginal = 1024;
-    passoAmostragem = 4;
-    larguraGrid = 256;
-    profundidadeGrid = 256;
-
-    alturas = new Float32Array(0);
-    private alturasOriginais = new Float32Array(0);
+    private perlin = new PerlinNoise2D(1);
+    /** a pista que molda o terreno (definida pelo WorldBuilder); sem ela o terreno é só o relevo */
+    estrada: Estrada | null = null;
 
     constructor(private config = GAME_CONFIG) {}
 
-    private get espacamento() { return this.config.terreno.parametros.espacamento * 0.005; }
-    private get escalaOndulacao() { return this.config.terreno.parametros.ondulacao * 0.05; }
+    definirSeed(seed: number) { this.perlin = new PerlinNoise2D((seed >>> 0) || 1); }
 
-    /** carregarRaw(): decide a resolução pelo tamanho em bytes, igual ao C++ */
-    carregarRaw(buffer: ArrayBuffer): boolean {
-        const tamanhoTotal = buffer.byteLength;
-        if (tamanhoTotal >= 1024 * 1024 * 2) { this.larguraOriginal = this.profundidadeOriginal = 1024; }
-        else if (tamanhoTotal >= 512 * 512 * 2) { this.larguraOriginal = this.profundidadeOriginal = 512; }
-        else { this.larguraOriginal = this.profundidadeOriginal = 256; }
+    /** distância entre vértices vizinhos (unidades do mundo) */
+    get espacamento() { return this.config.terreno.parametros.espacamento * 0.005; }
+    /** altura máxima do relevo */
+    get escalaOndulacao() { return this.config.terreno.parametros.ondulacao * 0.05; }
+    get celulasPorChunk() { return limitar(Math.floor(this.config.terreno.parametros.celulasPorChunk), 4, 250); }
+    get tamanhoChunk() { return this.celulasPorChunk * this.espacamento; }
+    /** quantos chunks existem em volta do carro em cada direção */
+    get raioChunks() { return limitar(Math.floor(this.config.terreno.parametros.raioChunks), 1, 12); }
 
-        this.passoAmostragem = this.larguraOriginal > 256 ? Math.floor(this.larguraOriginal / 256) : 1;
-        this.larguraGrid = Math.floor(this.larguraOriginal / this.passoAmostragem);
-        this.profundidadeGrid = Math.floor(this.profundidadeOriginal / this.passoAmostragem);
+    private lerParametros(): ParamRelevo {
+        const p = this.config.terreno.parametros;
+        const comp = Math.max(10, p.comprimentoOnda);
+        return {
+            fColinas: 1 / comp,
+            fCristas: 1 / (comp * 0.7),
+            fRegiao: 1 / COMPRIMENTO_REGIAO,
+            oitavas: limitar(Math.floor(p.oitavas), 1, 8),
+            persistencia: p.persistencia,
+            escala: this.escalaOndulacao,
+        };
+    }
 
-        // uint16 little-endian (mesmo que o fread do C++ em x86/ARM)
-        const view = new DataView(buffer);
-        this.alturas = new Float32Array(this.larguraGrid * this.profundidadeGrid);
-        for (let z = 0; z < this.profundidadeGrid; ++z) {
-            for (let x = 0; x < this.larguraGrid; ++x) {
-                const origX = x * this.passoAmostragem;
-                const origZ = z * this.passoAmostragem;
-                const val = view.getUint16((origZ * this.larguraOriginal + origX) * 2, true);
-                this.alturas[z * this.larguraGrid + x] = val / 65535.0;
+    /** altura normalizada (0..1) em (x, z) */
+    private alturaNormalizada(x: number, z: number, q: ParamRelevo): number {
+        const colinas = limitar((ruidoFractal(this.perlin, x * q.fColinas, z * q.fColinas, q.oitavas, q.persistencia) - 0.5) * CONTRASTE_COLINAS + 0.5, 0, 1);
+        const regiao = limitar((ruidoFractal(this.perlin, x * q.fRegiao + 500, z * q.fRegiao + 500, 2, 0.5) - 0.5) * CONTRASTE_REGIAO + 0.5, 0, 1);
+
+        let h = NIVEL_BASE + NIVEL_REGIAO * regiao + (colinas - 0.5) * (RELEVO_MIN + RELEVO_REGIAO * regiao);
+
+        const mascara = suave(MONTANHA_INICIO, MONTANHA_PLENA, regiao);
+        if (mascara > 0) {
+            const cristas = limitar(ruidoCristas(this.perlin, x * q.fCristas + 300, z * q.fCristas + 300, q.oitavas, 0.5) * GANHO_CRISTAS, 0, 1);
+            h += cristas * mascara * FORCA_MONTANHA;
+        }
+
+        if (h > JOELHO) h = JOELHO + (1 - JOELHO) * Math.tanh((h - JOELHO) / (1 - JOELHO));
+        return limitar(h, 0, 1);
+    }
+
+    /** relevo natural (sem a pista) em (x, z): função contínua */
+    alturaRelevo(x: number, z: number): number {
+        const q = this.lerParametros();
+        return this.alturaNormalizada(x, z, q) * q.escala;
+    }
+
+    /**
+     * Altura no VÉRTICE da grade em (x, z): o relevo, nivelado na cota da pista perto dela. Até `raioPlano` da linha
+     * central a cota é exatamente a da pista; dali até `raioTotal` ela vai se misturando de volta ao relevo.
+     */
+    private alturaVertice(x: number, z: number, q: ParamRelevo): number {
+        const h = this.alturaNormalizada(x, z, q) * q.escala;
+        const e = this.estrada;
+        if (e && e.consultarCota(x, z)) {
+            const w = 1 - suave(e.raioPlano, e.raioTotal, e.resD);
+            if (w > 0) return h + (e.resY - h) * w;
+        }
+        return h;
+    }
+
+    /**
+     * Altura do terreno em coordenadas de mundo, EXATAMENTE a da malha desenhada.
+     * A malha é feita de triângulos entre vértices que ficam a `espacamento` um do outro; entre os vértices a
+     * superfície é uma rampa reta. Se a física lesse a função contínua do ruído, ela divergiria dessas rampas
+     * (o carro flutuaria ou afundaria, mais ainda com triângulos grandes). Por isso amostramos a função só nos
+     * vértices da célula e interpolamos nos mesmos triângulos que gerarIndices() desenha:
+     * (i0,i2,i1) e (i1,i2,i3), com a diagonal indo de (x+1, z) a (x, z+1).
+     * Como o asfalto é recortado desses mesmos triângulos, o carro nunca muda de plano ao entrar na pista.
+     */
+    obterAlturaMundo(xMundo: number, zMundo: number): number {
+        const q = this.lerParametros();
+        const esp = this.espacamento;
+        const gx = xMundo / esp, gz = zMundo / esp;
+        const i = Math.floor(gx), j = Math.floor(gz);
+        const fx = gx - i, fz = gz - j;
+        const h = (a: number, b: number) => this.alturaVertice(a * esp, b * esp, q);
+
+        const h00 = h(i, j), h10 = h(i + 1, j), h01 = h(i, j + 1);
+        if (fx + fz < 1) return h00 + fx * (h10 - h00) + fz * (h01 - h00);
+        const h11 = h(i + 1, j + 1);
+        return h11 + (1 - fx) * (h01 - h11) + (1 - fz) * (h10 - h11);
+    }
+
+    /**
+     * Escreve em `out` os vértices (x, y, z) do chunk (cx, cz) em coordenadas LOCAIS ao chunk (o mesh é
+     * posicionado em cx*tamanhoChunk, cz*tamanhoChunk). Isso mantém os floats pequenos longe da origem.
+     * A altura é calculada a partir do índice global da célula (inteiro * espacamento), então dois chunks
+     * vizinhos calculam exatamente a mesma altura na borda e não surgem frestas.
+     */
+    preencherChunk(cx: number, cz: number, out: Float32Array) {
+        const q = this.lerParametros();
+        const esp = this.espacamento, celulas = this.celulasPorChunk;
+        const n = celulas + 1;
+        let k = 0;
+        for (let j = 0; j < n; ++j) {
+            const wz = (cz * celulas + j) * esp;
+            for (let i = 0; i < n; ++i) {
+                const wx = (cx * celulas + i) * esp;
+                out[k++] = i * esp;
+                out[k++] = this.alturaVertice(wx, wz, q);
+                out[k++] = j * esp;
             }
         }
-        this.alturasOriginais = this.alturas.slice();
-        return true;
     }
 
-    restaurarOriginal() {
-        if (this.alturasOriginais.length) this.alturas = this.alturasOriginais.slice();
-    }
-
-    /** Posições (x,y,z) dos vértices — reconstruirGeometria() */
-    gerarPosicoes(): Float32Array {
-        const { larguraGrid: W, profundidadeGrid: D } = this;
-        const esp = this.espacamento, esc = this.escalaOndulacao;
-        const offsetX = W * esp * 0.5, offsetZ = D * esp * 0.5;
-        const pos = new Float32Array(W * D * 3);
-        for (let z = 0; z < D; ++z) {
-            for (let x = 0; x < W; ++x) {
-                const i = (z * W + x) * 3;
-                pos[i] = x * esp - offsetX;
-                pos[i + 1] = this.alturas[z * W + x] * esc;
-                pos[i + 2] = z * esp - offsetZ;
-            }
-        }
-        return pos;
-    }
-
-    /** Índices: (i0,i2,i1) e (i1,i2,i3) por célula, mesma ordem do C++ */
+    /** Índices de um chunk: (i0,i2,i1) e (i1,i2,i3) por célula. A topologia é igual para todos os chunks. */
     gerarIndices(): Uint32Array {
-        const { larguraGrid: W, profundidadeGrid: D } = this;
+        const W = this.celulasPorChunk + 1, D = W;
         const idx = new Uint32Array((W - 1) * (D - 1) * 6);
         let k = 0;
         for (let z = 0; z < D - 1; ++z) {
@@ -85,85 +164,5 @@ export class Terreno {
             }
         }
         return idx;
-    }
-
-    /** obterAlturaMundo(): interpolação baricêntrica sobre o triângulo da célula */
-    obterAlturaMundo(xMundo: number, zMundo: number): number {
-        if (this.alturas.length === 0) return 0;
-        const { larguraGrid: W, profundidadeGrid: D } = this;
-        const esp = this.espacamento, esc = this.escalaOndulacao;
-        const offsetX = W * esp * 0.5, offsetZ = D * esp * 0.5;
-
-        // o C++ usa float32; Math.fround reproduz o clamp em 1.001 com a mesma precisão
-        let gridX = (xMundo + offsetX) / esp;
-        let gridZ = (zMundo + offsetZ) / esp;
-        gridX = Math.min(Math.max(gridX, 0), Math.fround(W - 1.001));
-        gridZ = Math.min(Math.max(gridZ, 0), Math.fround(D - 1.001));
-
-        const x0 = Math.floor(gridX), z0 = Math.floor(gridZ);
-        const x1 = x0 + 1, z1 = z0 + 1;
-        const fx = gridX - x0, fz = gridZ - z0;
-
-        const h00 = this.alturas[z0 * W + x0];
-        const h10 = this.alturas[z0 * W + x1];
-        const h01 = this.alturas[z1 * W + x0];
-        const h11 = this.alturas[z1 * W + x1];
-
-        const h = fx + fz < 1.0
-            ? h00 + fx * (h10 - h00) + fz * (h01 - h00)
-            : h11 + (1 - fx) * (h01 - h11) + (1 - fz) * (h10 - h11);
-        return h * esc;
-    }
-
-    /** aplainarSobreCaminho(): usado pela estrada (Etapa 2). Retorna true se alterou alturas. */
-    aplainarSobreCaminho(caminho: Vec3[], meiaLargura: number, margemPlana: number,
-                         larguraTransicao: number, profundidade: number): boolean {
-        if (this.alturas.length === 0 || caminho.length < 2) return false;
-        const { larguraGrid: W, profundidadeGrid: D } = this;
-        const esp = this.espacamento, esc = this.escalaOndulacao;
-        if (esc < 0.0001 || esp < 0.0001) return false;
-        const offsetX = W * esp * 0.5, offsetZ = D * esp * 0.5;
-
-        const raioPlano = meiaLargura + margemPlana;
-        const raioTotal = raioPlano + larguraTransicao;
-        const INF = 1e30;
-        const melhorDist = new Float32Array(this.alturas.length).fill(INF);
-        const alvo = new Float32Array(this.alturas.length);
-
-        const n = caminho.length;
-        for (let i = 0; i < n; ++i) {
-            const a = caminho[i], b = caminho[(i + 1) % n];
-            const minX = Math.min(a.x, b.x) - raioTotal, maxX = Math.max(a.x, b.x) + raioTotal;
-            const minZ = Math.min(a.z, b.z) - raioTotal, maxZ = Math.max(a.z, b.z) + raioTotal;
-            const gx0 = Math.max(0, Math.floor((minX + offsetX) / esp));
-            const gx1 = Math.min(W - 1, Math.ceil((maxX + offsetX) / esp));
-            const gz0 = Math.max(0, Math.floor((minZ + offsetZ) / esp));
-            const gz1 = Math.min(D - 1, Math.ceil((maxZ + offsetZ) / esp));
-
-            const abx = b.x - a.x, abz = b.z - a.z;
-            const len2 = abx * abx + abz * abz;
-
-            for (let z = gz0; z <= gz1; ++z) {
-                for (let x = gx0; x <= gx1; ++x) {
-                    const px = x * esp - offsetX, pz = z * esp - offsetZ;
-                    const t = len2 > 0 ? Math.min(1, Math.max(0, ((px - a.x) * abx + (pz - a.z) * abz) / len2)) : 0;
-                    const d = Math.hypot(px - (a.x + abx * t), pz - (a.z + abz * t));
-                    const idx = z * W + x;
-                    if (d < melhorDist[idx]) {
-                        melhorDist[idx] = d;
-                        alvo[idx] = a.y + (b.y - a.y) * t;
-                    }
-                }
-            }
-        }
-
-        for (let idx = 0; idx < this.alturas.length; ++idx) {
-            const d = melhorDist[idx];
-            if (d >= raioTotal) continue;
-            const w = 1 - smoothstep(raioPlano, raioTotal, d);
-            const alvoNorm = (alvo[idx] - profundidade) / esc;
-            this.alturas[idx] = this.alturas[idx] * (1 - w) + alvoNorm * w; // glm::mix
-        }
-        return true;
     }
 }

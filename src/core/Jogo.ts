@@ -9,6 +9,7 @@ import { ControleJogador } from './ControleJogador';
 import { CarroVisual } from '@/entities/CarroVisual';
 import { EfeitosDrift } from '@/entities/EfeitosDrift';
 import { lerpFactorDt } from '@/graphics/Mat4';
+import { sementeAleatoria } from './Random';
 import { geometriaDe } from '@/graphics/Malha';
 import { Renderer } from '@/graphics/Renderer';
 import { WorldBuilder } from '@/world/WorldBuilder';
@@ -92,14 +93,16 @@ export class Jogo {
     setMouseSobreUI(sobre: boolean) { this.mouseSobreUI = sobre; }
     marcarConfigAlterada() { this.painelAlterado = true; }
 
-    async iniciar(urlTerreno = './terreno.raw') {
+    async iniciar() {
+        if (this.descartado) return;
         this.aplicarPerfilCarro(this.estadoCarroVermelho);
 
-        const terrenoCarregado = await this.world.carregarTerreno(urlTerreno);
-        if (this.descartado || !terrenoCarregado) return;
+        // a seed do mundo vem de ?seed=... ou é sorteada
+        const s = Number(new URLSearchParams(location.search).get('seed'));
+        this.world.iniciar(Number.isFinite(s) && s > 0 ? s >>> 0 : sementeAleatoria());
         this.veiculo.init();
 
-        this.renderizador.scene.add(this.world.terrenoMesh);
+        this.renderizador.scene.add(this.world.terrenoGrupo);
         this.renderizador.scene.add(this.world.gramaMesh);
         for (let i = 0; i < 4; i++) {
             for (let j = 0; j < this.world.florestaMeshes[i].length; j++) {
@@ -115,10 +118,8 @@ export class Jogo {
             (x, z) => this.world.estrada.estaNoAsfalto(x, z), this.config,
         );
 
-        const s = Number(new URLSearchParams(location.search).get('seed'));
-        if (Number.isFinite(s) && s > 0) this.world.seedPista = s >>> 0;
-
-        this.regenerarPista(this.world.seedPista === 0, true);
+        this.reposicionarCarro();   // monta os chunks (terreno + vegetação) em volta da largada
+        this.emitirStats();
         this.configAnterior = structuredClone(this.config);
 
         this.lastTime = performance.now() / 1000;
@@ -126,27 +127,40 @@ export class Jogo {
         this.rafId = requestAnimationFrame(this.loop);
     }
 
-    private regenerarPista(novaSeed: boolean, reposicionar: boolean) {
-        this.world.regenerarPista(novaSeed);
-        if (this.world.estradaMesh && !this.renderizador.scene.children.includes(this.world.estradaMesh)) {
-            this.renderizador.scene.add(this.world.estradaMesh);
+    /**
+     * Tecla R: leva o carro ao ponto mais próximo da linha central da pista, parado e apontado para o sentido
+     * da pista que combina com para onde ele estava virado (assim também serve para virar o carro ao contrário).
+     * É também como o carro é colocado na largada (a pista passa pela origem, no sentido +z).
+     */
+    private reposicionarCarro() {
+        const p = this.veiculo.getPosicao(), yaw = this.veiculo.getYawAngle();
+        this.world.atualizarChunks(p.x, p.z, Infinity);       // garante terreno e pista em volta de onde o carro está
+
+        let x = 0, z = 0, dx = 0, dz = 1;
+        const proj = this.world.estrada.projetar(p.x, p.z);
+        if (proj) {
+            x = proj.x; z = proj.z; dx = proj.dirX; dz = proj.dirZ;
+            if (dx * Math.sin(yaw) + dz * Math.cos(yaw) < 0) { dx = -dx; dz = -dz; }
         }
+        this.world.atualizarChunks(x, z, Infinity);           // e em volta do destino, se for longe
 
         this.veiculo.invalidarSolo();
+        this.veiculo.reposicionarNaPista({ x, y: this.world.terreno.obterAlturaMundo(x, z), z }, { x: dx, y: 0, z: dz });
+        this.trabalhoPesadoNoFrame = true;
+    }
 
-        if (reposicionar) {
-            const curva = this.world.estrada.getPontosCurva();
-            if (curva.length >= 2) {
-                const d = { x: curva[1].x - curva[0].x, y: curva[1].y - curva[0].y, z: curva[1].z - curva[0].z };
-                const l = Math.hypot(d.x, d.y, d.z) || 1;
-                this.veiculo.reposicionarNaPista(curva[0], { x: d.x / l, y: d.y / l, z: d.z / l });
-            }
-        }
-
-        this.world.regerarVegetacao();
+    /**
+     * Troca a seed do mundo: recalcula relevo, pista e vegetação e volta o carro à largada.
+     * Ainda não há botão no menu do terreno chamando isto (fica para depois).
+     */
+    reiniciarSeed(seed: number = sementeAleatoria()) {
+        this.world.definirSeed(seed);
+        const p = this.veiculo.getPosicao();
+        this.world.reconstruirTerreno(p.x, p.z);   // refaz também a pista e a vegetação dos chunks
         this.terrenoDefasado = false;
         this.vegetacaoPendente = false;
-        this.trabalhoPesadoNoFrame = true;
+        this.veiculo.init();                       // de volta à origem, onde a pista da nova seed também passa
+        this.reposicionarCarro();
         this.emitirStats();
     }
 
@@ -217,13 +231,14 @@ export class Jogo {
 
         if (this.terrenoDefasado && (!arrastando || agora >= this.proximaRegenTerreno)) {
             const inicio = performance.now() / 1000;
-            this.world.regenerarPista(false);
+            const p = this.veiculo.getPosicao();
+            this.world.reconstruirTerreno(p.x, p.z);
             this.veiculo.invalidarSolo();
 
             const fim = performance.now() / 1000;
             this.proximaRegenTerreno = fim + Math.max(0.15, (fim - inicio) * 3.0);
 
-            this.terrenoDefasado = false; this.vegetacaoPendente = true; this.trabalhoPesadoNoFrame = true;
+            this.terrenoDefasado = false; this.trabalhoPesadoNoFrame = true;   // reconstruirTerreno já refaz a vegetação
         }
 
         if (this.vegetacaoPendente && !arrastando) {
@@ -239,6 +254,7 @@ export class Jogo {
         this.world.gramaMesh.visible = false;
         this.efeitos.setVisivel(false);
         this.world.atualizarFlorestaLods(p, true);
+        this.world.modoSombra(true, p.x, p.z);
 
         const r = this.renderizador.renderer;
         r.setRenderTarget(this.renderizador.sombra.alvo);
@@ -249,6 +265,7 @@ export class Jogo {
         this.renderizador.scene.overrideMaterial = null;
         r.setRenderTarget(null);
 
+        this.world.modoSombra(false, p.x, p.z);
         this.uniforms.uShadowOn.value = 1;
         this.world.gramaMesh.visible = true;
         this.efeitos.setVisivel(true);
@@ -272,7 +289,7 @@ export class Jogo {
             this.efeitos.setWireframe(this.wireframe);
             this.carro.setWireframe(this.wireframe);
         }
-        if (Entrada.teclaUmaVez('KeyR')) this.regenerarPista(true, true);
+        if (Entrada.teclaUmaVez('KeyR')) this.reposicionarCarro();
 
         const { throttle, steer, handbrake, carregandoPulo } = this.controle.ler(this.veiculo, this.world.estrada, this.mouseSobreUI);
         this.veiculo.setSegurandoPulo(carregandoPulo);
@@ -283,6 +300,7 @@ export class Jogo {
         deltaTime = Math.min(deltaTime, 0.05);
 
         this.veiculo.update(deltaTime, throttle, steer, handbrake, this.world.alturaSuperficie);
+        { const pc = this.veiculo.getPosicao(); this.world.atualizarChunks(pc.x, pc.z); }
         this.efeitos.atualizar(deltaTime);
 
         if (this.painelAlterado) {
@@ -375,6 +393,7 @@ export class Jogo {
         cancelAnimationFrame(this.rafId);
         Entrada.parar();
 
+        this.world.dispose();   // materiais e texturas das máscaras da pista (as geometrias o traverse abaixo cuida)
         this.renderizador.scene.traverse((o: any) => {
             if (o.geometry) o.geometry.dispose();
         });

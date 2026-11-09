@@ -1,9 +1,10 @@
 // PilotoAutomatico.ts — port de PilotoAutomatico.h (pure pursuit + perfil de frenagem antecipada).
+// A pista agora é infinita e aberta: o piloto trabalha numa janela de pontos à frente do carro, sem dar a volta.
 
 import { GAME_CONFIG } from '@/core/config';
 import { clamp, normalizarAngulo as angulo } from '@/graphics/Mat4';
 import type { Veiculo } from './Veiculo';
-import type { Estrada } from '@/world/Estrada';
+import { PASSO, type Estrada } from '@/world/Estrada';
 
 type V2 = { x: number; y: number };
 const xz = (v: { x: number; z: number }): V2 => ({ x: v.x, y: v.z });
@@ -13,14 +14,15 @@ const mulv = (a: V2, s: number): V2 => ({ x: a.x * s, y: a.y * s });
 const dot2 = (a: V2, b: V2) => a.x * b.x + a.y * b.y;
 const len2 = (a: V2) => Math.hypot(a.x, a.y);
 
+/** ponto a `dist` unidades à frente de (seg, t) ao longo da janela; no fim da janela devolve o último ponto */
 function pontoAFrente(curva: { x: number; z: number }[], seg: number, t: number, dist: number): V2 {
     const n = curva.length;
     let i = seg;
     const A = xz(curva[i]);
-    let B = xz(curva[(i + 1) % n]);
+    let B = xz(curva[i + 1]);
     let p = addv(A, mulv(sub(B, A), t));
     let restante = dist;
-    for (let guard = 0; guard < n; ++guard) {
+    for (;;) {
         const v = sub(B, p);
         const d = len2(v);
         if (d >= restante) {
@@ -29,16 +31,16 @@ function pontoAFrente(curva: { x: number; z: number }[], seg: number, t: number,
         }
         restante -= d;
         p = B;
-        i = (i + 1) % n;
-        B = xz(curva[(i + 1) % n]);
+        i++;
+        if (i + 1 >= n) return p;
+        B = xz(curva[i + 1]);
     }
-    return p;
 }
 
 function curvatura(curva: { x: number; z: number }[], i: number): number {
     const n = curva.length, k = 3;
-    const a = sub(xz(curva[i]), xz(curva[(i - k + n) % n]));
-    const b = sub(xz(curva[(i + k) % n]), xz(curva[i]));
+    const a = sub(xz(curva[i]), xz(curva[Math.max(i - k, 0)]));
+    const b = sub(xz(curva[Math.min(i + k, n - 1)]), xz(curva[i]));
     const la = len2(a), lb = len2(b);
     if (la < 1e-3 || lb < 1e-3) return 0;
     const c = clamp(dot2(a, b) / (la * lb), -1, 1);
@@ -57,10 +59,6 @@ export class PilotoAutomatico {
     atualizar(veiculo: Veiculo, estrada: Estrada): { throttle: number; steer: number; handbrake: boolean } {
         const saida = { throttle: 0, steer: 0, handbrake: false };
         if (!veiculo || !estrada) return saida;
-
-        const curva = estrada.getPontosCurva();
-        const n = curva.length;
-        if (n < 8) return saida;
 
         const fis = this.config.carro.fisica;
         const pConf = this.config.pilotoAutomatico.parametros;
@@ -97,25 +95,18 @@ export class PilotoAutomatico {
         this.yawAnterior = yaw;
         this.temYawAnterior = true;
 
-        // vértice mais próximo
-        let closest = 0, minD2 = 1e30;
-        for (let i = 0; i < n; ++i) {
-            const d = sub(pos, xz(curva[i]));
-            const d2 = dot2(d, d);
-            if (d2 < minD2) { minD2 = d2; closest = i; }
-        }
-
-        // projeção nos dois segmentos vizinhos
-        let seg = closest, tSeg = 0, melhor = 1e30;
-        for (let k = -1; k <= 0; ++k) {
-            const i = (closest + k + n) % n;
-            const A = xz(curva[i]);
-            const AB = sub(xz(curva[(i + 1) % n]), A);
-            const l2 = dot2(AB, AB);
-            const t = l2 > 0 ? clamp(dot2(sub(pos, A), AB) / l2, 0, 1) : 0;
-            const d = len2(sub(pos, addv(A, mulv(AB, t))));
-            if (d < melhor) { melhor = d; seg = i; tSeg = t; }
-        }
+        // posição do carro na pista e o trecho à frente dele (a pista é infinita: só uma janela em volta do carro)
+        const proj = estrada.projetar(pos3.x, pos3.z);
+        if (!proj) return saida;
+        const aFreioJan = Math.max(1e-4, fis.aceleracaoFreio * pConf.fatorFreio);
+        const distFreio = (fis.velmax * fis.velmax) / (2 * aFreioJan) + 200;
+        const alcance = Math.max(distFreio, pConf.lookaheadForaPista, pConf.lookaheadBase + speed * pConf.lookaheadVel) + 400;
+        const jan = estrada.janela(proj.i - 4, proj.i + Math.ceil(alcance / PASSO) + 4);
+        const curva = jan.pontos;
+        const n = curva.length;
+        const seg = proj.i - jan.inicio;
+        const tSeg = proj.t;
+        if (n < 8 || seg < 0 || seg >= n - 1) return saida;
 
         const foraDaPista = !estrada.estaNoAsfalto(pos3.x, pos3.z);
         const meiaLargura = this.config.estrada.estrada.largura * 0.5;
@@ -176,13 +167,12 @@ export class PilotoAutomatico {
 
         let vAlvo = fis.velmax;
         let acum = 0;
-        for (let s = 0; s < n && acum <= distMax; ++s) {
-            const i = (seg + s) % n;
+        for (let i = seg; i < n - 1 && acum <= distMax; ++i) {
             const kappa = curvatura(curva, i);
             let vc = pConf.fatorVelCurva * (grip * 0.5) / Math.max(kappa, 1e-5);
             vc = Math.max(vc, pConf.velMinCurva);
             vAlvo = Math.min(vAlvo, Math.sqrt(vc * vc + 2 * aFreio * acum));
-            acum += len2(sub(xz(curva[(i + 1) % n]), xz(curva[i])));
+            acum += len2(sub(xz(curva[i + 1]), xz(curva[i])));
         }
         if (foraDaPista) vAlvo = Math.min(vAlvo, 3);
 

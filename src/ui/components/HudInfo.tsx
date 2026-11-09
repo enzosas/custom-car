@@ -8,7 +8,7 @@ export function HudInfo({ stats }: { stats: JogoStats | null }) {
 
     return (
         <div className="hud-info">
-            {`Q: wireframe  R: nova pista  SHIFT: agachar/pular  ESPAÇO: freio de mão\n` +
+            {`Q: wireframe  R: voltar para a pista  SHIFT: agachar/pular  ESPAÇO: freio de mão\n` +
                 `botão direito: câmara  roda: zoom  X: alternar carro (${carro})\n` +
                 `seed ${seed}  ${fps} fps`}
         </div>

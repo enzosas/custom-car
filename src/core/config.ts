@@ -81,11 +81,13 @@ export const GAME_CONFIG = {
     },
     terreno: {
         parametros: {
-            ptcontrole: 10,
-            subdivisoes: 32,
-            espacamento: 18000.0,
-            ondulacao: 24000.0,
-            fatorborda: 0.3,
+            espacamento: 30060.0,    // distância entre vértices = espacamento * 0.005 (~150): triângulos grandes
+            ondulacao: 24000.0,      // altura máxima do relevo = ondulacao * 0.05 (1200)
+            comprimentoOnda: 1962.9446, // tamanho (unidades) dos morros
+            oitavas: 4,              // camadas de detalhe do relevo
+            persistencia: 0.5,       // quanto cada camada de detalhe seguinte pesa (0 = suave, 1 = muito rugoso)
+            celulasPorChunk: 32,     // resolução de um chunk (não está no painel)
+            raioChunks: 4,           // chunks carregados em volta do carro; precisa cobrir a neblina (~15000 / tamanho do chunk). Menos = mais leve
         },
         superficie: {
             offsetprofundidadegrama: 0.0,
@@ -120,10 +122,9 @@ export const GAME_CONFIG = {
     estrada: {
         estrada: {
             largura: 80.0,
-            quantidadePontosControle: 20,
-            raioBase: 0.35,
-            quantidadeRuido: 0.5,
-            offsetElevacao: 0.7,
+            anguloCurva: 40.0,       // graus: quanto a pista pode se desviar da direção geral (0 = reta; acima de 85 é limitado)
+            comprimentoCurva: 1800.0, // distância (unidades) em que cada curva se desenvolve: maior = curvas mais longas e suaves
+            larguraTransicao: 400.0, // faixa em volta do platô da pista onde o terreno volta ao relevo natural (maior = pista corta menos os morros)
         }
     },
     luz: {

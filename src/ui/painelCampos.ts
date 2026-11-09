@@ -51,7 +51,7 @@ export const ABAS: AbaDef[] = [
   },
   {
     titulo: 'terreno config', secoes: [
-      { titulo: 'parametros', caminho: ['terreno', 'parametros'], campos: [{ nome: 'ptcontrole', tipo: 'uint', fator: 1.0 }, { nome: 'subdivisoes', tipo: 'uint', fator: 1.0 }, { nome: 'espacamento', tipo: 'float', fator: 15.0 }, { nome: 'ondulacao', tipo: 'float', fator: 15.0 }, { nome: 'fatorborda', tipo: 'float', fator: 1.0 }] },
+      { titulo: 'parametros', caminho: ['terreno', 'parametros'], campos: [{ nome: 'espacamento', tipo: 'float', fator: 15.0 }, { nome: 'ondulacao', tipo: 'float', fator: 15.0 }, { nome: 'comprimentoOnda', tipo: 'float', fator: 1.0 }, { nome: 'oitavas', tipo: 'uint', fator: 1.0 }, { nome: 'persistencia', tipo: 'float', fator: 1.0, passo: 0.005, min: 0, max: 1 }, { nome: 'raioChunks', tipo: 'uint', fator: 1.0 }] },
       { titulo: 'superficie', caminho: ['terreno', 'superficie'], campos: [{ nome: 'offsetprofundidadegrama', tipo: 'float', fator: 15.0 }] },
       { titulo: 'visualizacao', caminho: ['terreno', 'visualizacao'], campos: [{ nome: 'fatorOpacidade', tipo: 'float', fator: 1.0 }] },
     ]
@@ -68,7 +68,7 @@ export const ABAS: AbaDef[] = [
   },
   {
     titulo: 'estrada config', secoes: [
-      { titulo: 'estrada', caminho: ['estrada', 'estrada'], campos: [{ nome: 'largura', tipo: 'float', fator: 15.0 }, { nome: 'quantidadePontosControle', tipo: 'uint', fator: 1.0 }, { nome: 'raioBase', tipo: 'float', fator: 1.0 }, { nome: 'quantidadeRuido', tipo: 'float', fator: 1.0 }, { nome: 'offsetElevacao', tipo: 'float', fator: 15.0 }] },
+      { titulo: 'estrada', caminho: ['estrada', 'estrada'], campos: [{ nome: 'largura', tipo: 'float', fator: 15.0 }, { nome: 'anguloCurva', tipo: 'float', fator: 1.0, passo: 0.25, min: 0, max: 90 }, { nome: 'comprimentoCurva', tipo: 'float', fator: 1.0 }, { nome: 'larguraTransicao', tipo: 'float', fator: 1.0 }] },
     ]
   },
   {
