@@ -1,3 +1,4 @@
+// useDragValue.ts - Captura de Pointer Events
 import { useRef, useState, type PointerEvent } from 'react';
 
 const LIMIAR_PX = 5; // zona de intenção: abaixo disso ainda não sabemos se é arrasto ou scroll
@@ -6,14 +7,11 @@ interface Opcoes {
     /** Pressionou o campo (ainda pode virar scroll). */
     aoComecar: () => void;
     /** Arrasto horizontal confirmado: deslocamento em px desde o último evento. */
-    aoArrastar: (deltaX: number, acelerado: boolean) => void;
+    aoArrastar: (deltaX: number, acelerado: boolean, precisao: boolean) => void;
 }
 
 /**
  * Arrasto horizontal para alterar um valor, via Pointer Events.
- *
- * No toque, o elemento deve ter `touch-action: pan-y`: o navegador cuida do scroll
- * vertical (e dispara pointercancel), e só o gesto horizontal chega aqui.
  */
 export function useDragValue(opcoes: Opcoes) {
     const [arrastando, setArrastando] = useState(false);
@@ -53,7 +51,8 @@ export function useDragValue(opcoes: Opcoes) {
         const delta = ev.clientX - s.xAnterior;
         if (delta !== 0) {
             s.xAnterior = ev.clientX;
-            op.current.aoArrastar(delta, ev.shiftKey);
+            // Passa os modificadores: Shift (acelerado), Alt (precisao)
+            op.current.aoArrastar(delta, ev.shiftKey, ev.altKey);
         }
     };
 

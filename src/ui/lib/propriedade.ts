@@ -1,25 +1,16 @@
-// propriedade.ts — lógica pura (sem DOM) de ajuste de valores do GAME_CONFIG.
-// Portado da antiga classe `Propriedade`.
-
+// propriedade.ts - Lógica de ajuste de valores do GAME_CONFIG por arrasto
 import type { CampoDef } from '../painelCampos';
 
 export interface Alvo {
     obj: Record<string, number>;
     chave: string;
     tipo: CampoDef['tipo'];
-    fator: number;
-    /** passo fixo por pixel (shift = 10x); se ausente, o passo é proporcional ao valor atual */
-    passo?: number;
     min?: number;
     max?: number;
-    /** com min/max: o valor dá a volta (ex.: matiz 0-360) em vez de travar nos limites */
     ciclico?: boolean;
 }
 
-/** Estado de uma sessão de arrasto (do pointerdown ao pointerup). */
 export interface SessaoArrasto {
-    base: number;
-    /** Valor "contínuo" para campos inteiros, para não perder arrastos pequenos no arredondamento. */
     acumulado: number;
 }
 
@@ -29,41 +20,38 @@ export function resolverObjeto(config: unknown, caminho: string[]): Record<strin
     return obj;
 }
 
-function valorBase(a: Alvo): number {
-    if (a.tipo === 'float') {
-        const base = a.obj[a.chave] / a.fator;
-        return Math.abs(base) < 0.0001 ? 1 : base;
-    }
-    return Math.max(1, a.obj[a.chave]);
-}
-
 export function iniciarSessao(a: Alvo): SessaoArrasto {
-    return { base: valorBase(a), acumulado: a.obj[a.chave] };
+    // Fallback `?? 0` para o caso da interface renderizar antes do objeto estar 100% pronto
+    return { acumulado: a.obj[a.chave] ?? 0 };
 }
 
-export function arrastar(a: Alvo, s: SessaoArrasto, deltaX: number, acelerado: boolean) {
-    const taxa = acelerado ? 1.0 : 0.10;
-    let mudancaPorPixel = (s.base * taxa) / 100;
+export function arrastar(a: Alvo, s: SessaoArrasto, deltaX: number, acelerado: boolean, precisao: boolean, passoBase: number) {
+    // Multiplicadores de controle: Shift = 10x (rápido), Alt/Option = 0.1x (precisão)
+    const multiplicador = acelerado ? 10 : (precisao ? 0.1 : 1);
+    const mudanca = deltaX * passoBase * multiplicador;
 
-    if (a.tipo === 'float' && a.passo !== undefined) {
-        let v = a.obj[a.chave] + deltaX * a.passo * (acelerado ? 10 : 1);
-        if (a.min !== undefined && a.max !== undefined && a.ciclico) {
+    s.acumulado += mudanca;
+    let novoValor = s.acumulado;
+
+    if (a.min !== undefined && a.max !== undefined) {
+        if (a.ciclico) {
             const faixa = a.max - a.min;
-            v = a.min + ((((v - a.min) % faixa) + faixa) % faixa);
+            novoValor = a.min + ((((novoValor - a.min) % faixa) + faixa) % faixa);
         } else {
-            if (a.min !== undefined) v = Math.max(a.min, v);
-            if (a.max !== undefined) v = Math.min(a.max, v);
+            novoValor = Math.max(a.min, Math.min(a.max, novoValor));
         }
-        a.obj[a.chave] = v;
-    } else if (a.tipo === 'float') {
-        if (Math.abs(mudancaPorPixel) < 0.001) mudancaPorPixel = 0.01;
-        a.obj[a.chave] += deltaX * mudancaPorPixel * a.fator;
-    } else {
-        s.acumulado = Math.max(0, s.acumulado + deltaX * mudancaPorPixel);
-        a.obj[a.chave] = Math.round(s.acumulado);
+        s.acumulado = novoValor; // Previne que o delta contínuo "fuja" muito além do limite visual
+    } else if (a.tipo === 'uint') {
+        novoValor = Math.max(0, novoValor);
+        s.acumulado = Math.max(0, s.acumulado);
     }
+
+    a.obj[a.chave] = a.tipo === 'uint' ? Math.round(novoValor) : novoValor;
 }
 
 export function formatarValor(a: Alvo): string {
-    return a.tipo === 'float' ? (a.obj[a.chave] / a.fator).toFixed(4) : String(a.obj[a.chave]);
+    // Fallback de segurança contra 'Cannot read properties of undefined'
+    const valor = a.obj[a.chave] ?? 0;
+    // O construtor Number() em volta de toFixed limpa os zeros inúteis do final
+    return a.tipo === 'float' ? Number(valor.toFixed(4)).toString() : String(valor);
 }
