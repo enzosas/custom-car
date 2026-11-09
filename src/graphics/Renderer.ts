@@ -8,11 +8,26 @@ const NEAR_PLANE = 0.3;
 const FAR_PLANE = 15000;
 
 /**
- * As luzes do three (usadas s  por materiais embutidos, como os do .glb) seguem os mesmos par metros do shader
- * do jogo. O three trabalha em unidades f sicas (o difuso   dividido por pi), ent o a intensidade do jogo
+ * As luzes do three (usadas só por materiais embutidos, como os do .glb) seguem os mesmos parâmetros do shader
+ * do jogo. O three trabalha em unidades físicas (o difuso é dividido por pi), então a intensidade do jogo é
  * multiplicada por pi. Ajuste aqui se o carro ficar mais claro/escuro que o resto.
  */
 const ESCALA_LUZ_THREE = Math.PI;
+
+// ---- resolução ----
+/** teto do pixel ratio: telas retina (2x/3x) desenhavam 4x–9x mais pixels do que o necessário */
+const PIXEL_RATIO_TETO = 1.5;
+/** o MSAA só vale a pena em telas 1x; em telas de alta densidade os pixels já são pequenos */
+const LIMITE_DPR_MSAA = 1.5;
+
+// ---- resolução dinâmica (baixa a resolução quando o FPS cai e sobe de volta quando sobra folga) ----
+const RESOLUCAO_DINAMICA = true;
+const RAZAO_MINIMA = 0.5;
+const JANELA_FRAMES = 40;           // frames medidos antes de cada decisão
+const BAIXAR_ACIMA_DE_MS = 21;      // média de frame acima disso (< ~47 fps): reduz
+const SUBIR_ABAIXO_DE_MS = 17.5;    // média de frame abaixo disso (>= ~57 fps): tenta subir
+const PASSO_BAIXAR = 0.1;
+const PASSO_SUBIR = 0.05;
 
 export class Renderer {
     public renderer: THREE.WebGLRenderer;
@@ -24,12 +39,29 @@ export class Renderer {
     private readonly corCeuTmp = new THREE.Color();
     private readonly luzSol = new THREE.DirectionalLight(0xffffff, 1);
 
-    constructor(private canvas: HTMLCanvasElement, uniforms: UniformsCompartilhados) {
-        // Inicializa o WebGL
-        this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    // estado da resolução dinâmica
+    private readonly razaoMax: number;
+    private razao: number;
+    private somaDt = 0;
+    private amostras = 0;
+    private tempoDesdeMudanca = 0;
+    private esperaParaSubir = 5;    // segundos; dobra quando subir resulta em ter que descer de novo
+    private ultimaMudanca: 'baixou' | 'subiu' | null = null;
 
-        // Cena e C mara
+    constructor(private canvas: HTMLCanvasElement, uniforms: UniformsCompartilhados) {
+        const dpr = window.devicePixelRatio || 1;
+        this.razaoMax = Math.min(dpr, PIXEL_RATIO_TETO);
+        this.razao = this.razaoMax;
+
+        // Inicializa o WebGL
+        this.renderer = new THREE.WebGLRenderer({
+            canvas,
+            antialias: dpr < LIMITE_DPR_MSAA,
+            powerPreference: 'high-performance',
+        });
+        this.renderer.setPixelRatio(this.razao);
+
+        // Cena e Câmera
         this.scene = new THREE.Scene();
         this.scene.matrixWorldAutoUpdate = true;
 
@@ -49,11 +81,11 @@ export class Renderer {
 
     private configurarLuzes() {
         this.scene.add(this.luzAmbiente);
-        this.scene.add(this.luzSol);   // o alvo padr  a origem: a dire  a posi o normalizada
+        this.scene.add(this.luzSol);   // o alvo padrão é a origem: a direção é a posição normalizada
         this.sincronizarLuzes();
     }
 
-    /** copia a config de luz do jogo (dire o, cor, intensidades) para as luzes do three; chamar a cada frame */
+    /** copia a config de luz do jogo (direção, cor, intensidades) para as luzes do three; chamar a cada frame */
     public sincronizarLuzes() {
         const l = GAME_CONFIG.luz.parametros;
 
@@ -61,7 +93,7 @@ export class Renderer {
         this.luzAmbiente.color.setRGB(...corAmbiente(l));
         this.luzAmbiente.intensity = l.intensidadeAmbiente * ESCALA_LUZ_THREE;
 
-        // A luz do Sol contínua independente
+        // A luz do Sol continua independente
         this.luzSol.color.setRGB(...corSol(l));
         this.luzSol.intensity = l.intensidadeDifusa * ESCALA_LUZ_THREE;
         this.luzSol.position.set(l.dirX, l.dirY, l.dirZ).normalize().multiplyScalar(500);
@@ -78,6 +110,44 @@ export class Renderer {
         this.camera.aspect = w / Math.max(1, h);
         this.camera.updateProjectionMatrix();
     };
+
+    /** escala atual do buffer de desenho em relação à janela (1 = um pixel por pixel CSS) */
+    public getEscalaResolucao() { return this.razao; }
+
+    /**
+     * Resolução dinâmica: chamar uma vez por frame com o tempo real do frame (em segundos).
+     * Mede a média de uma janela de frames; se estiver lento, reduz o pixel ratio; se houver folga por um tempo,
+     * sobe aos poucos (com espera crescente, para não ficar oscilando entre dois valores).
+     */
+    public ajustarResolucao(dt: number) {
+        if (!RESOLUCAO_DINAMICA) return;
+        if (!(dt > 0) || dt > 0.5) return;   // aba em segundo plano, pausa do depurador etc.
+
+        this.somaDt += Math.min(dt, 0.1);    // um engasgo isolado não deve derrubar a resolução
+        this.amostras++;
+        this.tempoDesdeMudanca += dt;
+        if (this.amostras < JANELA_FRAMES) return;
+
+        const mediaMs = (this.somaDt / this.amostras) * 1000;
+        this.somaDt = 0; this.amostras = 0;
+
+        if (mediaMs > BAIXAR_ACIMA_DE_MS && this.razao > RAZAO_MINIMA) {
+            if (this.ultimaMudanca === 'subiu') this.esperaParaSubir = Math.min(this.esperaParaSubir * 2, 60);
+            this.definirRazao(this.razao - PASSO_BAIXAR);
+            this.ultimaMudanca = 'baixou';
+        } else if (mediaMs < SUBIR_ABAIXO_DE_MS && this.razao < this.razaoMax
+            && this.tempoDesdeMudanca >= this.esperaParaSubir) {
+            this.definirRazao(this.razao + PASSO_SUBIR);
+            this.ultimaMudanca = 'subiu';
+        }
+    }
+
+    private definirRazao(r: number) {
+        this.razao = Math.round(Math.min(this.razaoMax, Math.max(RAZAO_MINIMA, r)) * 100) / 100;
+        this.tempoDesdeMudanca = 0;
+        this.renderer.setPixelRatio(this.razao);
+        this.redimensionar();
+    }
 
     public render() {
         this.renderer.render(this.scene, this.camera);

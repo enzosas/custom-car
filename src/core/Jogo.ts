@@ -22,6 +22,13 @@ import {
 
 const mudou = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
 
+/**
+ * O mapa de sombras é redesenhado a cada N frames (1 = todo frame).
+ * ATENÇÃO: com N > 1 a sombra do carro fica atrasada em alguns frames e aparece "dobrada"/tremida enquanto ele
+ * anda. Deixe em 1 a menos que o carro não projete sombra ou que o desempenho exija.
+ */
+const INTERVALO_SOMBRA = 1;
+
 export interface JogoStats {
     fps: number;
     seed: number;
@@ -56,6 +63,10 @@ export class Jogo {
     private vegetacaoPendente = false;
     private trabalhoPesadoNoFrame = false;
     private proximaRegenTerreno = 0;
+    private quadroSombra = 0;
+    private forcarSombra = true;
+    private readonly lightDirTmp = new THREE.Vector3();
+    private readonly alvoSombraTmp = new THREE.Vector3();
     private lastTime = 0;
     private rafId = 0;
     private rodando = false;
@@ -147,6 +158,7 @@ export class Jogo {
         this.veiculo.invalidarSolo();
         this.veiculo.reposicionarNaPista({ x, y: this.world.terreno.obterAlturaMundo(x, z), z }, { x: dx, y: 0, z: dz });
         this.trabalhoPesadoNoFrame = true;
+        this.forcarSombra = true;   // o carro pulou de lugar: o mapa de sombras antigo não serve mais
     }
 
     /**
@@ -248,8 +260,8 @@ export class Jogo {
     }
 
     private renderizarSombra(lightDir: THREE.Vector3, p: { x: number; y: number; z: number }) {
-        const alvo = new THREE.Vector3(p.x, p.y, p.z);
-        this.renderizador.sombra.atualizarMatriz(lightDir, alvo);
+        this.alvoSombraTmp.set(p.x, p.y, p.z);
+        this.renderizador.sombra.atualizarMatriz(lightDir, this.alvoSombraTmp);
 
         this.world.gramaMesh.visible = false;
         this.efeitos.setVisivel(false);
@@ -297,6 +309,7 @@ export class Jogo {
         const thisTime = performance.now() / 1000;
         let deltaTime = thisTime - this.lastTime;
         this.lastTime = thisTime;
+        this.renderizador.ajustarResolucao(deltaTime);   // resolução dinâmica: usa o tempo real do frame
         deltaTime = Math.min(deltaTime, 0.05);
 
         this.veiculo.update(deltaTime, throttle, steer, handbrake, this.world.alturaSuperficie);
@@ -348,11 +361,16 @@ export class Jogo {
         this.renderizador.sincronizarLuzes();
 
         const l = this.config.luz.parametros;
-        const lightDir = new THREE.Vector3(l.dirX, l.dirY, l.dirZ);
+        const lightDir = this.lightDirTmp.set(l.dirX, l.dirY, l.dirZ);
 
         this.carro.atualizar();
 
-        this.renderizarSombra(lightDir, this.veiculo.getPosicao());
+        const redesenharSombra = this.forcarSombra || this.quadroSombra === 0;
+        this.quadroSombra = (this.quadroSombra + 1) % INTERVALO_SOMBRA;
+        if (redesenharSombra) {
+            this.forcarSombra = false;
+            this.renderizarSombra(lightDir, this.veiculo.getPosicao());
+        }
         this.world.atualizarFlorestaLods(this.renderizador.camera.position, false);
 
         const nG = this.world.grama.selecionar(this.renderizador.camera.position, false, this.world.gramaLote);
