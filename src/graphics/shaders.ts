@@ -2,6 +2,12 @@
 // Normal "flat" por derivadas de tela, Blinn-Phong, sombra PCF 3x3 e neblina.
 // O original não faz correção de gama nem tone mapping: o ShaderMaterial também não faz (valores crus).
 //
+// PRECISÃO LONGE DA ORIGEM: float32 só tem ~7 dígitos. Com o carro a centenas de milhares de unidades da origem, uma
+// posição absoluta do mundo perde 0.03 ou mais de precisão, e o shader tira a normal "flat" das derivadas dessa
+// posição: as faces passam a piscar. Por isso o shader principal trabalha RELATIVO À CÂMERA (vRel): a posição vem
+// de modelViewMatrix (calculada em dupla precisão no JS) e fica sempre pequena. A sombra também é relativa
+// (uLightSpaceCam e, no passe de profundidade, uLightSpaceRel + uOrigemSombra).
+//
 // Sombra:
 //  - PCF bilinear sobre 3x3 texels (16 leituras, contra 25 do 5x5 original): bordas suaves, sem o aspecto de
 //    "blocos" que o PCF com leituras 'nearest' tem quando o mapa é mais grosso;
@@ -12,28 +18,30 @@
 //  - a sombra só é calculada onde a superfície está voltada para a luz (diff > 0).
 
 export const vertexPrincipal = /* glsl */ `
-varying vec3 vFragPos;
+varying vec3 vRel;                 // posição relativa à câmera, nos eixos do MUNDO (valores pequenos)
 varying vec3 vColor;
 varying vec4 vFragPosLightSpace;
-uniform mat4 uLightSpaceMatrix;
+uniform mat4 uLightSpaceCam;       // luz * translação(câmera - origem da sombra)
 
 void main() {
+    // modelViewMatrix já vem da CPU em dupla precisão (câmera e objeto subtraídos antes de virar float32)
+    mat4 mv = modelViewMatrix;
 #ifdef USE_INSTANCING
-    mat4 model = modelMatrix * instanceMatrix;
-#else
-    mat4 model = modelMatrix;
+    mv = mv * instanceMatrix;
 #endif
-    vec4 worldPos = model * vec4(position, 1.0);
-    vFragPos = worldPos.xyz;
+    vec4 mvPos = mv * vec4(position, 1.0);
+
+    // do espaço da vista de volta para os eixos do mundo, SEM somar a posição da câmera: R^T * v
+    vRel = mvPos.xyz * mat3(viewMatrix);
     vColor = color;
 
-    vFragPosLightSpace = uLightSpaceMatrix * worldPos;
-    gl_Position = projectionMatrix * viewMatrix * worldPos;
+    vFragPosLightSpace = uLightSpaceCam * vec4(vRel, 1.0);
+    gl_Position = projectionMatrix * mvPos;
 }
 `;
 
 export const fragmentPrincipal = /* glsl */ `
-varying vec3 vFragPos;
+varying vec3 vRel;
 varying vec3 vColor;
 varying vec4 vFragPosLightSpace;
 uniform vec3  uLightDir;
@@ -98,12 +106,12 @@ float calcularSombra(vec4 posLuz, vec3 normal, vec3 lDir) {
 }
 
 void main() {
-    vec3 dX = dFdx(vFragPos);
-    vec3 dY = dFdy(vFragPos);
+    vec3 dX = dFdx(vRel);
+    vec3 dY = dFdy(vRel);
     vec3 normal = normalize(cross(dX, dY));
 
     vec3 lDir = normalize(uLightDir);
-    vec3 viewDir = normalize(cameraPosition - vFragPos);
+    vec3 viewDir = normalize(-vRel);
 
     vec3 ambient = uAmbient * uAmbientColor * vColor;
 
@@ -119,7 +127,7 @@ void main() {
 
     vec3 result = ambient + (1.0 - shadow) * (diffuse + specular);
 
-    float distCam = length(cameraPosition - vFragPos);
+    float distCam = length(vRel);
     float fogFactor = clamp((distCam - 5000.0) / (15000.0 - 5000.0), 0.0, 1.0);
 
     result = mix(result, uFogColor, clamp(fogFactor * uNeblina, 0.0, 1.0));
@@ -129,14 +137,18 @@ void main() {
 `;
 
 export const vertexProfundidade = /* glsl */ `
-uniform mat4 uLightSpaceMatrix;
+uniform mat4 uLightSpaceRel;      // luz * vista, relativa à origem da sombra
+uniform vec3 uOrigemSombra;       // origem (já em float32) em torno da qual o mapa é desenhado
+
 void main() {
-#ifdef USE_INSTANCING
-    mat4 model = modelMatrix * instanceMatrix;
-#else
+    // subtrai a origem da TRANSLAÇÃO do modelo antes de multiplicar pelo vértice: a diferença de dois números
+    // grandes e já em float32 é exata, e o resultado fica pequeno
     mat4 model = modelMatrix;
+    model[3].xyz -= uOrigemSombra;
+#ifdef USE_INSTANCING
+    model = model * instanceMatrix;
 #endif
-    gl_Position = uLightSpaceMatrix * model * vec4(position, 1.0);
+    gl_Position = uLightSpaceRel * model * vec4(position, 1.0);
 }
 `;
 

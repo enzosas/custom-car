@@ -371,6 +371,8 @@ export class Jogo {
             this.forcarSombra = false;
             this.renderizarSombra(lightDir, this.veiculo.getPosicao());
         }
+        // a sombra é relativa: a matriz usada na tela depende da posição da câmera, então é refeita todo frame
+        this.renderizador.sombra.atualizarParaCamera(this.renderizador.camera.position);
         this.world.atualizarFlorestaLods(this.renderizador.camera.position, false);
 
         const nG = this.world.grama.selecionar(this.renderizador.camera.position, false, this.world.gramaLote);

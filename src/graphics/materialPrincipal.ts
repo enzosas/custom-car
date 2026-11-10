@@ -23,7 +23,10 @@ export function criarUniformsCompartilhados() {
         uShadowMap: { value: null as THREE.Texture | null },
         uShadowTexel: { value: new THREE.Vector2(1 / 4096, 1 / 4096) },
         uShadowOn: { value: 0 },
-        uLightSpaceMatrix: { value: new THREE.Matrix4() },
+        // sombra RELATIVA (ver shaders.ts): longe da origem as matrizes absolutas perdem precisão em float32
+        uLightSpaceCam: { value: new THREE.Matrix4() },   // passe principal: luz * translação(câmera - origem da sombra)
+        uLightSpaceRel: { value: new THREE.Matrix4() },   // passe de profundidade: luz * vista, relativa à origem
+        uOrigemSombra: { value: new THREE.Vector3() },    // origem da sombra (valor em float32)
     };
 }
 
@@ -75,7 +78,7 @@ export function criarMaterialProfundidade(u: UniformsCompartilhados): THREE.Shad
         polygonOffsetFactor: 2,
         polygonOffsetUnits: 4,
         colorWrite: false,
-        uniforms: { uLightSpaceMatrix: u.uLightSpaceMatrix },
+        uniforms: { uLightSpaceRel: u.uLightSpaceRel, uOrigemSombra: u.uOrigemSombra },
     });
 }
 
