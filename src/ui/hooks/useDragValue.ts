@@ -8,6 +8,8 @@ interface Opcoes {
     aoComecar: () => void;
     /** Arrasto horizontal confirmado: deslocamento em px desde o último evento. */
     aoArrastar: (deltaX: number, acelerado: boolean, precisao: boolean) => void;
+    /** O arrasto confirmado terminou (soltou o ponteiro). Não dispara para um simples toque/scroll. */
+    aoSoltar?: () => void;
 }
 
 /**
@@ -21,9 +23,12 @@ export function useDragValue(opcoes: Opcoes) {
     const e = useRef({ ativo: false, confirmado: false, id: -1, x0: 0, y0: 0, xAnterior: 0 });
 
     const terminar = () => {
+        // pointerup e lostpointercapture chegam em sequência: só o primeiro encontra o arrasto ainda ativo
+        const eraArrasto = e.current.ativo && e.current.confirmado;
         e.current.ativo = false;
         e.current.confirmado = false;
         setArrastando(false);
+        if (eraArrasto) op.current.aoSoltar?.();
     };
 
     const onPointerDown = (ev: PointerEvent<HTMLElement>) => {

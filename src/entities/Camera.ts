@@ -90,12 +90,14 @@ export class CameraJogo {
 
         const raio = this.distanciaRaioBase * this.fatorZoom;
         const radPitch = radians(this.anguloCameraPitch);
+        // offset de yaw: só desloca a posição em órbita; o "retorno" da órbita continua usando o yaw sem o offset
+        const yawOrbita = this.anguloCameraYaw + radians(pConf.offsetYaw ?? 0);
         const cosP = Math.cos(radPitch), sinP = Math.sin(radPitch);
 
         const posAlvo: V3 = {
-            x: ancora.x + (-raio * cosP * Math.sin(this.anguloCameraYaw)),
+            x: ancora.x + (-raio * cosP * Math.sin(yawOrbita)),
             y: ancora.y + raio * sinP,
-            z: ancora.z + (-raio * cosP * Math.cos(this.anguloCameraYaw)),
+            z: ancora.z + (-raio * cosP * Math.cos(yawOrbita)),
         };
 
         const fatorPos = lerpFactorDt(this.suavizacaoPos, dt60);
@@ -120,7 +122,21 @@ export class CameraJogo {
     getUpRef(): V3 {
         const dx = this.cameraTarget.x - this.cameraPos.x, dy = this.cameraTarget.y - this.cameraPos.y, dz = this.cameraTarget.z - this.cameraPos.z;
         const l = Math.hypot(dx, dy, dz) || 1;
-        return Math.abs(dy / l) > 0.99 ? { x: 0, y: 0, z: -1 } : { x: 0, y: 1, z: 0 };
+        const up: V3 = Math.abs(dy / l) > 0.99 ? { x: 0, y: 0, z: -1 } : { x: 0, y: 1, z: 0 };
+
+        // offset de roll: gira o "up" em volta da direção do olhar (fórmula de Rodrigues; up é perpendicular a k
+        // quando a câmera não olha na vertical, e quase perpendicular nos demais casos, o que basta para o lookAt)
+        const roll = radians(this.config.camera.parametros.offsetRoll ?? 0);
+        if (roll === 0) return up;
+        const kx = dx / l, ky = dy / l, kz = dz / l;
+        const c = Math.cos(roll), s = Math.sin(roll);
+        const dot = kx * up.x + ky * up.y + kz * up.z;
+        const cx = ky * up.z - kz * up.y, cy = kz * up.x - kx * up.z, cz = kx * up.y - ky * up.x;
+        return {
+            x: up.x * c + cx * s + kx * dot * (1 - c),
+            y: up.y * c + cy * s + ky * dot * (1 - c),
+            z: up.z * c + cz * s + kz * dot * (1 - c),
+        };
     }
 
     getPosition() { return this.cameraPos; }

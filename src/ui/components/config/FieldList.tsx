@@ -33,7 +33,10 @@ export function FieldList({ aba, config, modo, onAlterado }: Props) {
                             />
                         )}
                         {sec.campos.map((c) => (
-                            <DraggableField key={c.nome} def={c} objeto={objeto} modo={modo} onAlterado={aoAlterar} />
+                            <DraggableField
+                                key={c.nome} def={c} objeto={objeto} caminho={sec.caminho} modo={modo}
+                                aplicarAoSoltar={sec.aplicarAoSoltar} onAlterado={aoAlterar}
+                            />
                         ))}
                         {sec.interruptores?.map((i) => (
                             <SwitchRow

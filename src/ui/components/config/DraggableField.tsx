@@ -3,76 +3,81 @@ import { useMemo, useReducer, useRef } from 'react';
 import type { CampoDef } from '../../painelCampos';
 import { useDragValue } from '../../hooks/useDragValue';
 import { arrastar, formatarValor, iniciarSessao, type Alvo, type SessaoArrasto } from '../../lib/propriedade';
+import { valorPadrao } from '../../lib/padroes';
 import type { ModoPainel } from './tipos';
 
 interface Props {
     def: CampoDef;
     objeto: Record<string, number>;
+    /** caminho da seção dentro do GAME_CONFIG; usado para achar o valor padrão do campo (sensibilidade do arrasto) */
+    caminho: string[];
     modo: ModoPainel;
     onAlterado: () => void;
+    /** o GAME_CONFIG só recebe o valor ao soltar o arrasto; enquanto arrasta, só o texto do campo muda */
+    aplicarAoSoltar?: boolean;
 }
 
-export function DraggableField({ def, objeto, modo, onAlterado }: Props) {
-    const alvo = useMemo<Alvo>(
-        () => ({
-            obj: objeto,
-            chave: def.nome,
-            tipo: def.tipo,
-            min: def.min,
-            max: def.max,
-            ciclico: def.ciclico,
-        }),
-        [objeto, def],
-    );
+export function DraggableField({ def, objeto, caminho, modo, onAlterado, aplicarAoSoltar = false }: Props) {
+    const chaveCaminho = caminho.join('.');
 
-    // Congela a sensibilidade na renderização inicial do campo
+    // Rascunho usado nos campos "aplicar ao soltar": o arrasto altera ele, e não o GAME_CONFIG
+    const rascunho = useRef<Record<string, number>>({ [def.nome]: objeto[def.nome] ?? 0 });
+
+    const criarAlvo = (obj: Record<string, number>): Alvo => ({
+        obj, chave: def.nome, tipo: def.tipo, min: def.min, max: def.max, ciclico: def.ciclico,
+    });
+    const alvoReal = useMemo(() => criarAlvo(objeto), [objeto, def]);               // eslint-disable-line react-hooks/exhaustive-deps
+    const alvoRascunho = useMemo(() => criarAlvo(rascunho.current), [def]);         // eslint-disable-line react-hooks/exhaustive-deps
+    const alvoArrasto = aplicarAoSoltar ? alvoRascunho : alvoReal;
+
+    // Congela a sensibilidade pelo valor PADRÃO do campo (e não pelo atual)
     const passoBase = useMemo(() => {
-        // Inferência direta por Limites (cor/porcentagens etc)
-        if (def.min !== undefined && def.max !== undefined) {
-            return (def.max - def.min) / 300; // 300px varre a barra toda
-        }
+        // Com limites (cor, porcentagens etc.): 300px varrem a faixa toda
+        if (def.min !== undefined && def.max !== undefined) return (def.max - def.min) / 300;
 
-        // Inferência logarítmica para campos sem limite (protegido contra undefined com ?? 0)
-        const valorInicial = Math.abs(objeto[def.nome] ?? 0);
-        const ref = valorInicial === 0 ? (def.tipo === 'uint' ? 1 : 0.01) : valorInicial;
-        const ordem = Math.floor(Math.log10(ref));
+        const ref = valorPadrao(caminho, def.nome) ?? objeto[def.nome] ?? 0;
+        // Campos que começam em 0 não têm escala para inferir: passo fixo de 0.1 (inteiro, se for uint)
+        if (ref === 0) return def.tipo === 'uint' ? 1 : 0.1;
 
+        // Sem limite: inferência logarítmica pela ordem de grandeza do valor
+        const ordem = Math.floor(Math.log10(Math.abs(ref)));
         let passo = Math.pow(10, Math.max(ordem - 2, -4));
-        if (def.tipo === 'uint' && def.min === undefined) {
-            passo = Math.max(1, Math.round(passo)); // Garante pulo inteiro
-        }
+        if (def.tipo === 'uint' && def.min === undefined) passo = Math.max(1, Math.round(passo));   // pulo inteiro
         return passo;
-
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [def.min, def.max, def.tipo, def.nome]); // Ignoramos 'objeto' propositalmente para não re-renderizar passo
+    }, [def.min, def.max, def.tipo, def.nome, chaveCaminho]);   // 'objeto' fica de fora de propósito
 
     const sessao = useRef<SessaoArrasto | null>(null);
     const [, redesenhar] = useReducer((n: number) => n + 1, 0);
 
     const { arrastando, handlers } = useDragValue({
-        aoComecar: () => { sessao.current = iniciarSessao(alvo); },
+        aoComecar: () => {
+            if (aplicarAoSoltar) rascunho.current[def.nome] = objeto[def.nome] ?? 0;
+            sessao.current = iniciarSessao(alvoArrasto);
+        },
         aoArrastar: (dx, acelerado, precisao) => {
             if (!sessao.current) return;
-            arrastar(alvo, sessao.current, dx, acelerado, precisao, passoBase);
+            arrastar(alvoArrasto, sessao.current, dx, acelerado, precisao, passoBase);
             redesenhar();
-            onAlterado();
+            if (!aplicarAoSoltar) onAlterado();
+        },
+        aoSoltar: () => {
+            // arrasto confirmado e terminado: só agora o jogo recebe o valor
+            if (aplicarAoSoltar) {
+                objeto[def.nome] = rascunho.current[def.nome];
+                redesenhar();
+                onAlterado();
+            }
+            sessao.current = null;
         },
     });
 
-    // Fundo visual (barra de progresso) para campos delimitados
-    let style = {};
-    if (def.min !== undefined && def.max !== undefined && !def.ciclico) {
-        const range = def.max - def.min;
-        const valAtual = objeto[def.nome] ?? 0;
-        const percentage = Math.max(0, Math.min(100, ((valAtual - def.min) / range) * 100));
-        style = {
-            background: `linear-gradient(to right, rgba(0, 85, 170, 0.15) ${percentage}%, transparent ${percentage}%)`
-        };
-    }
+    // Enquanto arrasta um campo "aplicar ao soltar", mostra o rascunho; fora disso, o valor real do config
+    const alvoVisivel = aplicarAoSoltar && arrastando ? alvoRascunho : alvoReal;
 
     return (
-        <div className={`painel-item ${modo}${arrastando ? ' dragging' : ''}`} style={style} {...handlers}>
-            {`${def.nome}: ${formatarValor(alvo)}`}
+        <div className={`painel-item ${modo}${arrastando ? ' dragging' : ''}`} {...handlers}>
+            {`${def.apresentacao ?? def.nome}: ${formatarValor(alvoVisivel)}`}
         </div>
     );
 }

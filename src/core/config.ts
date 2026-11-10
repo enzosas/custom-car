@@ -5,14 +5,12 @@ const FISICA_BASE = {
     aceleracaoFreio: 0.04,
     velmax: 7.0,
     velmaxre: -2.0,
-    anguloVolanteMax: 0.7,
     velocidadeGiro: 0.03,
     taxaLerpVolante: 0.025,
     aderenciaFreioDeMao: 0.015,
     aderenciaPista: 0.03,
     atritoEscalar: 0.9999,
     atritoLinear: 0.001,
-    arrastoQuadratico: 0.0,
     suspensaoRigidez: 80.0,
     suspensaoAmortecimento: 8.0,
     suspensaoInclinacaoMax: 8.0,
@@ -89,15 +87,12 @@ export const GAME_CONFIG = {
             comprimentoOnda: 1962.9446, // tamanho (unidades) dos morros
             oitavas: 4,              // camadas de detalhe do relevo
             persistencia: 0.5,       // quanto cada camada de detalhe seguinte pesa (0 = suave, 1 = muito rugoso)
-            celulasPorChunk: 32,     // resolução de um chunk (não está no painel)
+            celulasPorChunk: 32,     // resolução de um chunk (4 a 250); mudar recria todos os chunks
             raioChunks: 4,           // chunks carregados em volta do carro; precisa cobrir a neblina (~15000 / tamanho do chunk). Menos = mais leve
         },
         superficie: {
             offsetprofundidadegrama: 0.0,
         },
-        visualizacao: {
-            fatorOpacidade: 1.0,
-        }
     },
     arvore: {
         arvores: {
@@ -167,6 +162,8 @@ export const GAME_CONFIG = {
             offsetX: 0.0,
             offsetY: 0.0,
             offsetZ: 0.0,
+            offsetYaw: 0.0,          // graus: gira a câmera em órbita em volta do carro (positivo = para a direita do carro)
+            offsetRoll: 0.0,         // graus: inclina o horizonte (positivo = câmera inclina para a direita)
         }
     },
     pilotoAutomatico: {

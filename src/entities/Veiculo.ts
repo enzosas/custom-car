@@ -310,10 +310,8 @@ export class Veiculo {
                 if (f.forwardSpeed < maxReverseSpeed) f.forwardSpeed = maxReverseSpeed;
             }
         } else if (!this.pulo.noAr) {
-            const speedAbs = Math.abs(f.forwardSpeed);
-            const dragQuad = fis.arrastoQuadratico * (speedAbs * speedAbs);
             f.forwardSpeed *= Math.pow(clamp(fis.atritoEscalar, 0, 1), dt60);
-            const fatorArrasto = clamp((fis.atritoLinear + dragQuad) * dt60, 0, 1);
+            const fatorArrasto = clamp(fis.atritoLinear * dt60, 0, 1);
             f.forwardSpeed -= f.forwardSpeed * fatorArrasto;
         }
 
