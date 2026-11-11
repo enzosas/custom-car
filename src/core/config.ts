@@ -123,6 +123,12 @@ export const GAME_CONFIG = {
             anguloCurva: 40.0,       // graus: quanto a pista pode se desviar da direção geral (0 = reta; acima de 85 é limitado)
             comprimentoCurva: 1800.0, // distância (unidades) em que cada curva se desenvolve: maior = curvas mais longas e suaves
             larguraTransicao: 400.0, // faixa em volta do platô da pista onde o terreno volta ao relevo natural (maior = pista corta menos os morros)
+            // marcações: duas linhas brancas contínuas nas laterais e uma tracejada no centro (só visual)
+            marcacoes: true,
+            linhaLargura: 1.5,       // largura de cada linha
+            linhaMargem: 4.0,        // distância entre a borda do asfalto e a linha lateral
+            tracoComprimento: 50.0,  // comprimento de cada traço da linha central
+            tracoVao: 75.0,          // espaço entre os traços (0 = linha central contínua)
         }
     },
     luz: {

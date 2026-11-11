@@ -55,6 +55,24 @@ export function criarMaterialPrincipal(u: UniformsCompartilhados): THREE.ShaderM
     });
 }
 
+/**
+ * Marcações da pista: mesmo shader do asfalto, mas puxadas na direção da câmera na profundidade (polygonOffset).
+ * Só a folga geométrica não basta: com o plano próximo em 0.3 e o distante em 15000, o buffer de profundidade perde
+ * resolução com a distância (a ~1000 unidades ele distingue só ~0.2) e as linhas piscariam contra o asfalto.
+ */
+export function criarMaterialMarcacao(u: UniformsCompartilhados): THREE.ShaderMaterial {
+    return new THREE.ShaderMaterial({
+        vertexShader: vertexPrincipal,
+        fragmentShader: fragmentPrincipal,
+        vertexColors: true,
+        side: THREE.DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -4,
+        uniforms: { ...u, uAlpha: { value: 1.0 } },
+    });
+}
+
 /** Rastro: mesmo shader, blending alfa, uAlpha = 0.40, sem escrita de profundidade */
 export function criarMaterialRastro(u: UniformsCompartilhados): THREE.ShaderMaterial {
     return new THREE.ShaderMaterial({

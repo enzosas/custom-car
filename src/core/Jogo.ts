@@ -17,6 +17,7 @@ import { gerarGeometriaTufo } from '@/world/Grama';
 import {
     criarUniformsCompartilhados,
     criarMaterialPrincipal,
+    criarMaterialMarcacao,
     atualizarLuz,
 } from '@/graphics/materialPrincipal';
 
@@ -53,6 +54,7 @@ export class Jogo {
     private cam = new CameraJogo();
 
     private matOpaco = criarMaterialPrincipal(this.uniforms);
+    private matMarcacao = criarMaterialMarcacao(this.uniforms);
 
     private carro!: CarroVisual;
     private efeitos!: EfeitosDrift;
@@ -89,7 +91,7 @@ export class Jogo {
         this.opcoes = opcoes;
         this.controle = new ControleJogador(opcoes.controlesToque ?? criarControlesToque());
         this.renderizador = new Renderer(canvas, this.uniforms);
-        this.world = new WorldBuilder(this.matOpaco, this.config);
+        this.world = new WorldBuilder(this.matOpaco, this.matMarcacao, this.config);
         Entrada.iniciar(canvas);
     }
 
@@ -219,7 +221,15 @@ export class Jogo {
         const arvoreMudou = mudou(c.arvore.arvores, a.arvore.arvores);
         const gramaMudou = mudou(c.grama.grama, a.grama.grama);
         const opcoesMudou = mudou(c.opcoes, a.opcoes);
-        const terrenoMudou = mudou(c.terreno.parametros, a.terreno.parametros) || mudou(c.estrada.estrada, a.estrada.estrada);
+        // a geometria da pista reconstrói o terreno; as marcações (só visual) só refazem as faixas
+        const geoPista = (e: typeof c.estrada.estrada) => ({
+            largura: e.largura, anguloCurva: e.anguloCurva, comprimentoCurva: e.comprimentoCurva, larguraTransicao: e.larguraTransicao,
+        });
+        const marcasPista = (e: typeof c.estrada.estrada) => ({
+            marcacoes: e.marcacoes, linhaLargura: e.linhaLargura, linhaMargem: e.linhaMargem, tracoComprimento: e.tracoComprimento, tracoVao: e.tracoVao,
+        });
+        const terrenoMudou = mudou(c.terreno.parametros, a.terreno.parametros) || mudou(geoPista(c.estrada.estrada), geoPista(a.estrada.estrada));
+        if (!terrenoMudou && mudou(marcasPista(c.estrada.estrada), marcasPista(a.estrada.estrada))) this.world.regerarMarcacoes();
 
         if (carroMudou) {
             this.veiculo.reconstruirGeometria();
@@ -300,6 +310,7 @@ export class Jogo {
         if (Entrada.teclaUmaVez('KeyQ')) {
             this.wireframe = !this.wireframe;
             this.matOpaco.wireframe = this.wireframe;
+            this.matMarcacao.wireframe = this.wireframe;
             this.efeitos.setWireframe(this.wireframe);
             this.carro.setWireframe(this.wireframe);
         }
@@ -422,6 +433,7 @@ export class Jogo {
 
         this.carro?.dispose();
         this.matOpaco.dispose();
+        this.matMarcacao.dispose();
         this.efeitos?.dispose();
         this.renderizador.dispose();
     }

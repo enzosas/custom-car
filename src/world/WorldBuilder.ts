@@ -14,8 +14,15 @@ const CHUNKS_POR_FRAME = 3;
 /** ...e também limitados por tempo: um chunk com a pista dentro custa ~10-20 ms, então para de montar quando passa disso (sempre faz ao menos 1) */
 const ORCAMENTO_MS = 6;
 
-/** `pooled`: o mesh vem do pool (malha comum de grade); senão é uma malha própria do chunk, com a pista dentro */
-interface ChunkAtivo { mesh: THREE.Mesh; pooled: boolean; cx: number; cz: number }
+/** marcações da pista só nos chunks bem perto do carro (distância² em chunks): longe elas têm menos de 1 pixel e só cintilam */
+const MARCACAO_D2_CRIA = 2;
+const MARCACAO_D2_REMOVE = 5;
+
+/**
+ * `pooled`: o mesh vem do pool (malha comum de grade); senão é uma malha própria do chunk, com a pista dentro.
+ * `marcas`: as faixas da pista (só em chunks com pista e perto do carro).
+ */
+interface ChunkAtivo { mesh: THREE.Mesh; pooled: boolean; cx: number; cz: number; marcas: THREE.Mesh | null }
 
 export class WorldBuilder {
     public terreno = new Terreno();
@@ -50,9 +57,10 @@ export class WorldBuilder {
     private ultCx = NaN;
     private ultCz = NaN;
     private faltaConstruir = true;
+    private marcasPendentes = false;          // há chunks perto do carro ainda sem faixas (criadas aos poucos)
 
     /** `matOpaco` é compartilhado com o Jogo (quem o cria também o descarta). */
-    constructor(private matOpaco: THREE.ShaderMaterial, private config = GAME_CONFIG) {
+    constructor(private matOpaco: THREE.ShaderMaterial, private matMarcacao: THREE.ShaderMaterial, private config = GAME_CONFIG) {
         this.terreno.estrada = this.estrada;   // o terreno é derivado da pista
     }
 
@@ -108,8 +116,50 @@ export class WorldBuilder {
         this.faltaConstruir = true;
     }
 
+    private removerMarcas(ch: ChunkAtivo) {
+        if (!ch.marcas) return;
+        this.terrenoGrupo.remove(ch.marcas);
+        ch.marcas.geometry.dispose();
+        ch.marcas = null;
+    }
+
+    /**
+     * Cria as marcações dos chunks com pista que estão perto do carro e remove as dos que ficaram longe
+     * (com histerese). `ccx`/`ccz` são o chunk do carro; cria no máximo `limite` por chamada (o resto fica pendente).
+     */
+    private atualizarMarcas(ccx: number, ccz: number, limite: number) {
+        const tam = this.terreno.tamanhoChunk;
+        const ligado = !!this.config.estrada.estrada.marcacoes;
+        let criadas = 0;
+        this.marcasPendentes = false;
+        for (const ch of this.chunks.values()) {
+            if (ch.pooled) continue;                                   // sem pista
+            const dx = ch.cx - ccx, dz = ch.cz - ccz, d2 = dx * dx + dz * dz;
+            if (!ch.marcas && ligado && d2 <= MARCACAO_D2_CRIA) {
+                if (criadas >= limite) { this.marcasPendentes = true; continue; }
+                const malha = this.estrada.gerarMarcacoesChunk(ch.cx, ch.cz, tam);
+                if (!malha) continue;
+                const mesh = new THREE.Mesh(geometriaDe(malha), this.matMarcacao);
+                mesh.frustumCulled = false;
+                mesh.position.set(ch.cx * tam, 0, ch.cz * tam);
+                this.terrenoGrupo.add(mesh);
+                ch.marcas = mesh;
+                criadas++;
+            } else if (ch.marcas && (!ligado || d2 > MARCACAO_D2_REMOVE)) {
+                this.removerMarcas(ch);
+            }
+        }
+    }
+
+    /** descarta as marcações atuais e deixa o próximo atualizarChunks refazê-las (mudança de config das linhas) */
+    regerarMarcacoes() {
+        for (const ch of this.chunks.values()) this.removerMarcas(ch);
+        this.ultCx = NaN; this.ultCz = NaN;
+    }
+
     /** malha comum: volta ao pool; malha própria (chunk com pista): sai da cena e a geometria é descartada */
     private soltarChunk(ch: ChunkAtivo) {
+        this.removerMarcas(ch);
         if (ch.pooled) {
             ch.mesh.visible = false;
             this.livres.push(ch.mesh);
@@ -170,7 +220,7 @@ export class WorldBuilder {
         mesh.visible = true;
 
         const chave = `${cx},${cz}`;
-        this.chunks.set(chave, { mesh, pooled: !malha, cx, cz });
+        this.chunks.set(chave, { mesh, pooled: !malha, cx, cz, marcas: null });
 
         // a vegetação nasce junto com o chunk (sorteio determinístico por chunk)
         this.floresta.adicionarChunk(chave, cx, cz, tam, this.terreno, this.estrada);
@@ -194,7 +244,7 @@ export class WorldBuilder {
         if (tam !== this.gradeTamanho) { this.liberarTodos(); this.gradeTamanho = tam; }
 
         const ccx = Math.floor(x / tam), ccz = Math.floor(z / tam);
-        if (ccx === this.ultCx && ccz === this.ultCz && !this.faltaConstruir) return 0;
+        if (ccx === this.ultCx && ccz === this.ultCz && !this.faltaConstruir && !this.marcasPendentes) return 0;
         this.ultCx = ccx; this.ultCz = ccz;
 
         const R = this.terreno.raioChunks;
@@ -234,6 +284,7 @@ export class WorldBuilder {
             feitos++;
         }
         this.faltaConstruir = faltando.length > feitos;
+        this.atualizarMarcas(ccx, ccz, Number.isFinite(orcamento) ? 1 : Infinity);   // 1 chunk de faixas por vez, para não somar ao custo do terreno
         this.garantirCapacidades();
         return feitos;
     }
@@ -251,13 +302,14 @@ export class WorldBuilder {
      */
     modoSombra(ligado: boolean, x: number, z: number) {
         if (!ligado) {
-            for (const ch of this.chunks.values()) ch.mesh.visible = true;
+            for (const ch of this.chunks.values()) { ch.mesh.visible = true; if (ch.marcas) ch.marcas.visible = true; }
             return;
         }
         const tam = this.terreno.tamanhoChunk;
         const ccx = Math.floor(x / tam), ccz = Math.floor(z / tam);
         for (const ch of this.chunks.values()) {
             ch.mesh.visible = Math.abs(ch.cx - ccx) <= 1 && Math.abs(ch.cz - ccz) <= 1;
+            if (ch.marcas) ch.marcas.visible = false;      // as faixas não projetam sombra
         }
     }
 

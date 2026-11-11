@@ -204,7 +204,12 @@ export const ABAS: AbaDef[] = [
           { nome: 'anguloCurva', apresentacao: 'angulo da curva (graus)', tipo: 'float', min: 0, max: 85 },
           { nome: 'comprimentoCurva', apresentacao: 'comprimento da curva', tipo: 'float' },
           { nome: 'larguraTransicao', apresentacao: 'largura da transicao', tipo: 'float' },
-        ]
+          { nome: 'linhaLargura', apresentacao: 'largura da linha', tipo: 'float' },
+          { nome: 'linhaMargem', apresentacao: 'margem da linha lateral', tipo: 'float' },
+          { nome: 'tracoComprimento', apresentacao: 'comprimento do traco', tipo: 'float' },
+          { nome: 'tracoVao', apresentacao: 'vao entre tracos', tipo: 'float' },
+        ],
+        interruptores: [{ nome: 'marcacoes', rotulo: 'marcacoes da pista' }],
       },
     ]
   },

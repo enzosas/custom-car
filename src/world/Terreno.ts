@@ -42,7 +42,7 @@ export class Terreno {
     /** a pista que molda o terreno (definida pelo WorldBuilder); sem ela o terreno é só o relevo */
     estrada: Estrada | null = null;
 
-    constructor(private config = GAME_CONFIG) {}
+    constructor(private config = GAME_CONFIG) { }
 
     definirSeed(seed: number) { this.perlin = new PerlinNoise2D((seed >>> 0) || 1); }
 
@@ -126,6 +126,32 @@ export class Terreno {
         if (fx + fz < 1) return h00 + fx * (h10 - h00) + fz * (h01 - h00);
         const h11 = h(i + 1, j + 1);
         return h11 + (1 - fx) * (h01 - h11) + (1 - fz) * (h10 - h11);
+    }
+
+    /**
+     * Amostrador de altura com a MESMA superfície de obterAlturaMundo, mas que guarda a altura de cada vértice da grade
+     * (o cache vive só enquanto o amostrador existe). Serve para quem lê muitos pontos vizinhos, como as marcações da
+     * pista: cada vértice é calculado uma vez, em vez de três por amostra (e cada cálculo consulta a pista).
+     */
+    criarAmostradorAltura(): (xMundo: number, zMundo: number) => number {
+        const q = this.lerParametros();
+        const esp = this.espacamento;
+        const cache = new Map<number, number>();
+        const h = (a: number, b: number) => {
+            const k = (a + 4194304) * 8388608 + (b + 4194304);      // índices globais da grade, deslocados para ficarem positivos
+            let v = cache.get(k);
+            if (v === undefined) { v = this.alturaVertice(a * esp, b * esp, q); cache.set(k, v); }
+            return v;
+        };
+        return (xMundo, zMundo) => {
+            const gx = xMundo / esp, gz = zMundo / esp;
+            const i = Math.floor(gx), j = Math.floor(gz);
+            const fx = gx - i, fz = gz - j;
+            const h00 = h(i, j), h10 = h(i + 1, j), h01 = h(i, j + 1);
+            if (fx + fz < 1) return h00 + fx * (h10 - h00) + fz * (h01 - h00);
+            const h11 = h(i + 1, j + 1);
+            return h11 + (1 - fx) * (h01 - h11) + (1 - fz) * (h10 - h11);
+        };
     }
 
     /**

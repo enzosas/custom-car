@@ -28,6 +28,11 @@ const MAX_ANGULO = 85;
 const MAX_PONTOS = 600000;
 /** cor do asfalto (a da grama vem do WorldBuilder) */
 const COR_ASFALTO = [0.25, 0.25, 0.28];
+/** cor das marcações (linhas brancas) e a folga delas acima do asfalto */
+const COR_MARCACAO = [0.95, 0.95, 0.95];
+const ELEVACAO_MARCACAO = 0.12;
+/** distância máxima entre as seções de uma fita: para ela acompanhar as quebras entre os triângulos do terreno */
+const PASSO_FITA = 10;
 /** distância aproximada entre os pontos que seguem a curva da borda do asfalto dentro de um triângulo */
 const ESPACO_BORDA = 25;
 /** quanto além da menor distância um trecho da pista ainda pesa na cota do terreno (ver consultarCota) */
@@ -315,6 +320,107 @@ export class Estrada {
         const pontos: Vec3[] = [];
         for (let i = a; i <= b; ++i) { const p = this.pt(i); pontos.push({ x: p.x, y: p.y, z: p.z }); }
         return { inicio: a, pontos };
+    }
+
+    /**
+     * Marcações da pista do chunk (cx, cz): duas linhas brancas contínuas nas laterais e uma tracejada no centro, como
+     * fitas finas deitadas sobre o asfalto. É uma malha SEPARADA da do terreno (as do asfalto são triângulos grandes
+     * com cor chapada por vértice, que não desenham uma linha de ~1 unidade).
+     *
+     * - A posição vem da linha central: cada ponto tem um vetor lateral (com correção de quina, para a linha ficar à
+     *   mesma distância dos dois segmentos vizinhos). Os pontos ficam a PASSO unidades um do outro, então o comprimento
+     *   de arco global é `índice * PASSO`; o tracejado é função dele e por isso é contínuo entre chunks.
+     * - Cada trecho pertence ao chunk que contém o seu meio, e as seções das pontas são calculadas dos mesmos pontos
+     *   nos dois chunks: não sobra fresta nem sobreposição.
+     * - A altura vem da MESMA superfície da malha do terreno e da física (Terreno.criarAmostradorAltura), com as seções
+     *   a cada ~PASSO_FITA unidades para acompanhar as quebras entre os triângulos, mais uma folga pequena.
+     * - Vértices locais ao chunk (como os do terreno), para manter os floats pequenos longe da origem.
+     * Devolve null se desligadas, ou se a pista não passa pelo chunk.
+     */
+    gerarMarcacoesChunk(cx: number, cz: number, tam: number): Malha | null {
+        const c = this.config.estrada.estrada;
+        if (!c.marcacoes || this.pf.b - this.pf.a < 3) return null;
+
+        const larg = Math.max(0.05, c.linhaLargura);
+        const dBorda = this.hw - Math.max(0, c.linhaMargem) - larg / 2;      // distância do centro da linha lateral ao eixo
+        const traco = Math.max(0, c.tracoComprimento), periodo = traco + Math.max(0, c.tracoVao);
+        const x0 = cx * tam, z0 = cz * tam;
+
+        // pontos que cobrem o chunk (z cresce com o índice); as fitas ficam a até `hw` do eixo, então a folga em z
+        const ia = Math.max(this.pf.a + 1, this.indiceDeZ(z0 - this.hw - 2 * PASSO));
+        const ib = Math.min(this.pf.b - 1, this.indiceDeZ(z0 + tam + this.hw + 2 * PASSO) + 1);
+        if (ib - ia < 1) return null;
+
+        // por ponto: posição e vetor lateral (por unidade de distância ao eixo, com correção de quina)
+        const n = ib - ia + 1;
+        const PX = new Float64Array(n), PZ = new Float64Array(n), MX = new Float64Array(n), MZ = new Float64Array(n);
+        for (let k = 0; k < n; ++k) {
+            const p = this.pt(ia + k), a = this.pt(ia + k - 1), b = this.pt(ia + k + 1);
+            const d1x = p.x - a.x, d1z = p.z - a.z, l1 = Math.hypot(d1x, d1z) || 1;
+            const d2x = b.x - p.x, d2z = b.z - p.z, l2 = Math.hypot(d2x, d2z) || 1;
+            const n1x = d1z / l1, n1z = -d1x / l1, n2x = d2z / l2, n2z = -d2x / l2;
+            let nx = n1x + n2x, nz = n1z + n2z;
+            const ln = Math.hypot(nx, nz) || 1;
+            nx /= ln; nz /= ln;
+            const cos = Math.max(0.5, nx * n1x + nz * n1z);
+            PX[k] = p.x; PZ[k] = p.z; MX[k] = nx / cos; MZ[k] = nz / cos;
+        }
+
+        // ponto da fita em s (comprimento de arco) a distância lateral d do eixo
+        let rx = 0, rz = 0;
+        const ponto = (s: number, d: number) => {
+            const kf = s / PASSO;
+            let k = Math.floor(kf);
+            if (k < ia) k = ia; else if (k > ib - 1) k = ib - 1;
+            const u = kf - k, j = k - ia;
+            rx = PX[j] + (PX[j + 1] - PX[j]) * u + d * (MX[j] + (MX[j + 1] - MX[j]) * u);
+            rz = PZ[j] + (PZ[j + 1] - PZ[j]) * u + d * (MZ[j] + (MZ[j + 1] - MZ[j]) * u);
+        };
+        const noChunk = (s: number, d: number) => {
+            ponto(s, d);
+            return Math.floor(rx / tam) === cx && Math.floor(rz / tam) === cz;
+        };
+
+        const altura = this.terreno.criarAmostradorAltura();
+        const P: number[] = [], C: number[] = [], I: number[] = [];
+        // fita de s0 a s1, centrada na distância lateral d, com largura w: pares de vértices (lado a, lado b) por seção
+        const fita = (s0: number, s1: number, d: number, w: number) => {
+            const ns = Math.max(1, Math.ceil((s1 - s0) / PASSO_FITA));
+            const base = P.length / 3;
+            for (let q = 0; q <= ns; ++q) {
+                const s = s0 + (s1 - s0) * q / ns;
+                for (const lado of [-0.5, 0.5]) {
+                    ponto(s, d + lado * w);
+                    P.push(rx - x0, altura(rx, rz) + ELEVACAO_MARCACAO, rz - z0);
+                    C.push(COR_MARCACAO[0], COR_MARCACAO[1], COR_MARCACAO[2]);
+                }
+            }
+            for (let q = 0; q < ns; ++q) {
+                const a0 = base + 2 * q, b0 = a0 + 1, a1 = a0 + 2, b1 = a0 + 3;
+                I.push(a0, b0, a1, b0, b1, a1);
+            }
+        };
+
+        // linhas laterais, contínuas: um trecho por segmento da linha central
+        if (dBorda > larg) {
+            for (let k = ia; k < ib; ++k) {
+                const sMeio = (k + 0.5) * PASSO;
+                for (const d of [dBorda, -dBorda]) {
+                    if (noChunk(sMeio, d)) fita(k * PASSO, (k + 1) * PASSO, d, larg);
+                }
+            }
+        }
+        // linha central tracejada: o padrão depende só do comprimento de arco global
+        if (traco > 0.01 && periodo > 0.5) {
+            const sMin = ia * PASSO, sMax = ib * PASSO;
+            for (let m = Math.ceil(sMin / periodo); m * periodo + traco <= sMax; ++m) {
+                const s0 = m * periodo;
+                if (noChunk(s0 + traco / 2, 0)) fita(s0, s0 + traco, 0, larg);
+            }
+        }
+
+        if (I.length === 0) return null;
+        return { positions: Float32Array.from(P), colors: Float32Array.from(C), indices: Uint32Array.from(I) };
     }
 
     /**
