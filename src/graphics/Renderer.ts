@@ -1,7 +1,6 @@
 import * as THREE from 'three';
-import { GAME_CONFIG } from '@/core/config';
 import { ShadowMap } from './ShadowMap';
-import { corSol, corCeu, corAmbiente } from './cor';
+import type { Atmosfera } from './Atmosfera';
 import type { UniformsCompartilhados } from './materialPrincipal';
 
 const NEAR_PLANE = 0.3;
@@ -82,24 +81,22 @@ export class Renderer {
     private configurarLuzes() {
         this.scene.add(this.luzAmbiente);
         this.scene.add(this.luzSol);   // o alvo padrão é a origem: a direção é a posição normalizada
-        this.sincronizarLuzes();
+        // as cores e a direção vêm da atmosfera do frame: o Jogo chama sincronizarLuzes(atmosfera) todo frame
     }
 
     /** copia a config de luz do jogo (direção, cor, intensidades) para as luzes do three; chamar a cada frame */
-    public sincronizarLuzes() {
-        const l = GAME_CONFIG.luz.parametros;
-
+    public sincronizarLuzes(a: Atmosfera) {
         // Luz ambiente dos materiais nativos (.glb): cor própria, independente do céu
-        this.luzAmbiente.color.setRGB(...corAmbiente(l));
-        this.luzAmbiente.intensity = l.intensidadeAmbiente * ESCALA_LUZ_THREE;
+        this.luzAmbiente.color.setRGB(a.corAmbiente[0], a.corAmbiente[1], a.corAmbiente[2]);
+        this.luzAmbiente.intensity = a.intAmbiente * ESCALA_LUZ_THREE;
 
-        // A luz do Sol continua independente
-        this.luzSol.color.setRGB(...corSol(l));
-        this.luzSol.intensity = l.intensidadeDifusa * ESCALA_LUZ_THREE;
-        this.luzSol.position.set(l.dirX, l.dirY, l.dirZ).normalize().multiplyScalar(500);
+        // A luz do mundo (sol de dia, luar à noite) continua independente
+        this.luzSol.color.setRGB(a.corLuz[0], a.corLuz[1], a.corLuz[2]);
+        this.luzSol.intensity = a.intDifusa * ESCALA_LUZ_THREE;
+        this.luzSol.position.set(a.dirLuz[0], a.dirLuz[1], a.dirLuz[2]).multiplyScalar(500);
 
-        // O céu agora só define o fundo da tela: não entra em nenhuma conta de iluminação
-        this.renderer.setClearColor(this.corCeuTmp.setRGB(...corCeu(l), THREE.SRGBColorSpace), 1);
+        // O fundo da tela é a cor do horizonte (o domo do céu cobre quase tudo, mas isto evita falhas)
+        this.renderer.setClearColor(this.corCeuTmp.setRGB(a.corHorizonte[0], a.corHorizonte[1], a.corHorizonte[2], THREE.SRGBColorSpace), 1);
     }
 
     private redimensionar = () => {

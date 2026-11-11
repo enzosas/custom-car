@@ -12,6 +12,8 @@ import { lerpFactorDt } from '@/graphics/Mat4';
 import { sementeAleatoria } from './Random';
 import { geometriaDe } from '@/graphics/Malha';
 import { Renderer } from '@/graphics/Renderer';
+import { Ceu } from '@/graphics/Ceu';
+import { calcularAtmosfera, criarAtmosfera } from '@/graphics/Atmosfera';
 import { WorldBuilder } from '@/world/WorldBuilder';
 import { gerarGeometriaTufo } from '@/world/Grama';
 import {
@@ -68,6 +70,8 @@ export class Jogo {
     private quadroSombra = 0;
     private forcarSombra = true;
     private readonly lightDirTmp = new THREE.Vector3();
+    private readonly atm = criarAtmosfera();       // sol e cores do frame (ver Atmosfera.ts)
+    private ceu!: Ceu;
     private readonly alvoSombraTmp = new THREE.Vector3();
     private lastTime = 0;
     private rafId = 0;
@@ -92,6 +96,7 @@ export class Jogo {
         this.controle = new ControleJogador(opcoes.controlesToque ?? criarControlesToque());
         this.renderizador = new Renderer(canvas, this.uniforms);
         this.world = new WorldBuilder(this.matOpaco, this.matMarcacao, this.config);
+        this.ceu = new Ceu(this.renderizador.scene, this.uniforms, this.matOpaco);
         Entrada.iniciar(canvas);
     }
 
@@ -277,6 +282,7 @@ export class Jogo {
         this.renderizador.sombra.atualizarMatriz(lightDir, this.alvoSombraTmp);
 
         this.world.gramaMesh.visible = false;
+        this.ceu.setVisivel(false);
         this.efeitos.setVisivel(false);
         this.world.atualizarFlorestaLods(p, true);
         this.world.modoSombra(true, p.x, p.z);
@@ -293,6 +299,7 @@ export class Jogo {
         this.world.modoSombra(false, p.x, p.z);
         this.uniforms.uShadowOn.value = 1;
         this.world.gramaMesh.visible = true;
+        this.ceu.setVisivel(true);
         this.efeitos.setVisivel(true);
     }
 
@@ -371,11 +378,14 @@ export class Jogo {
         }
 
         this.renderizador.camera.updateProjectionMatrix();
-        atualizarLuz(this.uniforms);
-        this.renderizador.sincronizarLuzes();
-
-        const l = this.config.luz.parametros;
-        const lightDir = this.lightDirTmp.set(l.dirX, l.dirY, l.dirZ);
+        // hora do dia -> posição do sol e cores do frame (luz, neblina, céu) -> uniforms, luzes do three e céu
+        const cc = this.config.ceu.parametros;
+        if (cc.cicloAtivo && cc.usarHora) cc.hora = (cc.hora + deltaTime / Math.max(1, cc.duracaoDia) * 24) % 24;
+        calcularAtmosfera(this.config.luz.parametros, cc, this.atm);
+        atualizarLuz(this.uniforms, this.atm);
+        this.renderizador.sincronizarLuzes(this.atm);
+        this.ceu.atualizar(deltaTime, this.renderizador.camera.position, this.atm, cc);
+        const lightDir = this.lightDirTmp.set(this.atm.dirLuz[0], this.atm.dirLuz[1], this.atm.dirLuz[2]);
 
         this.carro.atualizar();
 
@@ -435,6 +445,7 @@ export class Jogo {
         this.carro?.dispose();
         this.matOpaco.dispose();
         this.matMarcacao.dispose();
+        this.ceu?.dispose();
         this.efeitos?.dispose();
         this.renderizador.dispose();
     }

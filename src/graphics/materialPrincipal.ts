@@ -4,8 +4,9 @@ import { GAME_CONFIG } from '@/core/config';
 import { corSol, corCeu, corAmbiente } from './cor';
 import {
     vertexPrincipal, fragmentPrincipal, vertexProfundidade, fragmentProfundidade,
-    vertexParticula, fragmentParticula,
+    vertexParticula, fragmentParticula, vertexCeu, fragmentCeu,
 } from './shaders';
+import type { Atmosfera } from './Atmosfera';
 
 /** Uniforms compartilhados por todos os materiais que usam o shader principal */
 export function criarUniformsCompartilhados() {
@@ -16,6 +17,10 @@ export function criarUniformsCompartilhados() {
         uAmbientColor: { value: new THREE.Vector3(...corAmbiente(l)) },
         uFogColor: { value: new THREE.Vector3(...corCeu(l)) },
         uNeblina: { value: l.neblina },
+        // brilho da neblina e do céu em volta do sol (ver glslHorizonte em shaders.ts)
+        uSunDir: { value: new THREE.Vector3(l.dirX, l.dirY, l.dirZ).normalize() },
+        uSunGlow: { value: new THREE.Vector3(1, 1, 1) },
+        uSunGlowAmt: { value: 0 },
         uAmbient: { value: l.intensidadeAmbiente },
         uDiffuse: { value: l.intensidadeDifusa },
         uSpecular: { value: l.intensidadeEspecular },
@@ -32,17 +37,39 @@ export function criarUniformsCompartilhados() {
 
 export type UniformsCompartilhados = ReturnType<typeof criarUniformsCompartilhados>;
 
-export function atualizarLuz(u: UniformsCompartilhados) {
-    const l = GAME_CONFIG.luz.parametros;
-    u.uLightDir.value.set(l.dirX, l.dirY, l.dirZ);
-    u.uLightColor.value.set(...corSol(l));
-    u.uAmbientColor.value.set(...corAmbiente(l));
-    u.uFogColor.value.set(...corCeu(l)); // neblina sempre na cor do céu
-    u.uNeblina.value = l.neblina;
-    u.uAmbient.value = l.intensidadeAmbiente;
-    u.uDiffuse.value = l.intensidadeDifusa;
-    u.uSpecular.value = l.intensidadeEspecular;
-    u.uShininess.value = l.shininess;
+/** passa a atmosfera do frame (sol, cores, neblina) para os uniforms compartilhados */
+export function atualizarLuz(u: UniformsCompartilhados, a: Atmosfera) {
+    u.uLightDir.value.set(a.dirLuz[0], a.dirLuz[1], a.dirLuz[2]);
+    u.uLightColor.value.set(a.corLuz[0], a.corLuz[1], a.corLuz[2]);
+    u.uAmbientColor.value.set(a.corAmbiente[0], a.corAmbiente[1], a.corAmbiente[2]);
+    u.uFogColor.value.set(a.corHorizonte[0], a.corHorizonte[1], a.corHorizonte[2]); // neblina sempre na cor do horizonte do céu
+    u.uNeblina.value = a.neblina;
+    u.uAmbient.value = a.intAmbiente;
+    u.uDiffuse.value = a.intDifusa;
+    u.uSpecular.value = a.intEspecular;
+    u.uShininess.value = a.shininess;
+    u.uSunDir.value.set(a.dirSol[0], a.dirSol[1], a.dirSol[2]);
+    u.uSunGlow.value.set(a.corBrilhoSol[0], a.corBrilhoSol[1], a.corBrilhoSol[2]);
+    u.uSunGlowAmt.value = a.brilhoNeblina;
+}
+
+/** Domo do céu: gradiente, estrelas e sol. Fica no fundo (profundidade máxima), sem escrever profundidade. */
+export function criarMaterialCeu(u: UniformsCompartilhados): THREE.ShaderMaterial {
+    return new THREE.ShaderMaterial({
+        vertexShader: vertexCeu,
+        fragmentShader: fragmentCeu,
+        side: THREE.BackSide,
+        depthWrite: false,
+        depthFunc: THREE.LessEqualDepth,   // o domo está exatamente na profundidade do fundo
+        uniforms: {
+            uFogColor: u.uFogColor, uSunDir: u.uSunDir, uSunGlow: u.uSunGlow, uSunGlowAmt: u.uSunGlowAmt,
+            uZenith: { value: new THREE.Vector3(0.3, 0.5, 0.9) },
+            uSunColor: { value: new THREE.Vector3(1, 1, 1) },
+            uSunSize: { value: 0.035 },
+            uSunBright: { value: 1.0 },
+            uNight: { value: 0 },
+        },
+    });
 }
 
 export function criarMaterialPrincipal(u: UniformsCompartilhados): THREE.ShaderMaterial {

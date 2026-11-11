@@ -166,6 +166,33 @@ export const GAME_CONFIG = {
             shininess: 20.0,
         }
     },
+
+    // Céu, hora do dia e nuvens. A luz de cima (luz.parametros) é o visual de DIA: ao baixar o sol as cores
+    // escorregam para o pôr do sol e para a noite sem mexer nela.
+    ceu: {
+        parametros: {
+            usarHora: true,          // true: o sol segue a hora do dia; false: usa a direção dirX/dirY/dirZ da luz
+            hora: 13.0,              // 0 a 24 (6 = nascer do sol, 12 = meio-dia, 18 = pôr do sol)
+            cicloAtivo: false,       // o tempo passa sozinho (só com usarHora ligado)
+            duracaoDia: 480.0,       // segundos reais que um dia inteiro leva
+            azimute: 283.0,          // graus: direção horizontal do nascente (0 = +x, 90 = +z); o pôr do sol fica no lado oposto
+            inclinacaoSol: 25.0,     // graus: quanto a trajetória do sol se inclina (o sol a pino fica a 90 - isto de altura)
+            // cor do céu no alto (o horizonte usa a cor do céu de luz.parametros, que também é a da neblina)
+            zeniteH: 215.0,
+            zeniteS: 0.55,
+            zeniteV: 0.85,
+            solTamanho: 0.035,       // raio do disco do sol (radianos)
+            solBrilho: 1.0,          // intensidade do halo em volta do sol
+            estrelas: true,
+            nuvens: true,
+            nuvensQuantidade: 60.0,  // até 400
+            nuvensAltura: 2100.0,    // altitude das nuvens (as montanhas chegam a ~1200)
+            nuvensRaio: 14000.0,     // até onde as nuvens aparecem em volta da câmera
+            nuvensEscala: 1.0,
+            nuvensVelocidade: 12.0,  // unidades por segundo
+            nuvensDirecao: 30.0,     // graus (0 = +x, 90 = +z)
+        }
+    },
     camera: {
         parametros: {
             distanciaRaioBase: 80.0,

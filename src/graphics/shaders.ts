@@ -17,6 +17,21 @@
 //    pixels fora do alcance não leem a textura;
 //  - a sombra só é calculada onde a superfície está voltada para a luz (diff > 0).
 
+// Cor do horizonte na direção `d` (unitária, eixos do mundo): a cor da neblina/céu, mais clara em volta do sol.
+// O domo do céu e a neblina do terreno usam a MESMA função, então o terreno distante some exatamente no céu.
+const glslHorizonte = /* glsl */ `
+uniform vec3 uFogColor;        // cor do céu no horizonte
+uniform vec3 uSunDir;          // direção real do sol (pode estar abaixo do horizonte)
+uniform vec3 uSunGlow;         // cor do brilho em volta do sol
+uniform float uSunGlowAmt;     // intensidade desse brilho (0..1)
+vec3 corHorizonte(vec3 d) {
+    vec2 h = d.xz, s = uSunDir.xz;
+    float lh = length(h), ls = length(s);
+    float g = (lh > 1e-4 && ls > 1e-4) ? pow(max(dot(h / lh, s / ls), 0.0), 6.0) : 0.0;
+    return uFogColor + uSunGlow * (g * uSunGlowAmt);
+}
+`;
+
 export const vertexPrincipal = /* glsl */ `
 varying vec3 vRel;                 // posição relativa à câmera, nos eixos do MUNDO (valores pequenos)
 varying vec3 vColor;
@@ -44,13 +59,13 @@ void main() {
 `;
 
 export const fragmentPrincipal = /* glsl */ `
+${glslHorizonte}
 varying vec3 vRel;
 varying vec3 vColor;
 varying vec4 vFragPosLightSpace;
 uniform vec3  uLightDir;
 uniform vec3  uLightColor;
 uniform vec3  uAmbientColor;
-uniform vec3  uFogColor;
 uniform float uNeblina;
 uniform float uAlpha;
 uniform float uAmbient;
@@ -133,7 +148,7 @@ void main() {
     float distCam = length(vRel);
     float fogFactor = clamp((distCam - 5000.0) / (15000.0 - 5000.0), 0.0, 1.0);
 
-    result = mix(result, uFogColor, clamp(fogFactor * uNeblina, 0.0, 1.0));
+    result = mix(result, corHorizonte(vRel / max(distCam, 1e-4)), clamp(fogFactor * uNeblina, 0.0, 1.0));
 
     gl_FragColor = vec4(result, uAlpha);
 }
@@ -174,12 +189,12 @@ void main() {
 `;
 
 export const fragmentParticula = /* glsl */ `
+${glslHorizonte}
 varying vec4 vCor;
 varying vec3 vFragPos;
 
 uniform vec3 uLightColor;
 uniform vec3 uAmbientColor;
-uniform vec3 uFogColor;
 uniform float uAmbient;
 uniform float uDiffuse;
 uniform float uNeblina;
@@ -192,8 +207,59 @@ void main() {
     // Aplicamos a mesma neblina (fog) usada no terreno
     float distCam = length(cameraPosition - vFragPos);
     float fogFactor = clamp((distCam - 5000.0) / (15000.0 - 5000.0), 0.0, 1.0);
-    result = mix(result, uFogColor, clamp(fogFactor * uNeblina, 0.0, 1.0));
+    result = mix(result, corHorizonte(normalize(vFragPos - cameraPosition)), clamp(fogFactor * uNeblina, 0.0, 1.0));
 
     gl_FragColor = vec4(result, vCor.a);
+}
+`;
+
+// Céu: esfera unitária em volta da câmera, empurrada para a profundidade máxima (gl_Position.xyww)
+export const vertexCeu = /* glsl */ `
+varying vec3 vDir;
+void main() {
+    vDir = position;
+    vec4 p = projectionMatrix * vec4(mat3(viewMatrix) * position, 1.0);
+    gl_Position = p.xyww;
+}
+`;
+
+export const fragmentCeu = /* glsl */ `
+${glslHorizonte}
+varying vec3 vDir;
+uniform vec3 uZenith;
+uniform vec3 uSunColor;
+uniform float uSunSize;      // raio angular do disco (radianos)
+uniform float uSunBright;    // intensidade do halo
+uniform float uNight;        // 0 dia .. 1 noite (estrelas)
+
+float hash13(vec3 p) {
+    p = fract(p * 0.1031);
+    p += dot(p, p.zyx + 31.32);
+    return fract((p.x + p.y) * p.z);
+}
+
+void main() {
+    vec3 d = normalize(vDir);
+    vec3 col = mix(corHorizonte(d), uZenith, pow(smoothstep(0.0, 0.75, d.y), 0.85));
+
+    // estrelas: pontos quadrados (combinam com o estilo low poly), só acima do horizonte
+    if (uNight > 0.01 && d.y > 0.0) {
+        vec3 cel = floor(d * 240.0);
+        float h = hash13(cel);
+        float brilho = step(0.9970, h) * (0.5 + 0.5 * hash13(cel + 7.0));
+        col += vec3(brilho) * uNight * smoothstep(0.02, 0.22, d.y);
+    }
+
+    // sol: disco, halo e brilho; some abaixo do horizonte
+    vec3 sd = normalize(uSunDir);
+    float c = dot(d, sd);
+    float ang = acos(clamp(c, -1.0, 1.0));
+    float vis = smoothstep(-0.04, 0.03, d.y);
+    float halo = pow(max(c, 0.0), 48.0) * 0.55 + pow(max(c, 0.0), 6.0) * 0.18;
+    col += uSunColor * (halo * uSunBright * vis);
+    float disco = 1.0 - smoothstep(uSunSize * 0.9, uSunSize, ang);
+    col = mix(col, uSunColor * 1.25, disco * vis);
+
+    gl_FragColor = vec4(col, 1.0);
 }
 `;
