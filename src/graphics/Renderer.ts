@@ -59,6 +59,10 @@ export class Renderer {
             powerPreference: 'high-performance',
         });
         this.renderer.setPixelRatio(this.razao);
+        // Convenção de cor do jogo: valores CRUS, sem gama. O shader do terreno, da pista e das marcações escreve o
+        // resultado da luz direto; os materiais do three (o carro .glb) codificariam em sRGB na saída, o que clareia os
+        // tons escuros (à noite, uma luz de 0.2 viraria ~0.48 e o carro brilharia mais que a pista). Linear = sem codificar.
+        this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 
         // Cena e Câmera
         this.scene = new THREE.Scene();
@@ -96,7 +100,7 @@ export class Renderer {
         this.luzSol.position.set(a.dirLuz[0], a.dirLuz[1], a.dirLuz[2]).multiplyScalar(500);
 
         // O fundo da tela é a cor do horizonte (o domo do céu cobre quase tudo, mas isto evita falhas)
-        this.renderer.setClearColor(this.corCeuTmp.setRGB(a.corHorizonte[0], a.corHorizonte[1], a.corHorizonte[2], THREE.SRGBColorSpace), 1);
+        this.renderer.setClearColor(this.corCeuTmp.setRGB(a.corHorizonte[0], a.corHorizonte[1], a.corHorizonte[2]), 1);   // sem conversão: valores crus
     }
 
     private redimensionar = () => {

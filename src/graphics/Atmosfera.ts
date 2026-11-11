@@ -69,12 +69,7 @@ function mistura(a: RGB, b: RGB, t: number, out: RGB): RGB {
 const tmpA: RGB = [0, 0, 0], tmpB: RGB = [0, 0, 0], corDoSol: RGB = [0, 0, 0];
 
 /** posição do sol (vetor unitário) para a hora dada: nasce em 6h no leste, a pino em 12h, se põe em 18h no oeste */
-export function direcaoDoSol(c: CfgCeu, l: Luz, out: V3): V3 {
-    if (!c.usarHora) {
-        const n = Math.hypot(l.dirX, l.dirY, l.dirZ) || 1;
-        out[0] = l.dirX / n; out[1] = l.dirY / n; out[2] = l.dirZ / n;
-        return out;
-    }
+export function direcaoDoSol(c: CfgCeu, out: V3): V3 {
     const th = ((c.hora - 6) / 12) * Math.PI;                 // 0 = nascer, PI/2 = meio-dia, PI = pôr do sol
     const az = rad(c.azimute), inc = rad(c.inclinacaoSol);
     const ex = Math.cos(az), ez = Math.sin(az);                // leste: direção horizontal do nascente
@@ -88,7 +83,7 @@ export function direcaoDoSol(c: CfgCeu, l: Luz, out: V3): V3 {
 }
 
 export function calcularAtmosfera(l: Luz, c: CfgCeu, a: Atmosfera) {
-    direcaoDoSol(c, l, a.dirSol);
+    direcaoDoSol(c, a.dirSol);
     const [sx, sy, sz] = a.dirSol;
     a.elevacao = sy;
 

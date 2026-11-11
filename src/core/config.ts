@@ -144,9 +144,6 @@ export const GAME_CONFIG = {
         // Todas as cores são HSV: H em graus (0-360), S e V de 0 a 1.
         // Cada papel tem a sua própria cor, para o céu poder ser azul sem tingir o resto do mapa.
         parametros: {
-            dirX: 0.35,
-            dirY: 0.85,
-            dirZ: 0.35,
             // sol (difuso + especular)
             corH: 0.0,
             corS: 0.0,
@@ -171,9 +168,8 @@ export const GAME_CONFIG = {
     // escorregam para o pôr do sol e para a noite sem mexer nela.
     ceu: {
         parametros: {
-            usarHora: true,          // true: o sol segue a hora do dia; false: usa a direção dirX/dirY/dirZ da luz
             hora: 13.0,              // 0 a 24 (6 = nascer do sol, 12 = meio-dia, 18 = pôr do sol)
-            cicloAtivo: false,       // o tempo passa sozinho (só com usarHora ligado)
+            cicloAtivo: false,       // o tempo passa sozinho
             duracaoDia: 480.0,       // segundos reais que um dia inteiro leva
             azimute: 283.0,          // graus: direção horizontal do nascente (0 = +x, 90 = +z); o pôr do sol fica no lado oposto
             inclinacaoSol: 25.0,     // graus: quanto a trajetória do sol se inclina (o sol a pino fica a 90 - isto de altura)

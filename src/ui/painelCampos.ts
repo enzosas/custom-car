@@ -48,7 +48,7 @@ export interface SecaoDef {
 
 export interface AbaDef { titulo: string; secoes: SecaoDef[] }
 
-// ---- cores em HSV (luz config) ----
+// ---- cores em HSV (ceu config) ----
 const camposHSV = (p: string): CampoDef[] => [
   { nome: `${p}H`, apresentacao: 'matiz', tipo: 'float', min: 0, max: 360, ciclico: true },
   { nome: `${p}S`, apresentacao: 'saturacao', tipo: 'float', min: 0, max: 1 },
@@ -224,40 +224,15 @@ export const ABAS: AbaDef[] = [
     ]
   },
   {
-    titulo: 'luz config', secoes: [
-      {
-        titulo: 'sol (direcao, usada se a hora nao controlar o sol)', caminho: ['luz', 'parametros'], campos: [
-          { nome: 'dirX', apresentacao: 'direcao x', tipo: 'float' },
-          { nome: 'dirY', apresentacao: 'direcao y', tipo: 'float' },
-          { nome: 'dirZ', apresentacao: 'direcao z', tipo: 'float' },
-        ]
-      },
-      secaoCor('sol (cor)', 'cor'),
-      secaoCor('ceu (fundo e neblina)', 'ceu', [{ nome: 'neblina', apresentacao: 'neblina', tipo: 'float', min: 0, max: 1 }]),
-      secaoCor('ambiente', 'ambiente'),
-      {
-        titulo: 'intensidades', caminho: ['luz', 'parametros'], campos: [
-          { nome: 'intensidadeAmbiente', apresentacao: 'intensidade ambiente', tipo: 'float' },
-          { nome: 'intensidadeDifusa', apresentacao: 'intensidade difusa', tipo: 'float' },
-          { nome: 'intensidadeEspecular', apresentacao: 'intensidade especular', tipo: 'float' },
-          { nome: 'shininess', apresentacao: 'brilho especular', tipo: 'float' },
-        ]
-      },
-    ]
-  },
-  {
     titulo: 'ceu config', secoes: [
       {
         titulo: 'hora do dia', caminho: ['ceu', 'parametros'], campos: [
-          { nome: 'hora', apresentacao: 'hora (6 nascer, 12 meio-dia, 18 por)', tipo: 'float', min: 0, max: 24, ciclico: true },
+          { nome: 'hora', apresentacao: 'hora', tipo: 'float', min: 0, max: 24, ciclico: true },
           { nome: 'duracaoDia', apresentacao: 'duracao do dia (segundos)', tipo: 'float' },
           { nome: 'azimute', apresentacao: 'azimute do nascente (graus)', tipo: 'float', min: 0, max: 360, ciclico: true },
           { nome: 'inclinacaoSol', apresentacao: 'inclinacao do sol (graus)', tipo: 'float', min: 0, max: 70 },
         ],
-        interruptores: [
-          { nome: 'usarHora', rotulo: 'a hora controla o sol' },
-          { nome: 'cicloAtivo', rotulo: 'o tempo passa sozinho' },
-        ],
+        interruptores: [{ nome: 'cicloAtivo', rotulo: 'o tempo passa sozinho' }],
       },
       secaoCor('ceu (cor do alto)', 'zenite', [], ['ceu', 'parametros']),
       {

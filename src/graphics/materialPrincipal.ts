@@ -12,13 +12,13 @@ import type { Atmosfera } from './Atmosfera';
 export function criarUniformsCompartilhados() {
     const l = GAME_CONFIG.luz.parametros;
     return {
-        uLightDir: { value: new THREE.Vector3(l.dirX, l.dirY, l.dirZ) },
+        uLightDir: { value: new THREE.Vector3(0, 1, 0) },     // a direção vem da atmosfera (ver atualizarLuz)
         uLightColor: { value: new THREE.Vector3(...corSol(l)) },
         uAmbientColor: { value: new THREE.Vector3(...corAmbiente(l)) },
         uFogColor: { value: new THREE.Vector3(...corCeu(l)) },
         uNeblina: { value: l.neblina },
         // brilho da neblina e do céu em volta do sol (ver glslHorizonte em shaders.ts)
-        uSunDir: { value: new THREE.Vector3(l.dirX, l.dirY, l.dirZ).normalize() },
+        uSunDir: { value: new THREE.Vector3(0, 1, 0) },
         uSunGlow: { value: new THREE.Vector3(1, 1, 1) },
         uSunGlowAmt: { value: 0 },
         uAmbient: { value: l.intensidadeAmbiente },

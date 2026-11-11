@@ -380,7 +380,7 @@ export class Jogo {
         this.renderizador.camera.updateProjectionMatrix();
         // hora do dia -> posição do sol e cores do frame (luz, neblina, céu) -> uniforms, luzes do three e céu
         const cc = this.config.ceu.parametros;
-        if (cc.cicloAtivo && cc.usarHora) cc.hora = (cc.hora + deltaTime / Math.max(1, cc.duracaoDia) * 24) % 24;
+        if (cc.cicloAtivo) cc.hora = (cc.hora + deltaTime / Math.max(1, cc.duracaoDia) * 24) % 24;
         calcularAtmosfera(this.config.luz.parametros, cc, this.atm);
         atualizarLuz(this.uniforms, this.atm);
         this.renderizador.sincronizarLuzes(this.atm);

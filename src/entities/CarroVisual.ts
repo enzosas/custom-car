@@ -49,6 +49,22 @@ function paraPhong(orig: THREE.Material): THREE.Material {
     return m;
 }
 
+/**
+ * Convenção de cor do jogo: valores crus, sem decodificar sRGB para linear. O GLTFLoader entrega cor, emissivo e
+ * texturas já decodificados (linear); aqui voltamos ao valor original, para o carro responder à luz exatamente como o
+ * terreno e a pista (ver Renderer: a saída também não codifica em sRGB).
+ */
+function usarCoresCruas(m: THREE.Material) {
+    const s = m as THREE.MeshPhongMaterial;
+    s.color?.convertLinearToSRGB();
+    s.emissive?.convertLinearToSRGB();
+    for (const t of [s.map, s.emissiveMap]) {
+        if (!t) continue;
+        t.colorSpace = THREE.NoColorSpace;   // sem decodificação ao amostrar a textura
+        t.needsUpdate = true;
+    }
+}
+
 export class CarroVisual {
     private readonly chassi = new THREE.Group();
     private readonly chassiProcedural: THREE.Mesh;
@@ -276,6 +292,7 @@ export class CarroVisual {
             return novo;
         };
 
+        const cruas = new WeakSet<THREE.Material>();   // um material pode estar em vários meshes: converte uma vez só
         modelo.traverse((child) => {
             const mesh = child as THREE.Mesh;
             if (!mesh.isMesh) return;
@@ -284,8 +301,7 @@ export class CarroVisual {
             const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
             for (const m of mats) {
                 if ((m as THREE.MeshPhongMaterial).isMeshPhongMaterial) this.materiaisPhong.add(m as THREE.MeshPhongMaterial);
-                const mapa = (m as THREE.MeshStandardMaterial).map;
-                if (mapa) mapa.colorSpace = THREE.SRGBColorSpace;
+                if (!cruas.has(m)) { cruas.add(m); usarCoresCruas(m); }
             }
         });
     }
