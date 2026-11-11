@@ -7,6 +7,7 @@
 import { GAME_CONFIG } from '@/core/config';
 import { PerlinNoise2D, ruidoFractal, ruidoCristas } from './Ruido';
 import type { Estrada } from './Estrada';
+import { avaliarPaleta, COR_GRAMA_PADRAO, type SaidaPaleta } from './Paleta';
 
 export type Vec3 = { x: number; y: number; z: number };
 
@@ -29,8 +30,43 @@ const FORCA_MONTANHA = 0.71;     // altura das cristas
 const COMPRIMENTO_REGIAO = 23030; // tamanho das regiões (planície x terras altas)
 const JOELHO = 0.78;             // acima disso o relevo satura suavemente (sem topos achatados)
 
+const CONTRASTE_BIOMA = 2.4;       // o ruído de bioma fica concentrado perto de 0.5; abre a faixa para usar 0..1
+const ESCALA_MANCHAS = 700;        // tamanho das manchas de variação de cor (unidades)
+
 const limitar = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 const suave = (a: number, b: number, x: number) => { const t = limitar((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+/** atributos por vértice da grade de um chunk: cor e cobertura vegetal (calculados por Terreno.preencherAtributosChunk) */
+export interface AtributosChunk {
+    celulas: number;
+    /** RGB de cada um dos (celulas+1)² vértices */
+    cor: Float32Array;
+    /** por vértice: [quanto de árvore, quanto de grama] o ponto aceita (0..1) */
+    veg: Float32Array;
+}
+
+/**
+ * Valor interpolado de um atributo por vértice (`canais` valores por vértice) no ponto de mundo (x, z), nos MESMOS
+ * triângulos da malha: (i0,i2,i1) e (i1,i2,i3), como obterAlturaMundo.
+ */
+export function amostrarGrade(dados: Float32Array, canais: number, canal: number, celulas: number, esp: number,
+    cx: number, cz: number, x: number, z: number): number {
+    const n = celulas + 1;
+    const gx = limitar((x - cx * celulas * esp) / esp, 0, celulas - 1e-6);
+    const gz = limitar((z - cz * celulas * esp) / esp, 0, celulas - 1e-6);
+    const i = Math.floor(gx), j = Math.floor(gz), fx = gx - i, fz = gz - j;
+    const v = (a: number, b: number) => dados[((j + b) * n + (i + a)) * canais + canal];
+    if (fx + fz < 1) return v(0, 0) + fx * (v(1, 0) - v(0, 0)) + fz * (v(0, 1) - v(0, 0));
+    return v(1, 1) + (1 - fx) * (v(0, 1) - v(1, 1)) + (1 - fz) * (v(1, 0) - v(1, 1));
+}
+
+/** hash inteiro 2D -> [-1, 1] (variação de cor por vértice, sempre a mesma para o mesmo vértice global) */
+function hash2(a: number, b: number): number {
+    let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967295 * 2 - 1;
+}
 
 interface ParamRelevo {
     fColinas: number; fRegiao: number; fCristas: number;
@@ -39,6 +75,8 @@ interface ParamRelevo {
 
 export class Terreno {
     private perlin = new PerlinNoise2D(1);
+    private alturasTmp = new Float32Array(0);        // alturas do chunk com 1 vértice de folga em volta (inclinação sem emenda)
+    private paletaTmp: SaidaPaleta = { r: 0, g: 0, b: 0, arvore: 1, grama: 1 };
     /** a pista que molda o terreno (definida pelo WorldBuilder); sem ela o terreno é só o relevo */
     estrada: Estrada | null = null;
 
@@ -126,6 +164,69 @@ export class Terreno {
         if (fx + fz < 1) return h00 + fx * (h10 - h00) + fz * (h01 - h00);
         const h11 = h(i + 1, j + 1);
         return h11 + (1 - fx) * (h01 - h11) + (1 - fz) * (h10 - h11);
+    }
+
+    /** bioma em (x, z): 0..1, ruído de baixa frequência (ver Paleta.ts) */
+    biomaEm(x: number, z: number): number {
+        const f = 1 / Math.max(1000, this.config.terreno.paleta.escalaBioma);
+        return limitar((ruidoFractal(this.perlin, x * f + 900, z * f + 900, 2, 0.5) - 0.5) * CONTRASTE_BIOMA + 0.5, 0, 1);
+    }
+
+    criarAtributosChunk(): AtributosChunk {
+        const celulas = this.celulasPorChunk, n = celulas + 1;
+        return { celulas, cor: new Float32Array(n * n * 3), veg: new Float32Array(n * n * 2) };
+    }
+
+    /**
+     * Cor e cobertura vegetal de cada vértice do chunk (cx, cz), a partir da altitude, da inclinação e do bioma.
+     * `pos` são os vértices já preenchidos por preencherChunk. A inclinação de um vértice usa os vizinhos, inclusive
+     * os do chunk ao lado (calculados aqui pela função de altura), então a cor não tem emenda entre chunks.
+     */
+    preencherAtributosChunk(cx: number, cz: number, pos: Float32Array, at: AtributosChunk) {
+        const p = this.config.terreno.paleta;
+        const celulas = at.celulas, n = celulas + 1, esp = this.espacamento;
+        const s = this.paletaTmp;
+
+        if (!p.ativa) {
+            for (let k = 0; k < n * n; ++k) {
+                at.cor[k * 3] = COR_GRAMA_PADRAO[0]; at.cor[k * 3 + 1] = COR_GRAMA_PADRAO[1]; at.cor[k * 3 + 2] = COR_GRAMA_PADRAO[2];
+                at.veg[k * 2] = 1; at.veg[k * 2 + 1] = 1;
+            }
+            return;
+        }
+
+        const q = this.lerParametros();
+        const m = n + 2;
+        if (this.alturasTmp.length < m * m) this.alturasTmp = new Float32Array(m * m);
+        const H = this.alturasTmp;
+        for (let j = -1; j <= n; ++j) {
+            for (let i = -1; i <= n; ++i) {
+                H[(j + 1) * m + (i + 1)] = (i >= 0 && i < n && j >= 0 && j < n)
+                    ? pos[(j * n + i) * 3 + 1]
+                    : this.alturaVertice((cx * celulas + i) * esp, (cz * celulas + j) * esp, q);
+            }
+        }
+
+        for (let j = 0; j < n; ++j) {
+            for (let i = 0; i < n; ++i) {
+                const gi = cx * celulas + i, gj = cz * celulas + j;
+                const gx = gi * esp, gz = gj * esp;
+                const hc = H[(j + 1) * m + (i + 1)];
+                const hx = (H[(j + 1) * m + (i + 2)] - H[(j + 1) * m + i]) / (2 * esp);
+                const hz = (H[(j + 2) * m + (i + 1)] - H[j * m + (i + 1)]) / (2 * esp);
+                const incl = Math.hypot(hx, hz);
+                const alt = limitar(hc / q.escala, 0, 1);
+
+                // variação de cor: manchas grandes (ruído suave) misturadas com um granulado por vértice
+                const mancha = (ruidoFractal(this.perlin, gx / ESCALA_MANCHAS + 300, gz / ESCALA_MANCHAS + 300, 2, 0.5) - 0.5) * 2.4;
+                const ruido = limitar(0.65 * mancha + 0.35 * hash2(gi, gj), -1, 1);
+
+                avaliarPaleta(p, this.biomaEm(gx, gz), alt, incl, ruido, s);
+                const k = j * n + i;
+                at.cor[k * 3] = s.r; at.cor[k * 3 + 1] = s.g; at.cor[k * 3 + 2] = s.b;
+                at.veg[k * 2] = s.arvore; at.veg[k * 2 + 1] = s.grama;
+            }
+        }
     }
 
     /**

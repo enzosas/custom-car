@@ -159,6 +159,16 @@ export const ABAS: AbaDef[] = [
         ]
       },
       {
+        titulo: 'paleta (cor por bioma, altitude e inclinacao)', caminho: ['terreno', 'paleta'], aplicarAoSoltar: true, campos: [
+          { nome: 'escalaBioma', apresentacao: 'tamanho dos biomas', tipo: 'float' },
+          { nome: 'altitudeRocha', apresentacao: 'altitude da rocha', tipo: 'float', min: 0, max: 1 },
+          { nome: 'altitudeNeve', apresentacao: 'altitude da neve', tipo: 'float', min: 0, max: 1 },
+          { nome: 'inclinacaoRocha', apresentacao: 'inclinacao da rocha', tipo: 'float', min: 0, max: 1.5 },
+          { nome: 'variacaoCor', apresentacao: 'variacao de cor', tipo: 'float', min: 0, max: 0.3 },
+        ],
+        interruptores: [{ nome: 'ativa', rotulo: 'paleta ligada' }],
+      },
+      {
         titulo: 'superficie', caminho: ['terreno', 'superficie'], campos: [
           { nome: 'offsetprofundidadegrama', apresentacao: 'afundamento da grama', tipo: 'float' },
         ]

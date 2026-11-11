@@ -26,7 +26,7 @@ const POR_LOTE = 32;
 /** teto do desvio de rumo; abaixo de 90° para garantir que a pista sempre avança em z */
 const MAX_ANGULO = 85;
 const MAX_PONTOS = 600000;
-/** cor do asfalto (a da grama vem do WorldBuilder) */
+/** cor do asfalto (a do terreno vem da paleta: ver Terreno.preencherAtributosChunk) */
 const COR_ASFALTO = [0.25, 0.25, 0.28];
 /** cor das marcações (linhas brancas) e a folga delas acima do asfalto */
 const COR_MARCACAO = [0.95, 0.95, 0.95];
@@ -435,7 +435,7 @@ export class Estrada {
      * Em cada triângulo a borda segue a curva real, em pontos a cada ~ESPACO_BORDA unidades. Todos os pontos ficam no
      * plano do triângulo, ou seja, na superfície que a física lê.
      */
-    gerarMalhaTerrenoChunk(cx: number, cz: number, tam: number, esp: number, celulas: number, pos: Float32Array, corGrama: number[]): Malha | null {
+    gerarMalhaTerrenoChunk(cx: number, cz: number, tam: number, esp: number, celulas: number, pos: Float32Array, coresGrade: Float32Array): Malha | null {
         if (this.pf.b <= this.pf.a) return null;
         const hw = this.hw, n = celulas + 1, x0 = cx * tam, z0 = cz * tam;
         const R = hw + 215;                                    // além disso o ponto está "longe" da pista (> meia diagonal de uma célula)
@@ -528,10 +528,19 @@ export class Estrada {
                     const l2 = ((tz[2] - tz[0]) * (x - tx[2]) + (tx[0] - tx[2]) * (z - tz[2])) / det;
                     return l1 * ty[0] + l2 * ty[1] + (1 - l1 - l2) * ty[2];
                 };
+                // cores dos três cantos do triângulo da grade: a grama dos pedaços novos interpola entre elas, então
+                // continua combinando com o terreno em volta (que é colorido por vértice)
+                const k0 = (ci[0][1] * n + ci[0][0]) * 3, k1 = (ci[1][1] * n + ci[1][0]) * 3, k2 = (ci[2][1] * n + ci[2][0]) * 3;
                 const emitir = (xs: number[], zs: number[], asfalto: boolean) => {
-                    const cor = asfalto ? COR_ASFALTO : corGrama;
                     const base = nBase + nExtra;
-                    for (let q = 0; q < xs.length; ++q) { P.push(xs[q], yEm(xs[q], zs[q]), zs[q]); C.push(cor[0], cor[1], cor[2]); }
+                    for (let q = 0; q < xs.length; ++q) {
+                        P.push(xs[q], yEm(xs[q], zs[q]), zs[q]);
+                        if (asfalto) { C.push(COR_ASFALTO[0], COR_ASFALTO[1], COR_ASFALTO[2]); continue; }
+                        const l1 = ((tz[1] - tz[2]) * (xs[q] - tx[2]) + (tx[2] - tx[1]) * (zs[q] - tz[2])) / det;
+                        const l2 = ((tz[2] - tz[0]) * (xs[q] - tx[2]) + (tx[0] - tx[2]) * (zs[q] - tz[2])) / det;
+                        const l3 = 1 - l1 - l2;
+                        for (let c3 = 0; c3 < 3; ++c3) C.push(l1 * coresGrade[k0 + c3] + l2 * coresGrade[k1 + c3] + l3 * coresGrade[k2 + c3]);
+                    }
                     nExtra += xs.length;
                     const t = triangularPoligono(xs, zs);
                     for (const idx of t) I.push(base + idx);
@@ -612,7 +621,7 @@ export class Estrada {
         const positions = new Float32Array(pos.length + P.length);
         positions.set(pos); positions.set(P, pos.length);
         const colors = new Float32Array(positions.length);
-        for (let q = 0; q < nBase; ++q) { colors[q * 3] = corGrama[0]; colors[q * 3 + 1] = corGrama[1]; colors[q * 3 + 2] = corGrama[2]; }
+        colors.set(coresGrade.subarray(0, nBase * 3));
         colors.set(C, nBase * 3);
         const base: number[] = [];
         for (let j = 0; j < celulas; ++j) for (let i = 0; i < celulas; ++i) {

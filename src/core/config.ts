@@ -90,6 +90,15 @@ export const GAME_CONFIG = {
             celulasPorChunk: 32,     // resolução de um chunk (4 a 250); mudar recria todos os chunks
             raioChunks: 4,           // chunks carregados em volta do carro; precisa cobrir a neblina (~15000 / tamanho do chunk). Menos = mais leve
         },
+        // Cor do terreno por altitude, inclinação e bioma (e onde cresce vegetação). Mudar reconstrói o terreno.
+        paleta: {
+            ativa: true,             // false = terreno de uma cor só, como antes
+            escalaBioma: 26000.0,    // tamanho aproximado de cada região de bioma (verde, oliva, dourado, outono, savana, deserto)
+            altitudeRocha: 0.62,     // altitude (0..1 da altura máxima) em que a grama dá lugar à rocha e acaba a vegetação
+            altitudeNeve: 0.90,      // altitude em que começa a neve
+            inclinacaoRocha: 0.45,   // inclinação (0 = plano, 1 = 45°) a partir da qual a encosta vira rocha
+            variacaoCor: 0.08,       // variação de brilho por manchas e por vértice (0 = cor chapada)
+        },
         superficie: {
             offsetprofundidadegrama: 0.0,
         },

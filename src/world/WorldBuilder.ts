@@ -1,13 +1,11 @@
 import * as THREE from 'three';
 import { GAME_CONFIG } from '@/core/config';
-import { Terreno } from './Terreno';
+import { Terreno, type AtributosChunk } from './Terreno';
 import { Estrada, PASSO } from './Estrada';
 import { Floresta } from './Floresta';
 import { Grama, gerarGeometriaTufo } from './Grama';
 import { gerarGeometriasArvore } from './Arvore';
 import { geometriaDe } from '@/graphics/Malha';
-
-const COR_GRAMA = [0.34, 0.7, 0.56];
 
 /** chunks novos montados por frame enquanto o carro anda (carga inicial e mudanças do painel montam tudo de uma vez) */
 const CHUNKS_POR_FRAME = 3;
@@ -22,7 +20,7 @@ const MARCACAO_D2_REMOVE = 5;
  * `pooled`: o mesh vem do pool (malha comum de grade); senão é uma malha própria do chunk, com a pista dentro.
  * `marcas`: as faixas da pista (só em chunks com pista e perto do carro).
  */
-interface ChunkAtivo { mesh: THREE.Mesh; pooled: boolean; cx: number; cz: number; marcas: THREE.Mesh | null }
+interface ChunkAtivo { mesh: THREE.Mesh; pooled: boolean; cx: number; cz: number; marcas: THREE.Mesh | null; at: AtributosChunk }
 
 export class WorldBuilder {
     public terreno = new Terreno();
@@ -40,7 +38,9 @@ export class WorldBuilder {
     private florestaCap = 0;
 
     private gramaAttr!: THREE.InstancedBufferAttribute;
+    private gramaCorAttr!: THREE.InstancedBufferAttribute;
     public gramaLote = new Float32Array(0);
+    public gramaLoteCor = new Float32Array(0);      // RGB de cada tufo selecionado
     private gramaCap = 0;
 
     /** semente do mundo (o ruído do relevo depende dela; mais tarde a pista também) */
@@ -49,8 +49,7 @@ export class WorldBuilder {
     // --- terreno em chunks ---
     private chunks = new Map<string, ChunkAtivo>();
     private livres: THREE.Mesh[] = [];          // meshes reaproveitados (nunca recriados: evita dispose de buffers compartilhados)
-    private indiceAttr: THREE.BufferAttribute | null = null;   // compartilhado por todos os chunks
-    private corAttr: THREE.BufferAttribute | null = null;      // idem
+    private indiceAttr: THREE.BufferAttribute | null = null;   // compartilhado por todos os chunks (a cor é de cada mesh: a paleta varia por chunk)
     private scratchPos = new Float32Array(0);              // vértices do chunk em construção
     private gradeCelulas = 0;
     private gradeTamanho = 0;
@@ -72,6 +71,8 @@ export class WorldBuilder {
         this.gramaMesh = new THREE.InstancedMesh(geometriaDe(gerarGeometriaTufo(this.config)), this.matOpaco, 1);
         this.gramaMesh.frustumCulled = false;
         this.gramaMesh.count = 0;
+        // cor por instância (a cor do terreno sob cada tufo): precisa existir antes do primeiro desenho, porque é ela que liga a variante do shader
+        this.gramaMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(3), 3);
 
         // Floresta
         this.construirFlorestaGeometrias();
@@ -96,12 +97,7 @@ export class WorldBuilder {
         this.descartarChunks();   // a topologia mudou: todos os chunks e os buffers compartilhados são recriados
 
         const n = celulas + 1;
-        const cores = new Float32Array(n * n * 3);
-        for (let i = 0; i < cores.length; i += 3) {
-            cores[i] = COR_GRAMA[0]; cores[i + 1] = COR_GRAMA[1]; cores[i + 2] = COR_GRAMA[2];
-        }
         this.indiceAttr = new THREE.BufferAttribute(this.terreno.gerarIndices(), 1);
-        this.corAttr = new THREE.BufferAttribute(cores, 3);
         this.scratchPos = new Float32Array(n * n * 3);
         this.gradeCelulas = celulas;
     }
@@ -185,7 +181,9 @@ export class WorldBuilder {
         const pos = new THREE.BufferAttribute(new Float32Array(n * n * 3), 3);
         pos.setUsage(THREE.DynamicDrawUsage);
         geo.setAttribute('position', pos);
-        geo.setAttribute('color', this.corAttr!);
+        const cor = new THREE.BufferAttribute(new Float32Array(n * n * 3), 3);
+        cor.setUsage(THREE.DynamicDrawUsage);
+        geo.setAttribute('color', cor);
         geo.setIndex(this.indiceAttr!);
         const mesh = new THREE.Mesh(geo, this.matOpaco);
         mesh.frustumCulled = false;
@@ -197,10 +195,14 @@ export class WorldBuilder {
         const tam = this.terreno.tamanhoChunk;
         this.terreno.preencherChunk(cx, cz, this.scratchPos);
 
+        // cor e cobertura vegetal por vértice (altitude, inclinação, bioma)
+        const at = this.terreno.criarAtributosChunk();
+        this.terreno.preencherAtributosChunk(cx, cz, this.scratchPos, at);
+
         // Chunk que a pista atravessa: malha PRÓPRIA, com a grama e o asfalto juntos e vértices compartilhados nas bordas.
         // Os triângulos do terreno sob o asfalto não existem (foram trocados por pedaços de asfalto e de grama), então não
         // há duas superfícies no mesmo lugar e nada de z-fighting. Os demais chunks usam a malha comum, em pool.
-        const malha = this.estrada.gerarMalhaTerrenoChunk(cx, cz, tam, this.terreno.espacamento, this.gradeCelulas, this.scratchPos, COR_GRAMA);
+        const malha = this.estrada.gerarMalhaTerrenoChunk(cx, cz, tam, this.terreno.espacamento, this.gradeCelulas, this.scratchPos, at.cor);
         let mesh: THREE.Mesh;
         if (malha) {
             const geo = new THREE.BufferGeometry();
@@ -215,16 +217,19 @@ export class WorldBuilder {
             const pos = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
             (pos.array as Float32Array).set(this.scratchPos);
             pos.needsUpdate = true;
+            const cor = mesh.geometry.getAttribute('color') as THREE.BufferAttribute;
+            (cor.array as Float32Array).set(at.cor);
+            cor.needsUpdate = true;
         }
         mesh.position.set(cx * tam, 0, cz * tam);
         mesh.visible = true;
 
         const chave = `${cx},${cz}`;
-        this.chunks.set(chave, { mesh, pooled: !malha, cx, cz, marcas: null });
+        this.chunks.set(chave, { mesh, pooled: !malha, cx, cz, marcas: null, at });
 
         // a vegetação nasce junto com o chunk (sorteio determinístico por chunk)
-        this.floresta.adicionarChunk(chave, cx, cz, tam, this.terreno, this.estrada);
-        this.grama.adicionarChunk(chave, cx, cz, tam, this.terreno, this.estrada);
+        this.floresta.adicionarChunk(chave, cx, cz, tam, this.terreno, this.estrada, at);
+        this.grama.adicionarChunk(chave, cx, cz, tam, this.terreno, this.estrada, at);
     }
 
     /** garante buffers de instância grandes o bastante para tudo que está carregado (com folga, para não realocar a cada chunk) */
@@ -323,8 +328,8 @@ export class WorldBuilder {
         this.grama.limpar();
         const tam = this.terreno.tamanhoChunk;
         for (const [chave, ch] of this.chunks) {
-            this.floresta.adicionarChunk(chave, ch.cx, ch.cz, tam, this.terreno, this.estrada);
-            this.grama.adicionarChunk(chave, ch.cx, ch.cz, tam, this.terreno, this.estrada);
+            this.floresta.adicionarChunk(chave, ch.cx, ch.cz, tam, this.terreno, this.estrada, ch.at);
+            this.grama.adicionarChunk(chave, ch.cx, ch.cz, tam, this.terreno, this.estrada, ch.at);
         }
         this.garantirCapacidades();
     }
@@ -372,10 +377,16 @@ export class WorldBuilder {
         this.gramaAttr = new THREE.InstancedBufferAttribute(this.gramaLote, 16);
         this.gramaAttr.setUsage(THREE.DynamicDrawUsage);
         this.gramaMesh.instanceMatrix = this.gramaAttr;
+
+        this.gramaLoteCor = new Float32Array(this.gramaCap * 3);
+        this.gramaCorAttr = new THREE.InstancedBufferAttribute(this.gramaLoteCor, 3);
+        this.gramaCorAttr.setUsage(THREE.DynamicDrawUsage);
+        this.gramaMesh.instanceColor = this.gramaCorAttr;
     }
 
     atualizarGrama() {
         if (this.gramaAttr) this.gramaAttr.needsUpdate = true;
+        if (this.gramaCorAttr) this.gramaCorAttr.needsUpdate = true;
     }
 
     atualizarFlorestaLods(ref: { x: number; y: number; z: number }, sombraPass: boolean) {

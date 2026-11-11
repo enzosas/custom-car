@@ -1,7 +1,7 @@
 // Grama.ts — port de Grama.h: tufos de grama (3 cones inclinados) instanciados sobre o terreno.
 
 import { GAME_CONFIG } from '@/core/config';
-import type { Terreno } from './Terreno';
+import { amostrarGrade, type Terreno, type AtributosChunk } from './Terreno';
 import type { Estrada } from './Estrada';
 import { Mt19937, uniformReal } from '@/core/Random';
 import { AREA_REF, sementeChunk } from './Ruido';
@@ -10,8 +10,8 @@ import type { Malha } from '@/graphics/Malha';
 
 /** adicionarConeGeometria(): cone inclinado (tronco de cone) com rotação em X e Z */
 function adicionarCone(pos: number[], col: number[], idx: number[], offsetBase: V3,
-                       raioChao: number, raioTopo: number, altura: number,
-                       incXDeg: number, incZDeg: number, segmentos: number, cor: number[]) {
+    raioChao: number, raioTopo: number, altura: number,
+    incXDeg: number, incZDeg: number, segmentos: number, cor: number[]) {
     const step = 2 * Math.PI / segmentos;
     const rot = new Mat4().rotate(radians(incXDeg), X_AXIS).rotate(radians(incZDeg), Z_AXIS);
 
@@ -47,7 +47,7 @@ function adicionarCone(pos: number[], col: number[], idx: number[], offsetBase: 
 export function gerarGeometriaTufo(config = GAME_CONFIG): Malha {
     const g = config.grama.grama;
     const rTopoBase = g.raio, rChaoBase = rTopoBase * 0.8, altBase = g.altura, segs = g.segmentos;
-    const corGrama = [0.34, 0.7, 0.56];
+    const corGrama = [1, 1, 1];   // branco: a cor de cada tufo vem da instância (a cor do terreno naquele ponto)
     const pos: number[] = [], col: number[] = [], idx: number[] = [];
 
     const distSep = rTopoBase * 2.4;
@@ -69,6 +69,7 @@ interface DadosChunk {
     n: number;
     posicoes: Float32Array;
     matrizes: Float32Array;
+    cores: Float32Array;     // RGB de cada tufo (a cor do terreno sob ele)
 }
 
 /** Como a Floresta: os tufos nascem e somem junto com os chunks do terreno. */
@@ -77,7 +78,7 @@ export class Grama {
     private chunks = new Map<string, DadosChunk>();
     private seed = 1;
 
-    constructor(private config = GAME_CONFIG) {}
+    constructor(private config = GAME_CONFIG) { }
 
     definirSeed(seed: number) { this.seed = seed >>> 0; this.limpar(); }
 
@@ -91,7 +92,7 @@ export class Grama {
     }
 
     /** `quantidade` tufos por AREA_REF (mesma densidade do mapa antigo), sorteados com o RNG do chunk */
-    adicionarChunk(chave: string, cx: number, cz: number, tam: number, terreno: Terreno, estrada?: Estrada) {
+    adicionarChunk(chave: string, cx: number, cz: number, tam: number, terreno: Terreno, estrada?: Estrada, at?: AtributosChunk) {
         this.remover(chave);
         const x0 = cx * tam, z0 = cz * tam;
         const tentativas = Math.round(this.config.grama.grama.quantidade * (tam * tam) / AREA_REF);
@@ -100,8 +101,10 @@ export class Grama {
         const meiaLarguraPista = this.config.estrada.estrada.largura * 0.5;
         const distMinimaPista = meiaLarguraPista + this.config.grama.grama.distanciaEstrada;
 
-        const pos: number[] = [], mats: number[] = [];
+        const pos: number[] = [], mats: number[] = [], cores: number[] = [];
         let count = 0;
+        const esp = at ? tam / at.celulas : 1;
+        const brilho = this.config.terreno.paleta.ativa ? 0.94 : 1;   // um pouco mais escuro que o chão, para o tufo aparecer
 
         for (let t = 0; t < tentativas; ++t) {
             const x = x0 + uniformReal(rng, 0, tam);
@@ -109,6 +112,17 @@ export class Grama {
 
             if (Math.abs(x) < 25 && Math.abs(z) < 25) continue;
             if (estrada && estrada.distanciaEixo(x, z) < distMinimaPista) continue;
+
+            // a paleta diz quanta grama o ponto aceita; a cor do tufo é a do terreno sob ele
+            if (at) {
+                const fator = amostrarGrade(at.veg, 2, 1, at.celulas, esp, cx, cz, x, z);
+                if (fator < 1 && uniformReal(rng, 0, 1) > fator) continue;
+                cores.push(amostrarGrade(at.cor, 3, 0, at.celulas, esp, cx, cz, x, z) * brilho,
+                    amostrarGrade(at.cor, 3, 1, at.celulas, esp, cx, cz, x, z) * brilho,
+                    amostrarGrade(at.cor, 3, 2, at.celulas, esp, cx, cz, x, z) * brilho);
+            } else {
+                cores.push(0.34, 0.7, 0.56);
+            }
 
             const y = terreno.obterAlturaMundo(x, z) - 0.2;
             pos.push(x, y, z);
@@ -122,13 +136,13 @@ export class Grama {
 
         this.chunks.set(chave, {
             x: x0 + tam * 0.5, z: z0 + tam * 0.5, raio: tam * 0.7072, n: count,
-            posicoes: new Float32Array(pos), matrizes: new Float32Array(mats),
+            posicoes: new Float32Array(pos), matrizes: new Float32Array(mats), cores: new Float32Array(cores),
         });
         this.quantidade += count;
     }
 
     /** copia para `lote` as instâncias dentro do raio de visão; devolve a contagem */
-    selecionar(pontoRef: V3, isShadowPass: boolean, lote: Float32Array): number {
+    selecionar(pontoRef: V3, isShadowPass: boolean, lote: Float32Array, loteCor?: Float32Array): number {
         const alcance = isShadowPass ? 100 : 2000;
         const raioSq = alcance * alcance;
         let n = 0;
@@ -136,11 +150,12 @@ export class Grama {
             const cdx = d.x - pontoRef.x, cdz = d.z - pontoRef.z, lim = alcance + d.raio;
             if (cdx * cdx + cdz * cdz > lim * lim) continue;
 
-            const P = d.posicoes, M = d.matrizes;
+            const P = d.posicoes, M = d.matrizes, K = d.cores;
             for (let i = 0; i < d.n; ++i) {
                 const dx = P[i * 3] - pontoRef.x, dy = P[i * 3 + 1] - pontoRef.y, dz = P[i * 3 + 2] - pontoRef.z;
                 if (dx * dx + dy * dy + dz * dz > raioSq) continue;
                 lote.set(M.subarray(i * 16, i * 16 + 16), n * 16);
+                if (loteCor) { loteCor[n * 3] = K[i * 3]; loteCor[n * 3 + 1] = K[i * 3 + 1]; loteCor[n * 3 + 2] = K[i * 3 + 2]; }
                 n++;
             }
         }

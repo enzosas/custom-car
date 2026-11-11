@@ -1,7 +1,7 @@
 // Floresta.ts — port de Floresta.h: distribuição das árvores (Perlin + rejeição pela pista) e seleção de LOD.
 
 import { GAME_CONFIG } from '@/core/config';
-import type { Terreno } from './Terreno';
+import { amostrarGrade, type Terreno, type AtributosChunk } from './Terreno';
 import type { Estrada } from './Estrada';
 import { Mt19937, uniformReal } from '@/core/Random';
 import { PerlinNoise2D, AREA_REF, sementeChunk } from './Ruido';
@@ -23,7 +23,7 @@ export class Floresta {
     private seed = 1;
     private perlin = new PerlinNoise2D(1337);
 
-    constructor(private config = GAME_CONFIG) {}
+    constructor(private config = GAME_CONFIG) { }
 
     /** a seed do mundo muda onde ficam as clareiras e o sorteio de cada chunk */
     definirSeed(seed: number) {
@@ -54,7 +54,7 @@ export class Floresta {
      * A densidade é a mesma do mapa antigo: `quantidade` árvores por AREA_REF (12 tentativas por árvore, com a
      * aceitação do ruído de clareiras, que na média fica em ~6,5%).
      */
-    adicionarChunk(chave: string, cx: number, cz: number, tam: number, terreno: Terreno, estrada?: Estrada) {
+    adicionarChunk(chave: string, cx: number, cz: number, tam: number, terreno: Terreno, estrada?: Estrada, at?: AtributosChunk) {
         this.remover(chave);
         const pArvore = this.config.arvore.arvores;
         const x0 = cx * tam, z0 = cz * tam;
@@ -82,7 +82,9 @@ export class Floresta {
             if (densidade < limiarClareira) continue;
 
             const chanceAceite = (densidade - limiarClareira) / (1 - limiarClareira);
-            if (uniformReal(rng, 0, 1) > chanceAceite * chanceAceite) continue;
+            // a paleta diz quanto de árvore o ponto aceita (nada no deserto, na rocha e na neve); sem sorteio extra
+            const fator = at ? amostrarGrade(at.veg, 2, 0, at.celulas, tam / at.celulas, cx, cz, x, z) : 1;
+            if (uniformReal(rng, 0, 1) > chanceAceite * chanceAceite * fator) continue;
 
             if (estrada && estrada.distanciaEixo(x, z) < distMinimaPista) continue;
 

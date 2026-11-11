@@ -228,7 +228,8 @@ export class Jogo {
         const marcasPista = (e: typeof c.estrada.estrada) => ({
             marcacoes: e.marcacoes, linhaLargura: e.linhaLargura, linhaMargem: e.linhaMargem, tracoComprimento: e.tracoComprimento, tracoVao: e.tracoVao,
         });
-        const terrenoMudou = mudou(c.terreno.parametros, a.terreno.parametros) || mudou(geoPista(c.estrada.estrada), geoPista(a.estrada.estrada));
+        const terrenoMudou = mudou(c.terreno.parametros, a.terreno.parametros) || mudou(c.terreno.paleta, a.terreno.paleta)
+            || mudou(geoPista(c.estrada.estrada), geoPista(a.estrada.estrada));
         if (!terrenoMudou && mudou(marcasPista(c.estrada.estrada), marcasPista(a.estrada.estrada))) this.world.regerarMarcacoes();
 
         if (carroMudou) {
@@ -388,7 +389,7 @@ export class Jogo {
         this.renderizador.sombra.atualizarParaCamera(this.renderizador.camera.position);
         this.world.atualizarFlorestaLods(this.renderizador.camera.position, false);
 
-        const nG = this.world.grama.selecionar(this.renderizador.camera.position, false, this.world.gramaLote);
+        const nG = this.world.grama.selecionar(this.renderizador.camera.position, false, this.world.gramaLote, this.world.gramaLoteCor);
         this.world.atualizarGrama();
         this.world.gramaMesh.count = nG;
 

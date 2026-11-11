@@ -34,6 +34,9 @@ void main() {
     // do espaço da vista de volta para os eixos do mundo, SEM somar a posição da câmera: R^T * v
     vRel = mvPos.xyz * mat3(viewMatrix);
     vColor = color;
+#ifdef USE_INSTANCING_COLOR
+    vColor *= instanceColor;         // cor por instância (tufos de grama: a cor do terreno sob cada um)
+#endif
 
     vFragPosLightSpace = uLightSpaceCam * vec4(vRel, 1.0);
     gl_Position = projectionMatrix * mvPos;
