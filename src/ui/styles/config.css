@@ -20,13 +20,31 @@
     padding-left: 16px;
 }
 
-.painel-btn.mobile { width: 100%; height: 46px; }
-.painel-btn.mobile .rotulo { font-size: 16px; }
-.painel-btn.mobile:active { transform: scale(0.9); }
+.painel-btn.mobile {
+    width: 100%;
+    height: 46px;
+}
 
-.painel-btn.desktop { width: 100%; height: 42px; }
-.painel-btn.desktop .rotulo { font-size: 19.7px; }
-.painel-btn.desktop:active { transform: scale(0.85); }
+.painel-btn.mobile .rotulo {
+    font-size: 16px;
+}
+
+.painel-btn.mobile:active {
+    transform: scale(0.9);
+}
+
+.painel-btn.desktop {
+    width: 100%;
+    height: 42px;
+}
+
+.painel-btn.desktop .rotulo {
+    font-size: 19.7px;
+}
+
+.painel-btn.desktop:active {
+    transform: scale(0.85);
+}
 
 .painel-btn.active-tab {
     background: rgba(255, 255, 255, 0.3);
@@ -34,11 +52,32 @@
     color: rgba(0, 0, 0, 0.9);
 }
 
+.painel-btn.acao {
+    /* botão de ação do painel (ex.: nova seed): vidro como as abas; afunda ao ser pressionado.
+       border-box: com width 100% a borda de 1px somava por fora e criava uma barra de rolagem horizontal */
+    box-sizing: border-box;
+    margin: 4px 0;
+}
+
+.painel-btn.acao.mobile:active,
+.painel-btn.acao.desktop:active {
+    transform: scale(0.97);
+    background: rgba(255, 255, 255, 0.3);
+    box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.15), inset -4px -4px 8px rgba(255, 255, 255, 0.3);
+}
+
+@media (hover: hover) {
+    .painel-btn.acao:hover {
+        background: rgba(255, 255, 255, 0.28);
+    }
+}
+
 .painel-item {
     cursor: ew-resize;
     user-select: none;
     -webkit-user-select: none;
-    touch-action: pan-y; /* scroll vertical nativo; só o gesto horizontal altera o valor */
+    touch-action: pan-y;
+    /* scroll vertical nativo; só o gesto horizontal altera o valor */
     font-family: Arial, Helvetica, sans-serif;
     white-space: nowrap;
     display: flex;
@@ -48,8 +87,20 @@
     flex-shrink: 0;
 }
 
-.painel-item.mobile { height: 26px; font-size: 15px; }
-.painel-item.desktop { height: 22px; font-size: 19.7px; }
+.painel-item.mobile {
+    height: 26px;
+    font-size: 15px;
+}
+
+.painel-item.desktop {
+    height: 22px;
+    font-size: 19.7px;
+}
+
+.painel-item.info {
+    cursor: default;
+    color: rgba(0, 0, 0, 0.5);
+}
 
 .painel-item.dragging {
     color: #0055aa;
@@ -64,7 +115,9 @@
     touch-action: pan-y;
 }
 
-.painel-item.mobile.secao { margin-top: 10px; }
+.painel-item.mobile.secao {
+    margin-top: 10px;
+}
 
 /* interruptor liga/desliga (SwitchRow): trilho afundado como a aba ativa; azul do arrasto quando ligado */
 .painel-switch {
@@ -82,8 +135,15 @@
     flex-shrink: 0;
 }
 
-.painel-switch.mobile { height: 30px; font-size: 15px; }
-.painel-switch.desktop { height: 32px; font-size: 19.7px; }
+.painel-switch.mobile {
+    height: 30px;
+    font-size: 15px;
+}
+
+.painel-switch.desktop {
+    height: 32px;
+    font-size: 19.7px;
+}
 
 .painel-switch .trilho {
     position: relative;
@@ -115,7 +175,9 @@
     box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.3), inset -2px -2px 4px rgba(255, 255, 255, 0.2);
 }
 
-.painel-switch.ligado .trilho::after { transform: translateX(22px); }
+.painel-switch.ligado .trilho::after {
+    transform: translateX(22px);
+}
 
 /* ---------- mobile ---------- */
 .painel-config-root {
@@ -131,7 +193,9 @@
     transition: opacity 0.3s ease;
 }
 
-.painel-config-root.open { opacity: 1; }
+.painel-config-root.open {
+    opacity: 1;
+}
 
 .painel-config-root.open .painel-col-menu,
 .painel-config-root.open .painel-col-sliders {
@@ -181,7 +245,9 @@
         height: 40%;
     }
 
-    .painel-col-vazia { flex: 1; }
+    .painel-col-vazia {
+        flex: 1;
+    }
 }
 
 /* ---------- desktop ---------- */
@@ -235,5 +301,11 @@
     box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
     margin: 3px 0;
 }
-.painel-amostra.mobile { height: 14px; }
-.painel-amostra.desktop { height: 18px; }
+
+.painel-amostra.mobile {
+    height: 14px;
+}
+
+.painel-amostra.desktop {
+    height: 18px;
+}

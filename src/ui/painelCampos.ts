@@ -21,6 +21,18 @@ export interface CampoDef {
 
 export interface InterruptorDef { nome: string; rotulo: string }
 
+/** ações que um botão do painel pode disparar (implementadas em ConfigPanel, via AcoesPainel) */
+export type AcaoPainel = 'novaSeed';
+
+export interface BotaoDef {
+  /** texto do botão */
+  rotulo: string;
+  /** o que acontece ao clicar */
+  acao: AcaoPainel;
+  /** linha de informação, em cinza, acima do botão (mostra o valor atual relacionado à ação) */
+  info?: 'seed';
+}
+
 export interface AmostraHSV { h: string; s: string; v: string }
 
 export interface SecaoDef {
@@ -28,6 +40,7 @@ export interface SecaoDef {
   caminho: string[];
   campos: CampoDef[];
   interruptores?: InterruptorDef[];
+  botoes?: BotaoDef[];
   amostra?: AmostraHSV;
   /** o jogo só recebe o novo valor quando o arrasto termina (para ajustes caros, como reconstruir o terreno) */
   aplicarAoSoltar?: boolean;
@@ -130,6 +143,10 @@ export const ABAS: AbaDef[] = [
   },
   {
     titulo: 'terreno config', secoes: [
+      {
+        titulo: 'seed', caminho: ['terreno', 'parametros'], campos: [],
+        botoes: [{ rotulo: 'nova seed', acao: 'novaSeed', info: 'seed' }],
+      },
       {
         titulo: 'parametros', caminho: ['terreno', 'parametros'], aplicarAoSoltar: true, campos: [
           { nome: 'espacamento', apresentacao: 'espacamento', tipo: 'float' },

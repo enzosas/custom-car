@@ -103,6 +103,8 @@ export class Jogo {
     setConfigAberto(aberto: boolean) { this.configAberto = aberto; }
     setMouseSobreUI(sobre: boolean) { this.mouseSobreUI = sobre; }
     marcarConfigAlterada() { this.painelAlterado = true; }
+    /** seed atual do mundo (mostrada no painel do terreno) */
+    getSeed() { return this.world.seedPista; }
 
     async iniciar() {
         if (this.descartado) return;

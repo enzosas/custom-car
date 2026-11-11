@@ -1,9 +1,10 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GAME_CONFIG } from '@/core/config';
 import { ABAS } from '../../painelCampos';
 import type { JogoRef } from '../../hooks/useJogo';
 import { TabMenu } from './TabMenu';
 import { FieldList } from './FieldList';
+import type { AcoesPainel } from './tipos';
 
 interface Props {
     jogoRef: JogoRef;
@@ -26,6 +27,12 @@ function ConfigPanelBase({ jogoRef, isMobile, abertoMobile, revisao }: Props) {
     const aberto = isMobile ? abertoMobile : abertoDesktop;
 
     const aoAlterar = useCallback(() => jogoRef.current?.marcarConfigAlterada(), [jogoRef]);
+
+    // o que os botões do painel podem pedir ao motor (ver painelCampos.ts: BotaoDef)
+    const acoes = useMemo<AcoesPainel>(() => ({
+        novaSeed: () => { jogoRef.current?.reiniciarSeed(); },
+        lerSeed: () => jogoRef.current?.getSeed() ?? null,
+    }), [jogoRef]);
 
     // --- ponteiro sobre a UI (desktop): evita orbitar a câmera / iniciar pulo por baixo do painel ---
     const sincronizarHover = useCallback(() => {
@@ -58,7 +65,7 @@ function ConfigPanelBase({ jogoRef, isMobile, abertoMobile, revisao }: Props) {
 
     // key força os campos a relerem o GAME_CONFIG ao trocar de aba ou quando o motor o altera
     const campos = (
-        <FieldList key={`${abaAtiva}-${revisao}`} aba={ABAS[abaAtiva]} config={GAME_CONFIG} modo={modo} onAlterado={aoAlterar} />
+        <FieldList key={`${abaAtiva}-${revisao}`} aba={ABAS[abaAtiva]} config={GAME_CONFIG} modo={modo} acoes={acoes} onAlterado={aoAlterar} />
     );
 
     if (isMobile) {
