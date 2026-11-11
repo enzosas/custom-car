@@ -196,6 +196,7 @@ export const GAME_CONFIG = {
             suavizacaoPos: 0.5,
             suavizacaoTarget: 1.0,
             taxaRetornoOrbita: 0.03,
+            autoCentrarVerticalmente: true, // true = o pitch ajustado com o mouse é relativo à inclinação do terreno (a câmera acompanha morros na mesma velocidade de taxaRetornoOrbita)
             sensibilidadeMouse: 0.35,
             offsetX: 0.0,
             offsetY: 0.0,

@@ -2,7 +2,7 @@
 // S  a l gica; o Jogo.ts aplica posi o/alvo na c mera do three.
 
 import { GAME_CONFIG } from '@/core/config';
-import { type V3, clamp, mix, radians, normalizarAngulo, lerpFactorDt } from '@/graphics/Mat4';
+import { type V3, clamp, mix, radians, degrees, normalizarAngulo, lerpFactorDt } from '@/graphics/Mat4';
 
 export interface EntradaMouse { x: number; y: number; direito: boolean; esquerdo: boolean }
 
@@ -18,6 +18,10 @@ export class CameraJogo {
     private anguloCameraPitch = 15;
     private pitchPadrao = 15;
     private taxaRetornoOrbita = 0.06;
+    private autoCentrarVerticalmente = true;
+    /** inclinação do terreno (graus, + = subida) seguida pela câmera; é subtraída do pitch relativo escolhido no mouse */
+    private inclinacaoSuave = 0;
+    private inclinacaoInicializada = false;
 
     private mouseAnteriorX = 0;
     private mouseAnteriorY = 0;
@@ -35,6 +39,21 @@ export class CameraJogo {
         this.suavizacaoPos = c.suavizacaoPos;
         this.suavizacaoTarget = c.suavizacaoTarget;
         this.taxaRetornoOrbita = c.taxaRetornoOrbita;
+        this.autoCentrarVerticalmente = c.autoCentrarVerticalmente ?? true;
+    }
+
+    /**
+     * inclinação do terreno sob o carro em graus (+ = subida). A malha é de triângulos planos (~150 unidades), então
+     * uma base curta (a distância entre eixos) daria um degrau a cada triângulo cruzado; por isso a base cobre
+     * ~2 células da malha: a janela desliza pela superfície contínua e a inclinação varia sem saltos.
+     */
+    private inclinacaoTerreno(pos: V3, yaw: number, alturaFn?: (x: number, z: number) => number): number {
+        if (!alturaFn) return 0;
+        const celula = this.config.terreno.parametros.espacamento * 0.005;
+        const base = Math.max(0.001, this.config.carro.dimensoes.comprimentorodas, celula * 2);
+        const fx = Math.sin(yaw) * base * 0.5, fz = Math.cos(yaw) * base * 0.5;
+        const dh = alturaFn(pos.x + fx, pos.z + fz) - alturaFn(pos.x - fx, pos.z - fz);
+        return degrees(Math.atan2(dh, base));
     }
 
     update(deltaTime: number, mouse: EntradaMouse, targetPos: V3, targetYaw: number, alturaTeto: number,
@@ -47,7 +66,8 @@ export class CameraJogo {
 
         const sensibilidade = this.config.camera.parametros.sensibilidadeMouse;
 
-        if (mouse.direito && !mouseSobreUI) {
+        const arrastando = mouse.direito && !mouseSobreUI;
+        if (arrastando) {
             if (!this.estavaArrastando) {
                 this.mouseAnteriorX = mouse.x; this.mouseAnteriorY = mouse.y;
                 this.estavaArrastando = true;
@@ -67,6 +87,12 @@ export class CameraJogo {
                 this.anguloCameraYaw += diffYaw * lerpFactorDt(this.taxaRetornoOrbita, dt60);
             }
         }
+
+        // auto-centrar: a inclinação do terreno segue na mesma velocidade do retorno da órbita (desligado = alvo 0, decai suave);
+        // segurando o botão direito o pitch fica parado (a inclinação seguida congela) e ao soltar a câmera volta a acompanhar o terreno
+        const inclinacaoAlvo = this.autoCentrarVerticalmente ? this.inclinacaoTerreno(targetPos, targetYaw, alturaFn) : 0;
+        if (!this.inclinacaoInicializada) { this.inclinacaoSuave = inclinacaoAlvo; this.inclinacaoInicializada = true; }
+        else if (!arrastando) this.inclinacaoSuave = mix(this.inclinacaoSuave, inclinacaoAlvo, lerpFactorDt(this.taxaRetornoOrbita, dt60));
 
         const pConf = this.config.camera.parametros;
         const offX = pConf.offsetX ?? 0;
@@ -89,7 +115,9 @@ export class CameraJogo {
         };
 
         const raio = this.distanciaRaioBase * this.fatorZoom;
-        const radPitch = radians(this.anguloCameraPitch);
+        // subida = traseira do carro aponta para baixo, então a câmera desce no mundo para manter o mesmo ângulo em relação ao carro
+        const pitchEfetivo = clamp(this.anguloCameraPitch - this.inclinacaoSuave, -20, 85);
+        const radPitch = radians(pitchEfetivo);
         // offset de yaw: só desloca a posição em órbita; o "retorno" da órbita continua usando o yaw sem o offset
         const yawOrbita = this.anguloCameraYaw + radians(pConf.offsetYaw ?? 0);
         const cosP = Math.cos(radPitch), sinP = Math.sin(radPitch);
