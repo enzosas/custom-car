@@ -101,6 +101,7 @@ export const GAME_CONFIG = {
         },
         superficie: {
             offsetprofundidadegrama: 0.0,
+            particulas: true,        // false = desliga todas as partículas do carro (fumaça, grama, areia, neve, folhas, poeira)
         },
     },
     arvore: {

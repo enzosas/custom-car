@@ -172,7 +172,8 @@ export const ABAS: AbaDef[] = [
       {
         titulo: 'superficie', caminho: ['terreno', 'superficie'], campos: [
           { nome: 'offsetprofundidadegrama', apresentacao: 'afundamento da grama', tipo: 'float' },
-        ]
+        ],
+        interruptores: [{ nome: 'particulas', rotulo: 'particulas ligadas' }],
       },
     ]
   },

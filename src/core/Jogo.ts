@@ -137,7 +137,8 @@ export class Jogo {
 
         this.efeitos = new EfeitosDrift(
             this.renderizador.scene, this.uniforms, this.veiculo,
-            (x, z) => this.world.estrada.estaNoAsfalto(x, z), this.config,
+            (x, z) => this.world.estrada.estaNoAsfalto(x, z),
+            (x, z, saida) => this.world.terreno.superficieEm(x, z, saida), this.config,
         );
 
         this.reposicionarCarro();   // monta os chunks (terreno + vegetação) em volta da largada

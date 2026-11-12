@@ -76,7 +76,7 @@ interface ParamRelevo {
 export class Terreno {
     private perlin = new PerlinNoise2D(1);
     private alturasTmp = new Float32Array(0);        // alturas do chunk com 1 vértice de folga em volta (inclinação sem emenda)
-    private paletaTmp: SaidaPaleta = { r: 0, g: 0, b: 0, arvore: 1, grama: 1 };
+    private paletaTmp: SaidaPaleta = { r: 0, g: 0, b: 0, arvore: 1, grama: 1, neve: 0, rocha: 0, deserto: 0, outono: 0 };
     /** a pista que molda o terreno (definida pelo WorldBuilder); sem ela o terreno é só o relevo */
     estrada: Estrada | null = null;
 
@@ -172,6 +172,27 @@ export class Terreno {
         return limitar((ruidoFractal(this.perlin, x * f + 900, z * f + 900, 2, 0.5) - 0.5) * CONTRASTE_BIOMA + 0.5, 0, 1);
     }
 
+    /** manchas grandes de variação de cor em (x, z), em [-1.2, 1.2] */
+    private manchaEm(x: number, z: number): number {
+        return (ruidoFractal(this.perlin, x / ESCALA_MANCHAS + 300, z / ESCALA_MANCHAS + 300, 2, 0.5) - 0.5) * 2.4;
+    }
+
+    /**
+     * Cor do solo e pesos de superfície (neve, rocha, deserto, outono) em um ponto qualquer do mundo, com a MESMA
+     * paleta que pinta os vértices (altitude, inclinação e bioma). Mais caro que biomaEm: faz 5 leituras de altura.
+     * Serve às partículas do carro, que não rodam todo frame (ver EfeitosDrift). `s` é preenchido e reaproveitado.
+     */
+    superficieEm(x: number, z: number, s: SaidaPaleta) {
+        const p = this.config.terreno.paleta;
+        if (!p.ativa) { avaliarPaleta(p, 0, 0, 0, 0, s); return; }
+        const q = this.lerParametros(), esp = this.espacamento;
+        const hc = this.obterAlturaMundo(x, z);
+        const hx = (this.alturaVertice(x + esp, z, q) - this.alturaVertice(x - esp, z, q)) / (2 * esp);
+        const hz = (this.alturaVertice(x, z + esp, q) - this.alturaVertice(x, z - esp, q)) / (2 * esp);
+        const ruido = limitar(0.65 * this.manchaEm(x, z) + 0.35 * hash2(Math.round(x / esp), Math.round(z / esp)), -1, 1);
+        avaliarPaleta(p, this.biomaEm(x, z), limitar(hc / q.escala, 0, 1), Math.hypot(hx, hz), ruido, s);
+    }
+
     criarAtributosChunk(): AtributosChunk {
         const celulas = this.celulasPorChunk, n = celulas + 1;
         return { celulas, cor: new Float32Array(n * n * 3), veg: new Float32Array(n * n * 2) };
@@ -218,8 +239,7 @@ export class Terreno {
                 const alt = limitar(hc / q.escala, 0, 1);
 
                 // variação de cor: manchas grandes (ruído suave) misturadas com um granulado por vértice
-                const mancha = (ruidoFractal(this.perlin, gx / ESCALA_MANCHAS + 300, gz / ESCALA_MANCHAS + 300, 2, 0.5) - 0.5) * 2.4;
-                const ruido = limitar(0.65 * mancha + 0.35 * hash2(gi, gj), -1, 1);
+                const ruido = limitar(0.65 * this.manchaEm(gx, gz) + 0.35 * hash2(gi, gj), -1, 1);
 
                 avaliarPaleta(p, this.biomaEm(gx, gz), alt, incl, ruido, s);
                 const k = j * n + i;

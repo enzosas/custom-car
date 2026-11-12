@@ -19,7 +19,11 @@ export interface ParamPaleta {
 export const COR_GRAMA_PADRAO = [0.34, 0.7, 0.56];
 
 /** resultado de avaliarPaleta (reaproveitado, para não alocar por vértice) */
-export interface SaidaPaleta { r: number; g: number; b: number; arvore: number; grama: number }
+export interface SaidaPaleta {
+    r: number; g: number; b: number; arvore: number; grama: number;
+    /** pesos 0..1 de "que superfície é esta" (somam no máximo 1; o resto é solo comum). Usados pelas partículas do carro */
+    neve: number; rocha: number; deserto: number; outono: number;
+}
 
 const limitar = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 const suave = (a: number, b: number, x: number) => { const t = limitar((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
@@ -50,6 +54,7 @@ export function avaliarPaleta(p: ParamPaleta, bioma: number, alt: number, incl: 
     if (!p.ativa) {
         s.r = COR_GRAMA_PADRAO[0]; s.g = COR_GRAMA_PADRAO[1]; s.b = COR_GRAMA_PADRAO[2];
         s.arvore = 1; s.grama = 1;
+        s.neve = 0; s.rocha = 0; s.deserto = 0; s.outono = 0;
         return;
     }
 
@@ -85,4 +90,12 @@ export function avaliarPaleta(p: ParamPaleta, bioma: number, alt: number, incl: 
     const fAltGrama = 1 - suave(p.altitudeRocha, p.altitudeRocha + 0.12, alt);
     s.arvore = (1 - 0.9 * suave(0.6, 0.84, bioma)) * (1 - suave(0.84, 0.92, bioma)) * fAltArvore * fInc;
     s.grama = (1 - 0.85 * suave(0.68, 0.88, bioma)) * fAltGrama * fInc;
+
+    // pesos de superfície: a neve e a rocha vêm direto dos fatores acima; deserto e outono são faixas do ruído de bioma
+    // (a mesma região da rampa de cores), e só valem onde não há rocha nem neve por cima
+    const cobertura = (1 - fRocha) * (1 - fNeve);
+    s.neve = fNeve;
+    s.rocha = fRocha * (1 - fNeve);
+    s.deserto = suave(0.68, 0.80, bioma) * cobertura;
+    s.outono = suave(0.50, 0.58, bioma) * (1 - suave(0.64, 0.72, bioma)) * cobertura;
 }
