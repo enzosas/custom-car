@@ -325,11 +325,21 @@
 }
 
 /* top: 0 porque o sticky já respeita o padding do painel (18px no desktop, 15px no mobile): a âncora fica na linha do título */
-.reset-ancora.desktop { top: 0; margin-bottom: -4px; }   /* margin-bottom compensa o gap da coluna */
-.reset-ancora.mobile { top: 0; }
+.reset-ancora.desktop {
+    top: 0;
+    margin-bottom: -4px;
+}
+
+/* margin-bottom compensa o gap da coluna */
+.reset-ancora.mobile {
+    top: 0;
+}
 
 /* o título da primeira seção não passa por baixo do ↺ */
-.reset-ancora + .painel-item.secao { padding-right: 42px; box-sizing: border-box; }
+.reset-ancora+.painel-item.secao {
+    padding-right: 42px;
+    box-sizing: border-box;
+}
 
 .reset-ctl {
     display: flex;
@@ -337,8 +347,16 @@
     gap: 6px;
 }
 
-.reset-ctl.desktop { margin-top: -4px; margin-right: -10px; }
-.reset-ctl.mobile { margin-top: 6px; margin-right: -12px; }
+.reset-ctl.desktop {
+    margin-top: calc((var(--secao-h-desktop) - 1px - 30px) / 2);
+    margin-right: -10px;
+}
+
+/* centraliza o botão na linha do título */
+.reset-ctl.mobile {
+    margin-top: calc((var(--secao-h-mobile) - 1px - 34px) / 2);
+    margin-right: -12px;
+}
 
 .reset-chip,
 .reset-ic {
@@ -368,9 +386,21 @@
     transition: transform 0.4s cubic-bezier(0.3, 0.7, 0.2, 1), opacity 0.3s ease, background 0.15s ease;
 }
 
-.reset-ctl.on .reset-chip { transform: none; opacity: 1; pointer-events: inherit; }
-.reset-ctl.on .reset-chip.vazio { opacity: 0.5; cursor: default; }
-.reset-ctl.on .reset-chip:not(.vazio):active { transform: scale(0.95); background: rgba(255, 255, 255, 0.8); }
+.reset-ctl.on .reset-chip {
+    transform: none;
+    opacity: 1;
+    pointer-events: inherit;
+}
+
+.reset-ctl.on .reset-chip.vazio {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.reset-ctl.on .reset-chip:not(.vazio):active {
+    transform: scale(0.95);
+    background: rgba(255, 255, 255, 0.8);
+}
 
 .reset-ic {
     position: relative;
@@ -381,7 +411,9 @@
     transition: background 0.3s ease, color 0.3s ease, transform 0.12s ease;
 }
 
-.reset-ic:active { transform: scale(0.9); }
+.reset-ic:active {
+    transform: scale(0.9);
+}
 
 .reset-ic span {
     position: absolute;
@@ -393,14 +425,36 @@
     transition: opacity 0.25s ease, transform 0.45s ease;
 }
 
-.reset-ic .k { opacity: 0; transform: rotate(180deg); }
+.reset-ic .k {
+    opacity: 0;
+    transform: rotate(180deg);
+}
 
-.reset-ctl.on .reset-ic { background: #0055aa; color: #fff; }
-.reset-ctl.on .reset-ic .r { opacity: 0; transform: rotate(-180deg); }
-.reset-ctl.on .reset-ic .k { opacity: 1; transform: none; }
+.reset-ctl.on .reset-ic {
+    background: #0055aa;
+    color: #fff;
+}
 
-.reset-ctl.mobile .reset-chip { height: 34px; border-radius: 17px; }
-.reset-ctl.mobile .reset-ic { width: 34px; height: 34px; border-radius: 17px; }
+.reset-ctl.on .reset-ic .r {
+    opacity: 0;
+    transform: rotate(-180deg);
+}
+
+.reset-ctl.on .reset-ic .k {
+    opacity: 1;
+    transform: none;
+}
+
+.reset-ctl.mobile .reset-chip {
+    height: 34px;
+    border-radius: 17px;
+}
+
+.reset-ctl.mobile .reset-ic {
+    width: 34px;
+    height: 34px;
+    border-radius: 17px;
+}
 
 /* painel com o modo ativo: brilho azul (acrescentado à sombra do vidro) */
 .painel-desktop-fundo,
@@ -427,21 +481,130 @@
     transition: opacity 0.3s ease;
 }
 
-.painel-item .reset-marca { margin-left: auto; padding-left: 10px; }
-.painel-switch .reset-marca { margin-left: 8px; }
+.painel-item .reset-marca {
+    padding: 0 8px;
+}
+
+/* o rótulo ocupa o espaço livre; a marca fica colada na célula */
+.painel-switch .reset-marca {
+    margin-left: 8px;
+}
 
 .painel-item.reset-alt,
-.painel-switch.reset-alt { color: #0055aa; font-weight: bold; cursor: pointer; }
+.painel-switch.reset-alt {
+    color: #0055aa;
+    font-weight: bold;
+    cursor: pointer;
+}
 
 .painel-item.reset-ina,
-.painel-switch.reset-ina { opacity: 0.38; cursor: default; }
+.painel-switch.reset-ina {
+    opacity: 0.38;
+    cursor: default;
+}
 
 .painel-item.reset-alt .reset-marca,
-.painel-switch.reset-alt .reset-marca { opacity: 1; }
+.painel-switch.reset-alt .reset-marca {
+    opacity: 1;
+}
 
 /* flash azul ao voltar ao original (a e b alternam para reiniciar a animação a cada reset) */
-@keyframes reset-flash-a { from { background: rgba(0, 85, 170, 0.4); } to { background: transparent; } }
-@keyframes reset-flash-b { from { background: rgba(0, 85, 170, 0.4); } to { background: transparent; } }
+@keyframes reset-flash-a {
+    from {
+        background: rgba(0, 85, 170, 0.4);
+    }
 
-.painel-item.flash-a, .painel-switch.flash-a { animation: reset-flash-a 0.7s ease-out; border-radius: 6px; }
-.painel-item.flash-b, .painel-switch.flash-b { animation: reset-flash-b 0.7s ease-out; border-radius: 6px; }
+    to {
+        background: transparent;
+    }
+}
+
+@keyframes reset-flash-b {
+    from {
+        background: rgba(0, 85, 170, 0.4);
+    }
+
+    to {
+        background: transparent;
+    }
+}
+
+.painel-item.flash-a,
+.painel-switch.flash-a {
+    animation: reset-flash-a 0.7s ease-out;
+    border-radius: 6px;
+}
+
+.painel-item.flash-b,
+.painel-switch.flash-b {
+    animation: reset-flash-b 0.7s ease-out;
+    border-radius: 6px;
+}
+
+/* ---------- valor numérico em célula ancorada na borda direita do painel ---------- */
+.painel-item .painel-rotulo {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.painel-celula {
+    flex-shrink: 0;
+    box-sizing: border-box;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 10px;
+    border-radius: 8px;
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
+    color: rgba(0, 0, 0, 0.85);
+    background: rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.15), inset -2px -2px 4px rgba(255, 255, 255, 0.3);
+    transition: background 0.15s ease, color 0.1s ease;
+}
+
+.painel-item.desktop .painel-celula {
+    min-width: 104px;
+    font-size: 17px;
+}
+
+.painel-item.mobile .painel-celula {
+    min-width: 76px;
+    font-size: 14px;
+}
+
+/* linhas com célula ficam um pouco mais altas para o campo respirar */
+.painel-item.desktop:not(.secao):not(.info) {
+    height: 28px;
+}
+
+.painel-item.mobile:not(.secao):not(.info) {
+    height: 28px;
+}
+
+.painel-item.dragging .painel-celula {
+    background: rgba(0, 85, 170, 0.18);
+    color: #0055aa;
+}
+
+/* ---------- títulos de seção (divisores): mais altos; o botão ↺ se centraliza na mesma linha ---------- */
+:root {
+    --secao-h-desktop: 36px;
+    --secao-h-mobile: 38px;
+}
+
+.painel-item.secao {
+    box-sizing: border-box;
+}
+
+.painel-item.secao.desktop {
+    height: var(--secao-h-desktop);
+}
+
+.painel-item.secao.mobile {
+    height: var(--secao-h-mobile);
+}

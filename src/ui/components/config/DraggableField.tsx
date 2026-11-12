@@ -94,8 +94,9 @@ export function DraggableField({ def, objeto, caminho, modo, onAlterado, aplicar
 
     return (
         <div className={classes} {...(modoReset ? { onClick: aoClicarReset } : handlers)}>
-            <span>{`${def.apresentacao ?? def.nome}: ${formatarValor(alvoVisivel)}`}</span>
+            <span className="painel-rotulo">{def.apresentacao ?? def.nome}</span>
             <span className="reset-marca">↺</span>
+            <span className="painel-celula">{formatarValor(alvoVisivel)}</span>
         </div>
     );
 }
