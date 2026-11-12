@@ -6,4 +6,6 @@ export interface AcoesPainel {
     novaSeed: () => void;
     /** seed atual do mundo, ou null se o motor ainda não existe */
     lerSeed: () => number | null;
+    /** true se o perfil de carro ativo é o do modelo GLB: o "original" dos campos do carro depende do perfil */
+    carroGLB: () => boolean;
 }

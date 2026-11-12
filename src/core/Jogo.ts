@@ -112,6 +112,8 @@ export class Jogo {
     marcarConfigAlterada() { this.painelAlterado = true; }
     /** seed atual do mundo (mostrada no painel do terreno) */
     getSeed() { return this.world.seedPista; }
+    /** true se o perfil de carro ativo é o do modelo GLB (o painel usa isso para saber o valor original dos campos do carro) */
+    getModoCarroGLB() { return this.modoCarroGLB; }
 
     async iniciar() {
         if (this.descartado) return;

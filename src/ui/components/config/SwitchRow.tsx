@@ -8,6 +8,13 @@ interface Props {
     chave: string;
     modo: ModoPainel;
     onAlterado: () => void;
+    /** modo "resetar configs": clicar no switch alterado o devolve a `original` */
+    modoReset?: boolean;
+    original?: boolean;
+    id?: string;
+    /** contador que sobe a cada reset do switch; reinicia o flash azul */
+    flash?: number;
+    onResetar?: (id: string) => void;
 }
 
 /**
@@ -15,25 +22,38 @@ interface Props {
  * <div role="switch"> de propósito (como o TabButton): um <button> focado reagiria à tecla Espaço,
  * que o jogo usa como freio de mão.
  */
-export function SwitchRow({ rotulo, objeto, chave, modo, onAlterado }: Props) {
+export function SwitchRow({ rotulo, objeto, chave, modo, onAlterado, modoReset = false, original, id = chave, flash = 0, onResetar }: Props) {
     const [, redesenhar] = useReducer((n: number) => n + 1, 0);
     const ligado = !!objeto[chave];
 
+    const alterado = modoReset && original !== undefined && ligado !== original;
+
     const alternar = () => {
+        if (modoReset) {
+            if (!alterado || original === undefined) return;
+            objeto[chave] = original;
+            redesenhar();
+            onResetar?.(id);   // quem recebe já avisa o motor
+            return;
+        }
         objeto[chave] = !objeto[chave];
         redesenhar();
         onAlterado();
     };
+
+    const classes = `painel-switch ${modo}${ligado ? ' ligado' : ''}`
+        + (modoReset ? (alterado ? ' reset-alt' : ' reset-ina') : '')
+        + (flash > 0 ? (flash % 2 ? ' flash-a' : ' flash-b') : '');
 
     return (
         <div
             role="switch"
             aria-checked={ligado}
             aria-label={rotulo}
-            className={`painel-switch ${modo}${ligado ? ' ligado' : ''}`}
+            className={classes}
             onClick={alternar}
         >
-            <span>{rotulo}</span>
+            <span>{rotulo}<span className="reset-marca">↺</span></span>
             <span className="trilho" />
         </div>
     );

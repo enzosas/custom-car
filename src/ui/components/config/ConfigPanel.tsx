@@ -4,6 +4,8 @@ import { ABAS } from '../../painelCampos';
 import type { JogoRef } from '../../hooks/useJogo';
 import { TabMenu } from './TabMenu';
 import { FieldList } from './FieldList';
+import { ResetControl } from './ResetControl';
+import { itensAlterados } from '../../lib/padroes';
 import type { AcoesPainel } from './tipos';
 
 interface Props {
@@ -26,13 +28,33 @@ function ConfigPanelBase({ jogoRef, isMobile, abertoMobile, revisao }: Props) {
     const modo = isMobile ? 'mobile' : 'desktop';
     const aberto = isMobile ? abertoMobile : abertoDesktop;
 
-    const aoAlterar = useCallback(() => jogoRef.current?.marcarConfigAlterada(), [jogoRef]);
+    // modo "resetar configs": clicar num valor alterado o devolve ao original; "resetar tudo" vale para a aba atual
+    const [modoReset, setModoReset] = useState(false);
+    const [sinalResetarTudo, setSinalResetarTudo] = useState(0);
+    const [, atualizarContador] = useState(0);
+    const modoResetRef = useRef(false);
+    modoResetRef.current = modoReset;
+    const contadorExibido = useRef(0);
+
+    // fechar o painel desfaz o modo
+    useEffect(() => { if (!aberto) setModoReset(false); }, [aberto]);
+
+    const aoAlterar = useCallback(() => {
+        jogoRef.current?.marcarConfigAlterada();
+        // com o modo ativo, o contador do chip acompanha cada valor devolvido ao original
+        if (modoResetRef.current) atualizarContador((n) => n + 1);
+    }, [jogoRef]);
 
     // o que os botões do painel podem pedir ao motor (ver painelCampos.ts: BotaoDef)
     const acoes = useMemo<AcoesPainel>(() => ({
         novaSeed: () => { jogoRef.current?.reiniciarSeed(); },
         lerSeed: () => jogoRef.current?.getSeed() ?? null,
+        carroGLB: () => jogoRef.current?.getModoCarroGLB() ?? false,
     }), [jogoRef]);
+
+    const contador = modoReset ? itensAlterados(ABAS[abaAtiva], GAME_CONFIG, acoes.carroGLB()).length : 0;
+    // enquanto o chip desliza para fora, mantém o último número (senão ele piscaria sem o contador)
+    if (modoReset) contadorExibido.current = contador;
 
     // --- ponteiro sobre a UI (desktop): evita orbitar a câmera / iniciar pulo por baixo do painel ---
     const sincronizarHover = useCallback(() => {
@@ -65,7 +87,19 @@ function ConfigPanelBase({ jogoRef, isMobile, abertoMobile, revisao }: Props) {
 
     // key força os campos a relerem o GAME_CONFIG ao trocar de aba ou quando o motor o altera
     const campos = (
-        <FieldList key={`${abaAtiva}-${revisao}`} aba={ABAS[abaAtiva]} config={GAME_CONFIG} modo={modo} acoes={acoes} onAlterado={aoAlterar} />
+        <FieldList
+            key={`${abaAtiva}-${revisao}`} aba={ABAS[abaAtiva]} config={GAME_CONFIG} modo={modo} acoes={acoes} onAlterado={aoAlterar}
+            modoReset={modoReset} sinalResetarTudo={sinalResetarTudo}
+        />
+    );
+
+    // "resetar tudo" restaura a aba atual e desativa o modo
+    const controleReset = (
+        <ResetControl
+            ativo={modoReset} contador={contadorExibido.current} modo={modo}
+            onAlternar={() => setModoReset((v) => !v)}
+            onResetarTudo={() => { setSinalResetarTudo((s) => s + 1); setModoReset(false); }}
+        />
     );
 
     if (isMobile) {
@@ -77,7 +111,7 @@ function ConfigPanelBase({ jogoRef, isMobile, abertoMobile, revisao }: Props) {
                     titulos={titulos} ativa={abaAtiva} modo={modo} config={GAME_CONFIG}
                     onSelecionar={selecionar} onAlterado={aoAlterar}
                 />
-                <div ref={colunaRef} className="painel-col-sliders glass-panel">{campos}</div>
+                <div ref={colunaRef} className={`painel-col-sliders glass-panel${modoReset ? ' reset-ativo' : ''}`}>{controleReset}{campos}</div>
                 <div className="painel-col-vazia" />
             </div>
         );
@@ -92,9 +126,10 @@ function ConfigPanelBase({ jogoRef, isMobile, abertoMobile, revisao }: Props) {
             />
             <div
                 ref={colunaRef}
-                className={`painel-desktop-fundo glass-panel${abertoDesktop ? ' open' : ''}`}
+                className={`painel-desktop-fundo glass-panel${abertoDesktop ? ' open' : ''}${modoReset ? ' reset-ativo' : ''}`}
                 {...regiao('painel')}
             >
+                {controleReset}
                 {campos}
             </div>
         </div>

@@ -3,7 +3,7 @@ import { useMemo, useReducer, useRef } from 'react';
 import type { CampoDef } from '../../painelCampos';
 import { useDragValue } from '../../hooks/useDragValue';
 import { arrastar, formatarValor, iniciarSessao, type Alvo, type SessaoArrasto } from '../../lib/propriedade';
-import { valorPadrao } from '../../lib/padroes';
+import { foiAlterado, idItem, valorPadrao } from '../../lib/padroes';
 import type { ModoPainel } from './tipos';
 
 interface Props {
@@ -15,9 +15,15 @@ interface Props {
     onAlterado: () => void;
     /** o GAME_CONFIG só recebe o valor ao soltar o arrasto; enquanto arrasta, só o texto do campo muda */
     aplicarAoSoltar?: boolean;
+    /** modo "resetar configs": clicar no campo alterado o devolve a `original` (o arrasto fica desativado) */
+    modoReset?: boolean;
+    original?: number;
+    /** contador que sobe a cada reset do campo; reinicia o flash azul */
+    flash?: number;
+    onResetar?: (id: string) => void;
 }
 
-export function DraggableField({ def, objeto, caminho, modo, onAlterado, aplicarAoSoltar = false }: Props) {
+export function DraggableField({ def, objeto, caminho, modo, onAlterado, aplicarAoSoltar = false, modoReset = false, original, flash = 0, onResetar }: Props) {
     const chaveCaminho = caminho.join('.');
 
     // Rascunho usado nos campos "aplicar ao soltar": o arrasto altera ele, e não o GAME_CONFIG
@@ -75,9 +81,21 @@ export function DraggableField({ def, objeto, caminho, modo, onAlterado, aplicar
     // Enquanto arrasta um campo "aplicar ao soltar", mostra o rascunho; fora disso, o valor real do config
     const alvoVisivel = aplicarAoSoltar && arrastando ? alvoRascunho : alvoReal;
 
+    const alterado = modoReset && foiAlterado(objeto[def.nome], original);
+    const aoClicarReset = () => {
+        if (!alterado || original === undefined) return;
+        objeto[def.nome] = original;
+        onResetar?.(idItem(caminho, def.nome));
+    };
+
+    const classes = `painel-item ${modo}${arrastando ? ' dragging' : ''}`
+        + (modoReset ? (alterado ? ' reset-alt' : ' reset-ina') : '')
+        + (flash > 0 ? (flash % 2 ? ' flash-a' : ' flash-b') : '');
+
     return (
-        <div className={`painel-item ${modo}${arrastando ? ' dragging' : ''}`} {...handlers}>
-            {`${def.apresentacao ?? def.nome}: ${formatarValor(alvoVisivel)}`}
+        <div className={classes} {...(modoReset ? { onClick: aoClicarReset } : handlers)}>
+            <span>{`${def.apresentacao ?? def.nome}: ${formatarValor(alvoVisivel)}`}</span>
+            <span className="reset-marca">↺</span>
         </div>
     );
 }
