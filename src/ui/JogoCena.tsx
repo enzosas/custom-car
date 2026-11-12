@@ -39,7 +39,7 @@ export default function JogoCena() {
         <div className="cena" {...drop.handlers}>
             <canvas ref={canvasRef} className="cena-canvas" />
 
-            {!isMobile && <HudInfo stats={stats} />}
+            {!isMobile && <HudInfo stats={stats} jogoRef={jogoRef} />}
 
             <ConfigPanel
                 jogoRef={jogoRef}
