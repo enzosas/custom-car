@@ -85,20 +85,21 @@ function ConfigPanelBase({ jogoRef, isMobile, abertoMobile, revisao }: Props) {
 
     useEffect(() => { colunaRef.current?.scrollTo({ top: 0 }); }, [abaAtiva]);
 
-    // key força os campos a relerem o GAME_CONFIG ao trocar de aba ou quando o motor o altera
-    const campos = (
-        <FieldList
-            key={`${abaAtiva}-${revisao}`} aba={ABAS[abaAtiva]} config={GAME_CONFIG} modo={modo} acoes={acoes} onAlterado={aoAlterar}
-            modoReset={modoReset} sinalResetarTudo={sinalResetarTudo}
-        />
-    );
-
+    // o controle do modo "resetar configs" vai dentro do cabeçalho da primeira seção (ver FieldList), então rola com a lista
     // "resetar tudo" restaura a aba atual e desativa o modo
     const controleReset = (
         <ResetControl
             ativo={modoReset} contador={contadorExibido.current} modo={modo}
             onAlternar={() => setModoReset((v) => !v)}
             onResetarTudo={() => { setSinalResetarTudo((s) => s + 1); setModoReset(false); }}
+        />
+    );
+
+    // key força os campos a relerem o GAME_CONFIG ao trocar de aba ou quando o motor o altera
+    const campos = (
+        <FieldList
+            key={`${abaAtiva}-${revisao}`} aba={ABAS[abaAtiva]} config={GAME_CONFIG} modo={modo} acoes={acoes} onAlterado={aoAlterar}
+            modoReset={modoReset} sinalResetarTudo={sinalResetarTudo} acaoCabecalho={controleReset}
         />
     );
 
@@ -111,7 +112,7 @@ function ConfigPanelBase({ jogoRef, isMobile, abertoMobile, revisao }: Props) {
                     titulos={titulos} ativa={abaAtiva} modo={modo} config={GAME_CONFIG}
                     onSelecionar={selecionar} onAlterado={aoAlterar}
                 />
-                <div ref={colunaRef} className={`painel-col-sliders glass-panel${modoReset ? ' reset-ativo' : ''}`}>{controleReset}{campos}</div>
+                <div ref={colunaRef} className={`painel-col-sliders glass-panel${modoReset ? ' reset-ativo' : ''}`}>{campos}</div>
                 <div className="painel-col-vazia" />
             </div>
         );
@@ -129,7 +130,6 @@ function ConfigPanelBase({ jogoRef, isMobile, abertoMobile, revisao }: Props) {
                 className={`painel-desktop-fundo glass-panel${abertoDesktop ? ' open' : ''}${modoReset ? ' reset-ativo' : ''}`}
                 {...regiao('painel')}
             >
-                {controleReset}
                 {campos}
             </div>
         </div>

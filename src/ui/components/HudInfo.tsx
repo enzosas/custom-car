@@ -56,28 +56,35 @@ export function HudInfo({ stats, jogoRef }: Props) {
             onPointerEnter={() => sobreUI(true)}
             onPointerLeave={() => sobreUI(false)}
         >
-            {/* <div role="button" de propósito (como as abas): um <button> focado reagiria à tecla Espaço, o freio de mão */}
-            <div
-                role="button"
-                aria-label="Controles e informações"
-                aria-expanded={aberto}
-                className="hud-ajuda-btn"
-                onClick={() => setAberto((a) => !a)}
-            >
-                <span className="q1">?</span>
-                <span className="q2">✕</span>
+            <div className="hud-ajuda-cab">
+                <div className="hud-ajuda-titulo">controles</div>
+                {/* <div role="button" de propósito (como as abas): um <button> focado reagiria à tecla Espaço, o freio de mão */}
+                <div
+                    role="button"
+                    aria-label="Controles e informações"
+                    aria-expanded={aberto}
+                    className="hud-ajuda-btn"
+                    onClick={() => setAberto((a) => !a)}
+                >
+                    <span className="q1">?</span>
+                    <span className="q2">✕</span>
+                </div>
             </div>
-            <div className="hud-ajuda-titulo">controles</div>
-            <div className="hud-ajuda-lista" aria-hidden={!aberto}>
-                {linhas.map(([tecla, descricao], i) => (
-                    <div key={tecla} className="hud-ajuda-linha" style={{ '--i': i } as CSSProperties}>
-                        <span className="tecla">{tecla}</span>
-                        <span>{descricao}</span>
+            {/* o corpo cresce de 0 até a altura do conteúdo (grid 0fr -> 1fr): adicionar uma tecla não exige mexer em altura nenhuma */}
+            <div className="hud-ajuda-corpo" aria-hidden={!aberto}>
+                <div className="hud-ajuda-lista">
+                    <div className="hud-ajuda-itens">
+                        {linhas.map(([tecla, descricao], i) => (
+                            <div key={tecla} className="hud-ajuda-linha" style={{ '--i': i } as CSSProperties}>
+                                <span className="tecla">{tecla}</span>
+                                <span>{descricao}</span>
+                            </div>
+                        ))}
+                        <div className="hud-ajuda-linha info" style={{ '--i': linhas.length } as CSSProperties}>
+                            <span>{`seed ${seed}`}</span>
+                            <span>{`${fps} fps`}</span>
+                        </div>
                     </div>
-                ))}
-                <div className="hud-ajuda-linha info" style={{ '--i': linhas.length } as CSSProperties}>
-                    <span>{`seed ${seed}`}</span>
-                    <span>{`${fps} fps`}</span>
                 </div>
             </div>
         </div>

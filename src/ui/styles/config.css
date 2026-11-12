@@ -1,5 +1,38 @@
 /* Painel de configurações (neumórfico) — layouts mobile e desktop */
 
+/* ---------- tamanhos por modo ----------
+   Cada raiz do painel (desktop e mobile) define os mesmos nomes de variável com valores próprios; o resto do CSS só usa
+   var(--x). Ajustar o tamanho de algo em um modo é mudar uma linha aqui, sem regras .mobile/.desktop espalhadas. */
+.painel-desktop-root {
+    --fonte: 19.7px;          /* texto de campos, interruptores e botões */
+    --fonte-celula: 17px;     /* valor numérico dentro da célula */
+    --btn-h: 42px;            /* abas e botões de ação */
+    --btn-escala: 0.85;       /* encolhe ao pressionar */
+    --info-h: 22px;           /* linha de texto simples (ex.: seed) */
+    --campo-h: 28px;          /* campo arrastável */
+    --secao-h: 36px;          /* título de seção */
+    --secao-mt: 0px;
+    --switch-h: 32px;
+    --celula-min: 104px;
+    --amostra-h: 18px;
+    --reset-d: 30px;          /* diâmetro do ↺ e altura do chip "resetar tudo" */
+}
+
+.painel-config-root {
+    --fonte: 15px;
+    --fonte-celula: 14px;
+    --btn-h: 46px;
+    --btn-escala: 0.9;
+    --info-h: 26px;
+    --campo-h: 28px;
+    --secao-h: 38px;
+    --secao-mt: 10px;
+    --switch-h: 30px;
+    --celula-min: 76px;
+    --amostra-h: 14px;
+    --reset-d: 34px;
+}
+
 /* ---------- elementos compartilhados ---------- */
 .painel-btn {
     position: relative;
@@ -20,30 +53,17 @@
     padding-left: 16px;
 }
 
-.painel-btn.mobile {
+.painel-btn {
     width: 100%;
-    height: 46px;
+    height: var(--btn-h);
 }
 
-.painel-btn.mobile .rotulo {
-    font-size: 16px;
+.painel-btn .rotulo {
+    font-size: var(--fonte);
 }
 
-.painel-btn.mobile:active {
-    transform: scale(0.9);
-}
-
-.painel-btn.desktop {
-    width: 100%;
-    height: 42px;
-}
-
-.painel-btn.desktop .rotulo {
-    font-size: 19.7px;
-}
-
-.painel-btn.desktop:active {
-    transform: scale(0.85);
+.painel-btn:active {
+    transform: scale(var(--btn-escala));
 }
 
 .painel-btn.active-tab {
@@ -59,8 +79,7 @@
     margin: 4px 0;
 }
 
-.painel-btn.acao.mobile:active,
-.painel-btn.acao.desktop:active {
+.painel-btn.acao:active {
     transform: scale(0.97);
     background: rgba(255, 255, 255, 0.3);
     box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.15), inset -4px -4px 8px rgba(255, 255, 255, 0.3);
@@ -85,16 +104,8 @@
     color: rgba(0, 0, 0, 0.7);
     transition: color 0.1s ease;
     flex-shrink: 0;
-}
-
-.painel-item.mobile {
-    height: 26px;
-    font-size: 15px;
-}
-
-.painel-item.desktop {
-    height: 22px;
-    font-size: 19.7px;
+    height: var(--info-h);
+    font-size: var(--fonte);
 }
 
 .painel-item.info {
@@ -108,15 +119,13 @@
 }
 
 .painel-item.secao {
+    height: var(--secao-h);
+    margin-top: var(--secao-mt);
     font-weight: bold;
     color: rgba(0, 0, 0, 0.9);
     border-bottom: 1px solid rgba(0, 0, 0, 0.2);
     cursor: default;
     touch-action: pan-y;
-}
-
-.painel-item.mobile.secao {
-    margin-top: 10px;
 }
 
 /* interruptor liga/desliga (SwitchRow): trilho afundado como a aba ativa; azul do arrasto quando ligado */
@@ -127,22 +136,14 @@
     touch-action: pan-y;
     font-family: Arial, Helvetica, sans-serif;
     white-space: nowrap;
-    display: flex;
+    /* rótulo | marca ↺ | trilho: a coluna da marca existe sempre, então nada se mexe ao ligar o modo "resetar" */
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
     color: rgba(0, 0, 0, 0.7);
     flex-shrink: 0;
-}
-
-.painel-switch.mobile {
-    height: 30px;
-    font-size: 15px;
-}
-
-.painel-switch.desktop {
-    height: 32px;
-    font-size: 19.7px;
+    height: var(--switch-h);
+    font-size: var(--fonte);
 }
 
 .painel-switch .trilho {
@@ -251,9 +252,17 @@
 }
 
 /* ---------- desktop ---------- */
+/* Duas colunas em linha: o menu de abas e o painel. As posições saem de padding + gap, não de coordenadas. */
 .painel-desktop-root {
+    --painel-pad-y: 18px;
+    --painel-pad-x: 25px;
     position: absolute;
     inset: 0;
+    box-sizing: border-box;
+    padding: 20px 15px;
+    display: flex;
+    align-items: flex-start;
+    gap: 25px;
     pointer-events: none;
     overflow: hidden;
     z-index: 90;
@@ -261,10 +270,9 @@
 }
 
 .painel-menu-desktop {
-    position: absolute;
-    left: 15px;
-    top: 38px;
-    width: 180px;
+    flex: 0 0 180px;
+    /* a primeira aba fica na altura da primeira linha do painel (que tem padding no topo) */
+    margin-top: var(--painel-pad-y);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -272,13 +280,10 @@
 }
 
 .painel-desktop-fundo {
-    position: absolute;
-    left: 220px;
-    top: 20px;
-    width: 420px;
-    height: min(960px, calc(100% - 40px));
+    flex: 0 0 420px;
+    height: min(960px, 100%);
     box-sizing: border-box;
-    padding: 18px 25px;
+    padding: var(--painel-pad-y) var(--painel-pad-x);
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -302,60 +307,25 @@
     margin: 3px 0;
 }
 
-.painel-amostra.mobile {
-    height: 14px;
-}
-
-.painel-amostra.desktop {
-    height: 18px;
+.painel-amostra {
+    height: var(--amostra-h);
 }
 
 
 /* ---------- modo "resetar configs" ---------- */
-/* âncora sticky de altura 0 no topo da lista: o controle acompanha o canto quando o painel rola e não empurra nada */
-.reset-ancora {
-    position: sticky;
-    z-index: 5;
-    height: 0;
-    flex-shrink: 0;
-    align-self: stretch;
-    display: flex;
-    justify-content: flex-end;
-    align-items: flex-start;
-}
-
-/* top: 0 porque o sticky já respeita o padding do painel (18px no desktop, 15px no mobile): a âncora fica na linha do título */
-.reset-ancora.desktop {
-    top: 0;
-    margin-bottom: -4px;
-}
-
-/* margin-bottom compensa o gap da coluna */
-.reset-ancora.mobile {
-    top: 0;
-}
-
-/* o título da primeira seção não passa por baixo do ↺ */
-.reset-ancora+.painel-item.secao {
-    padding-right: 42px;
-    box-sizing: border-box;
+/* O controle fica dentro da linha do título da primeira seção (ver SectionHeader): é um item flex comum e rola com a lista.
+   O chip "resetar tudo" colapsa a largura 0 quando inativo (não rouba espaço do título) e abre à esquerda do ícone. */
+.painel-item.secao .secao-titulo {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .reset-ctl {
     display: flex;
     align-items: center;
-    gap: 6px;
-}
-
-.reset-ctl.desktop {
-    margin-top: calc((var(--secao-h-desktop) - 1px - 30px) / 2);
-    margin-right: -10px;
-}
-
-/* centraliza o botão na linha do título */
-.reset-ctl.mobile {
-    margin-top: calc((var(--secao-h-mobile) - 1px - 34px) / 2);
-    margin-right: -12px;
+    flex-shrink: 0;
 }
 
 .reset-chip,
@@ -371,25 +341,31 @@
 }
 
 .reset-chip {
-    height: 30px;
-    padding: 0 12px;
-    border-radius: 15px;
+    height: var(--reset-d);
+    padding: 0;
+    border-radius: calc(var(--reset-d) / 2);
     display: flex;
     align-items: center;
     white-space: nowrap;
     font-size: 15px;
     font-weight: bold;
-    /* inativo: fora de vista, à direita (atrás do ícone) */
-    transform: translateX(30px);
+    /* inativo: largura 0, invisível e sem clique */
+    max-width: 0;
+    margin-right: 0;
+    border-width: 0;
+    overflow: hidden;
     opacity: 0;
     pointer-events: none;
-    transition: transform 0.4s cubic-bezier(0.3, 0.7, 0.2, 1), opacity 0.3s ease, background 0.15s ease;
+    transition: max-width 0.4s cubic-bezier(0.3, 0.7, 0.2, 1), padding 0.4s ease, margin 0.4s ease, opacity 0.3s ease, background 0.15s ease;
 }
 
 .reset-ctl.on .reset-chip {
-    transform: none;
+    max-width: 200px;
+    padding: 0 12px;
+    margin-right: 6px;
+    border-width: 1px;
     opacity: 1;
-    pointer-events: inherit;
+    pointer-events: auto;
 }
 
 .reset-ctl.on .reset-chip.vazio {
@@ -404,9 +380,9 @@
 
 .reset-ic {
     position: relative;
-    width: 30px;
-    height: 30px;
-    border-radius: 15px;
+    width: var(--reset-d);
+    height: var(--reset-d);
+    border-radius: calc(var(--reset-d) / 2);
     flex-shrink: 0;
     transition: background 0.3s ease, color 0.3s ease, transform 0.12s ease;
 }
@@ -445,17 +421,6 @@
     transform: none;
 }
 
-.reset-ctl.mobile .reset-chip {
-    height: 34px;
-    border-radius: 17px;
-}
-
-.reset-ctl.mobile .reset-ic {
-    width: 34px;
-    height: 34px;
-    border-radius: 17px;
-}
-
 /* painel com o modo ativo: brilho azul (acrescentado à sombra do vidro) */
 .painel-desktop-fundo,
 .painel-col-sliders {
@@ -481,13 +446,9 @@
     transition: opacity 0.3s ease;
 }
 
-.painel-item .reset-marca {
+/* a marca ocupa a coluna entre o rótulo e a célula/trilho (campos e interruptores) */
+.reset-marca {
     padding: 0 8px;
-}
-
-/* o rótulo ocupa o espaço livre; a marca fica colada na célula */
-.painel-switch .reset-marca {
-    margin-left: 8px;
 }
 
 .painel-item.reset-alt,
@@ -542,17 +503,22 @@
 }
 
 /* ---------- valor numérico em célula ancorada na borda direita do painel ---------- */
-.painel-item .painel-rotulo {
-    flex: 1;
+/* campo arrastável: rótulo | marca ↺ | célula do valor (a célula fica na borda direita) */
+.painel-item.campo {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+}
+
+.painel-rotulo {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .painel-celula {
-    flex-shrink: 0;
     box-sizing: border-box;
-    height: 100%;
+    align-self: stretch;
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -565,46 +531,16 @@
     border: 1px solid rgba(255, 255, 255, 0.25);
     box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.15), inset -2px -2px 4px rgba(255, 255, 255, 0.3);
     transition: background 0.15s ease, color 0.1s ease;
+    min-width: var(--celula-min);
+    font-size: var(--fonte-celula);
 }
 
-.painel-item.desktop .painel-celula {
-    min-width: 104px;
-    font-size: 17px;
-}
-
-.painel-item.mobile .painel-celula {
-    min-width: 76px;
-    font-size: 14px;
-}
-
-/* linhas com célula ficam um pouco mais altas para o campo respirar */
-.painel-item.desktop:not(.secao):not(.info) {
-    height: 28px;
-}
-
-.painel-item.mobile:not(.secao):not(.info) {
-    height: 28px;
+/* campos ficam um pouco mais altos que o texto simples para o valor respirar */
+.painel-item:not(.secao):not(.info) {
+    height: var(--campo-h);
 }
 
 .painel-item.dragging .painel-celula {
     background: rgba(0, 85, 170, 0.18);
     color: #0055aa;
-}
-
-/* ---------- títulos de seção (divisores): mais altos; o botão ↺ se centraliza na mesma linha ---------- */
-:root {
-    --secao-h-desktop: 36px;
-    --secao-h-mobile: 38px;
-}
-
-.painel-item.secao {
-    box-sizing: border-box;
-}
-
-.painel-item.secao.desktop {
-    height: var(--secao-h-desktop);
-}
-
-.painel-item.secao.mobile {
-    height: var(--secao-h-mobile);
 }

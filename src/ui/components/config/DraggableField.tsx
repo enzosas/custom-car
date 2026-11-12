@@ -88,7 +88,7 @@ export function DraggableField({ def, objeto, caminho, modo, onAlterado, aplicar
         onResetar?.(idItem(caminho, def.nome));
     };
 
-    const classes = `painel-item ${modo}${arrastando ? ' dragging' : ''}`
+    const classes = `painel-item campo ${modo}${arrastando ? ' dragging' : ''}`
         + (modoReset ? (alterado ? ' reset-alt' : ' reset-ina') : '')
         + (flash > 0 ? (flash % 2 ? ' flash-a' : ' flash-b') : '');
 

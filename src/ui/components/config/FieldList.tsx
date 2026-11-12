@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { AbaDef } from '../../painelCampos';
 import { resolverObjeto } from '../../lib/propriedade';
 import { idItem, itensAlterados, valorOriginal } from '../../lib/padroes';
@@ -19,9 +20,11 @@ interface Props {
     modoReset: boolean;
     /** incrementa a cada clique em "resetar tudo": devolve ao original todos os valores alterados desta aba */
     sinalResetarTudo: number;
+    /** vai no cabeçalho da primeira seção, à direita do título (rola junto com a lista) */
+    acaoCabecalho?: ReactNode;
 }
 
-export function FieldList({ aba, config, modo, acoes, onAlterado, modoReset, sinalResetarTudo }: Props) {
+export function FieldList({ aba, config, modo, acoes, onAlterado, modoReset, sinalResetarTudo, acaoCabecalho }: Props) {
     // re-renderiza a lista a cada ajuste para a amostra de cor HSV acompanhar o arrasto
     const [, atualizar] = useReducer((n: number) => n + 1, 0);
     const aoAlterar = useCallback(() => { atualizar(); onAlterado(); }, [onAlterado]);
@@ -52,11 +55,11 @@ export function FieldList({ aba, config, modo, acoes, onAlterado, modoReset, sin
 
     return (
         <>
-            {aba.secoes.map((sec) => {
+            {aba.secoes.map((sec, indice) => {
                 const objeto = resolverObjeto(config, sec.caminho);
                 return (
                     <Fragment key={`${sec.caminho.join('.')}|${sec.titulo}`}>
-                        <SectionHeader titulo={sec.titulo} modo={modo} />
+                        <SectionHeader titulo={sec.titulo} modo={modo} acao={indice === 0 ? acaoCabecalho : undefined} />
                         {sec.amostra && (
                             <div
                                 className={`painel-amostra ${modo}`}

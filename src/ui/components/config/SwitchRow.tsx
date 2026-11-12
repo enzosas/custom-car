@@ -53,7 +53,8 @@ export function SwitchRow({ rotulo, objeto, chave, modo, onAlterado, modoReset =
             className={classes}
             onClick={alternar}
         >
-            <span>{rotulo}<span className="reset-marca">↺</span></span>
+            <span className="painel-rotulo">{rotulo}</span>
+            <span className="reset-marca">↺</span>
             <span className="trilho" />
         </div>
     );
