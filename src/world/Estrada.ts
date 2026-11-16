@@ -435,7 +435,7 @@ export class Estrada {
      * Em cada triângulo a borda segue a curva real, em pontos a cada ~ESPACO_BORDA unidades. Todos os pontos ficam no
      * plano do triângulo, ou seja, na superfície que a física lê.
      */
-    gerarMalhaTerrenoChunk(cx: number, cz: number, tam: number, esp: number, celulas: number, pos: Float32Array, coresGrade: Float32Array): Malha | null {
+    gerarMalhaTerrenoChunk(cx: number, cz: number, tam: number, esp: number, celulas: number, pos: Float32Array, coresGrade: Float32Array, coresGradePS2?: Float32Array, supGrade?: Float32Array): Malha | null {
         if (this.pf.b <= this.pf.a) return null;
         const hw = this.hw, n = celulas + 1, x0 = cx * tam, z0 = cz * tam;
         const R = hw + 215;                                    // além disso o ponto está "longe" da pista (> meia diagonal de uma célula)
@@ -488,6 +488,9 @@ export class Estrada {
         };
 
         const P: number[] = [], C: number[] = [], I: number[] = [];
+        const S: number[] = [];                                 // 1 = vértice de asfalto, 0 = grama (um por vértice de P)
+        const C2: number[] = [];                                // as mesmas cores com a paleta PS2 (só se coresGradePS2 vier)
+        const SUP: number[] = [];                               // pesos de superfície [rocha, neve, areia, terra] por vértice de P (só se supGrade vier)
         const nBase = n * n;
         let nExtra = 0;
         const substituido = new Uint8Array(celulas * celulas * 2);
@@ -535,11 +538,19 @@ export class Estrada {
                     const base = nBase + nExtra;
                     for (let q = 0; q < xs.length; ++q) {
                         P.push(xs[q], yEm(xs[q], zs[q]), zs[q]);
-                        if (asfalto) { C.push(COR_ASFALTO[0], COR_ASFALTO[1], COR_ASFALTO[2]); continue; }
+                        S.push(asfalto ? 1 : 0);
+                        if (asfalto) {
+                            C.push(COR_ASFALTO[0], COR_ASFALTO[1], COR_ASFALTO[2]);
+                            if (coresGradePS2) C2.push(COR_ASFALTO[0], COR_ASFALTO[1], COR_ASFALTO[2]);
+                            if (supGrade) SUP.push(0, 0, 0, 0);
+                            continue;
+                        }
                         const l1 = ((tz[1] - tz[2]) * (xs[q] - tx[2]) + (tx[2] - tx[1]) * (zs[q] - tz[2])) / det;
                         const l2 = ((tz[2] - tz[0]) * (xs[q] - tx[2]) + (tx[0] - tx[2]) * (zs[q] - tz[2])) / det;
                         const l3 = 1 - l1 - l2;
                         for (let c3 = 0; c3 < 3; ++c3) C.push(l1 * coresGrade[k0 + c3] + l2 * coresGrade[k1 + c3] + l3 * coresGrade[k2 + c3]);
+                        if (coresGradePS2) for (let c3 = 0; c3 < 3; ++c3) C2.push(l1 * coresGradePS2[k0 + c3] + l2 * coresGradePS2[k1 + c3] + l3 * coresGradePS2[k2 + c3]);
+                        if (supGrade) for (let c4 = 0; c4 < 4; ++c4) SUP.push(l1 * supGrade[k0 / 3 * 4 + c4] + l2 * supGrade[k1 / 3 * 4 + c4] + l3 * supGrade[k2 / 3 * 4 + c4]);
                     }
                     nExtra += xs.length;
                     const t = triangularPoligono(xs, zs);
@@ -623,6 +634,18 @@ export class Estrada {
         const colors = new Float32Array(positions.length);
         colors.set(coresGrade.subarray(0, nBase * 3));
         colors.set(C, nBase * 3);
+        let colorsPS2: Float32Array | undefined;
+        if (coresGradePS2) {
+            colorsPS2 = new Float32Array(positions.length);
+            colorsPS2.set(coresGradePS2.subarray(0, nBase * 3));
+            colorsPS2.set(C2, nBase * 3);
+        }
+        let sup: Float32Array | undefined;
+        if (supGrade) {
+            sup = new Float32Array(positions.length / 3 * 4);
+            sup.set(supGrade.subarray(0, nBase * 4));
+            sup.set(SUP, nBase * 4);
+        }
         const base: number[] = [];
         for (let j = 0; j < celulas; ++j) for (let i = 0; i < celulas; ++i) {
             const i0 = j * n + i, i1 = j * n + i + 1, i2 = (j + 1) * n + i, i3 = (j + 1) * n + i + 1, cel = j * celulas + i;
@@ -631,6 +654,9 @@ export class Estrada {
         }
         const indices = new Uint32Array(base.length + I.length);
         indices.set(base); indices.set(I, base.length);
-        return { positions, colors, indices };
+        // marcador de superfície: a grade base é toda terreno (0); os pedaços novos têm vértices próprios, então não há mistura na borda
+        const superficie = new Float32Array(positions.length / 3);
+        superficie.set(S, nBase);
+        return { positions, colors, indices, superficie, colorsPS2, sup };
     }
 }

@@ -47,6 +47,9 @@ export class Renderer {
     private esperaParaSubir = 5;    // segundos; dobra quando subir resulta em ter que descer de novo
     private ultimaMudanca: 'baixou' | 'subiu' | null = null;
 
+    /** 0 = resolução dinâmica (padrão); > 0 = altura interna FIXA do buffer, em pixels (estilo PS2) */
+    private alturaFixa = 0;
+
     constructor(private canvas: HTMLCanvasElement, uniforms: UniformsCompartilhados) {
         const dpr = window.devicePixelRatio || 1;
         this.razaoMax = Math.min(dpr, PIXEL_RATIO_TETO);
@@ -105,12 +108,34 @@ export class Renderer {
 
     private redimensionar = () => {
         const w = window.innerWidth, h = window.innerHeight;
+        if (this.alturaFixa > 0) {
+            // altura interna fixa: a razão acompanha a altura da janela (limitada ao teto, para não desenhar mais que o necessário)
+            this.razao = Math.ceil(Math.min(this.razaoMax, this.alturaFixa / Math.max(1, h)) * 10000) / 10000;   // para cima: o buffer fecha em exatamente alturaFixa linhas
+            this.renderer.setPixelRatio(this.razao);
+        }
         this.renderer.setSize(w, h, false);
         this.canvas.style.width = '100%';
         this.canvas.style.height = '100%';
         this.camera.aspect = w / Math.max(1, h);
         this.camera.updateProjectionMatrix();
     };
+
+    /**
+     * Estilo PS2: desenha numa altura interna fixa (ex.: 480) e deixa o navegador ampliar o canvas com filtro bilinear,
+     * que é o que dá a imagem macia do PS2 (e esconde os recortes das árvores). 0 volta à resolução dinâmica.
+     * Enquanto estiver fixa, a resolução dinâmica não mexe em nada.
+     */
+    public definirAlturaInterna(px: number) {
+        const v = px > 0 ? Math.max(120, Math.round(px)) : 0;
+        if (v === this.alturaFixa) return;
+        this.alturaFixa = v;
+        if (v > 0) {
+            this.redimensionar();
+        } else {
+            this.somaDt = 0; this.amostras = 0; this.tempoDesdeMudanca = 0; this.ultimaMudanca = null;
+            this.definirRazao(this.razaoMax);
+        }
+    }
 
     /** escala atual do buffer de desenho em relação à janela (1 = um pixel por pixel CSS) */
     public getEscalaResolucao() { return this.razao; }
@@ -121,7 +146,7 @@ export class Renderer {
      * sobe aos poucos (com espera crescente, para não ficar oscilando entre dois valores).
      */
     public ajustarResolucao(dt: number) {
-        if (!RESOLUCAO_DINAMICA) return;
+        if (!RESOLUCAO_DINAMICA || this.alturaFixa > 0) return;
         if (!(dt > 0) || dt > 0.5) return;   // aba em segundo plano, pausa do depurador etc.
 
         this.somaDt += Math.min(dt, 0.1);    // um engasgo isolado não deve derrubar a resolução

@@ -24,6 +24,8 @@ uniform vec3 uFogColor;        // cor do céu no horizonte
 uniform vec3 uSunDir;          // direção real do sol (pode estar abaixo do horizonte)
 uniform vec3 uSunGlow;         // cor do brilho em volta do sol
 uniform float uSunGlowAmt;     // intensidade desse brilho (0..1)
+uniform float uFogNear;        // distância em que a neblina começa
+uniform float uFogFar;         // distância em que ela cobre tudo
 vec3 corHorizonte(vec3 d) {
     vec2 h = d.xz, s = uSunDir.xz;
     float lh = length(h), ls = length(s);
@@ -36,6 +38,15 @@ export const vertexPrincipal = /* glsl */ `
 varying vec3 vRel;                 // posição relativa à câmera, nos eixos do MUNDO (valores pequenos)
 varying vec3 vColor;
 varying vec4 vFragPosLightSpace;
+#ifdef TEXTURA_CHAO
+attribute float aAsfalto;          // 1 nos pedaços de asfalto, 0 no resto do terreno (ver Estrada.gerarMalhaTerrenoChunk)
+varying float vAsfalto;
+attribute vec4 aSup;               // pesos [rocha, neve, areia, terra] do vértice (ver Terreno.preencherAtributosChunk)
+varying vec4 vSup;
+#endif
+#ifdef PALETA_PS2
+attribute vec3 colorPS2;           // a cor do vértice com a paleta do estilo PS2 (ver Paleta.ts)
+#endif
 uniform mat4 uLightSpaceCam;       // luz * translação(câmera - origem da sombra)
 
 void main() {
@@ -48,7 +59,15 @@ void main() {
 
     // do espaço da vista de volta para os eixos do mundo, SEM somar a posição da câmera: R^T * v
     vRel = mvPos.xyz * mat3(viewMatrix);
+#ifdef PALETA_PS2
+    vColor = colorPS2;
+#else
     vColor = color;
+#endif
+#ifdef TEXTURA_CHAO
+    vAsfalto = aAsfalto;
+    vSup = aSup;
+#endif
 #ifdef USE_INSTANCING_COLOR
     vColor *= instanceColor;         // cor por instância (tufos de grama: a cor do terreno sob cada um)
 #endif
@@ -76,6 +95,29 @@ uniform float uShininess;
 uniform sampler2D uShadowMap;
 uniform vec2  uShadowTexel;
 uniform float uShadowOn;
+
+#ifdef TEXTURA_CHAO
+// estilo PS2, só no terreno: textura de detalhe da grama e do asfalto, em duas escalas multiplicadas
+varying float vAsfalto;
+uniform sampler2D uTexGrama;
+uniform sampler2D uTexAsfalto;
+uniform vec4 uTexTile;             // tamanho de uma repetição: x,y = grama fino/grosso; z,w = asfalto fino/grosso
+uniform vec4 uTexOffG;             // fract(posição da câmera / tile), calculado em dupla precisão no JS: xy = fino, zw = grosso
+uniform vec4 uTexOffA;
+uniform float uContrasteGrama;     // 0 = grama lisa, 1 = a textura inteira
+uniform float uCorDetalheGrama;    // 0 = o detalhe só clareia e escurece, 1 = leva também a cor da foto (folhas secas laranja)
+// pedra, neve, areia e terra de outono: um detalhe em tons de cinza por canal (R, G, B, A), em duas escalas; a COR vem do vértice
+varying vec4 vSup;
+uniform sampler2D uTexSup;
+uniform vec2 uTileSup;             // tamanho de uma repetição: x = fino, y = grosso
+uniform vec4 uOffSup;              // fract(posição da câmera / tile) em dupla precisão: xy = fino, zw = grosso
+uniform float uContrasteSup;       // 0 = cor lisa, 1 = a textura inteira
+// terra de outono com a FOTO original (terra.jpg): a cor da foto, e não só o claro e escuro por cima da cor do bioma
+uniform sampler2D uTexTerra;
+uniform vec3 uCorMediaTerra;       // cor média da foto
+uniform float uFotoTerra;          // 1 = há foto (a terra de outono usa a foto), 0 = usa o detalhe do canal A de uTexSup
+uniform float uInfluenciaTerra;    // 0 = a foto original, 1 = cor do bioma com a foto só variando o claro e escuro
+#endif
 
 // 1.0 se o ponto (profundidade zRef) está atrás do que o mapa registrou em uv, senão 0.0
 float emSombra(vec2 uv, float zRef) {
@@ -131,10 +173,44 @@ void main() {
     vec3 lDir = normalize(uLightDir);
     vec3 viewDir = normalize(-vRel);
 
-    vec3 ambient = uAmbient * uAmbientColor * vColor;
+    vec3 albedo = vColor;
+#ifdef TEXTURA_CHAO
+    // UV do mundo SEM somar a posição da câmera (float32 não aguenta): vRel é pequeno, e a parte grande entra pronta em uTexOff
+    vec2 pTex = vRel.xz;
+    vec3 detGrama = texture2D(uTexGrama, pTex / uTexTile.x + uTexOffG.xy).rgb * texture2D(uTexGrama, pTex / uTexTile.y + uTexOffG.zw).rgb * 4.0;
+    float lumGrama = dot(detGrama, vec3(0.299, 0.587, 0.114));
+    detGrama = mix(vec3(lumGrama), detGrama, uCorDetalheGrama);
+    detGrama = mix(vec3(1.0), detGrama, uContrasteGrama);
+    vec3 detAsfalto = texture2D(uTexAsfalto, pTex / uTexTile.z + uTexOffA.xy).rgb * texture2D(uTexAsfalto, pTex / uTexTile.w + uTexOffA.zw).rgb * 4.0;
+    // onde há rocha, neve, areia ou terra de outono, o detalhe da grama dá lugar ao dessa superfície (o resto continua grama)
+    vec4 wSup = clamp(vSup, 0.0, 1.0);
+    float somaSup = wSup.x + wSup.y + wSup.z + wSup.w;
+    wSup /= max(somaSup, 1.0);
+    vec4 detSup = texture2D(uTexSup, pTex / uTileSup.x + uOffSup.xy) * texture2D(uTexSup, pTex / uTileSup.y + uOffSup.zw) * 4.0;
+    detSup = mix(vec4(1.0), detSup, uContrasteSup);
+    // com a foto de terra, a parte "terra de outono" (wSup.w) sai daqui e entra mais abaixo com a cor da própria foto
+    float wDetTerra = wSup.w * (1.0 - uFotoTerra);
+    vec3 detSolo = detGrama * (1.0 - (wSup.x + wSup.y + wSup.z + wSup.w)) + vec3(dot(vec4(wSup.xyz, wDetTerra), detSup));
+    vec3 detalhe = mix(detSolo, detAsfalto, clamp(vAsfalto, 0.0, 1.0));
+    // longe o detalhe some (a neblina cobre e o mipmap já o apagou): evita cintilação
+    float semDetalhe = smoothstep(2500.0, 9000.0, length(vRel));
+    detalhe = mix(detalhe, vec3(1.0), semDetalhe);
+    albedo *= detalhe;
+    // terra de outono pela foto: dois tamanhos da mesma foto (o grosso só quebra a repetição), COR da foto como base.
+    // Influência 0 = foto original; 1 = a cor do bioma com a foto variando o claro e escuro (a foto dividida pela sua média).
+    vec3 fotoTerra = texture2D(uTexTerra, pTex / uTileSup.x + uOffSup.xy).rgb;
+    float lumMedia = max(dot(uCorMediaTerra, vec3(0.299, 0.587, 0.114)), 0.01);
+    float grosso = dot(texture2D(uTexTerra, pTex / uTileSup.y + uOffSup.zw).rgb, vec3(0.299, 0.587, 0.114)) / lumMedia;
+    fotoTerra *= mix(1.0, clamp(grosso, 0.5, 1.6), 0.45);
+    fotoTerra = mix(fotoTerra, uCorMediaTerra, semDetalhe);
+    fotoTerra *= mix(vec3(1.0), vColor / max(uCorMediaTerra, vec3(0.02)), uInfluenciaTerra);
+    albedo += fotoTerra * (wSup.w * uFotoTerra * (1.0 - clamp(vAsfalto, 0.0, 1.0)));
+#endif
+
+    vec3 ambient = uAmbient * uAmbientColor * albedo;
 
     float diff = max(dot(normal, lDir), 0.0);
-    vec3 diffuse = uDiffuse * diff * uLightColor * vColor;
+    vec3 diffuse = uDiffuse * diff * uLightColor * albedo;
 
     vec3 halfwayDir = normalize(lDir + viewDir);
     float spec = pow(max(dot(normal, halfwayDir), 0.0), max(uShininess, 1.0));
@@ -146,11 +222,93 @@ void main() {
     vec3 result = ambient + (1.0 - shadow) * (diffuse + specular);
 
     float distCam = length(vRel);
-    float fogFactor = clamp((distCam - 5000.0) / (15000.0 - 5000.0), 0.0, 1.0);
+    float fogFactor = clamp((distCam - uFogNear) / max(uFogFar - uFogNear, 1.0), 0.0, 1.0);
 
     result = mix(result, corHorizonte(vRel / max(distCam, 1e-4)), clamp(fogFactor * uNeblina, 0.0, 1.0));
 
     gl_FragColor = vec4(result, uAlpha);
+}
+`;
+
+// Árvore do estilo PS2: um cartão com a textura de uma conífera (atlas de 4), alpha test, luz pintada na textura.
+// FACE_CAMERA: o cartão gira em torno do eixo VERTICAL para ficar de frente para a câmera (sem FACE_CAMERA, são dois
+// cartões fixos em X). A variante do atlas, o espelhamento e o brilho de cada árvore saem de um hash da posição da
+// instância: nenhuma árvore precisa de cor própria, e a mesma árvore é igual em todos os LODs.
+const glslHashArvore = /* glsl */ `
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+`;
+
+export const vertexArvorePS2 = /* glsl */ `
+varying vec2 vUv;
+varying vec3 vRel;
+varying vec3 vTom;
+${glslHashArvore}
+
+void main() {
+    mat4 inst = mat4(1.0);
+#ifdef USE_INSTANCING
+    inst = instanceMatrix;
+#endif
+    float h1 = hash12(inst[3].xz);
+    float h2 = hash12(inst[3].zx + 17.0);
+    float h3 = hash12(inst[3].xz * 1.7 + 3.0);
+    float h4 = hash12(inst[3].zx * 2.3 + 11.0);
+
+    vec4 mvPos;
+#ifdef FACE_CAMERA
+    vec3 o = (modelViewMatrix * inst * vec4(0.0, 0.0, 0.0, 1.0)).xyz;      // base da árvore, no espaço da vista
+    float sx = length(inst[0].xyz), sy = length(inst[1].xyz);
+    vec3 upV = mat3(viewMatrix)[1];                                          // o "para cima" do mundo, no espaço da vista
+    vec3 r = cross(o, upV);
+    vec3 rightV = r / max(length(r), 1e-4);
+    mvPos = vec4(o + rightV * (position.x * sx) + upV * (position.y * sy), 1.0);
+#else
+    mvPos = modelViewMatrix * inst * vec4(position, 1.0);
+#endif
+
+    vRel = mvPos.xyz * mat3(viewMatrix);       // posição relativa à câmera nos eixos do mundo (neblina)
+    float variante = floor(h1 * 4.0);
+    float u = (h2 > 0.5) ? 1.0 - uv.x : uv.x;
+    vUv = vec2((u + variante) * 0.25, uv.y);
+    vTom = (0.86 + 0.28 * h3) * vec3(1.0 + 0.10 * (h4 - 0.5), 1.0, 1.0 - 0.14 * (h4 - 0.5));
+    gl_Position = projectionMatrix * mvPos;
+}
+`;
+
+export const fragmentArvorePS2 = /* glsl */ `
+${glslHorizonte}
+varying vec2 vUv;
+varying vec3 vRel;
+varying vec3 vTom;
+uniform sampler2D uTexArvore;
+uniform vec3  uLightDir;
+uniform vec3  uLightColor;
+uniform vec3  uAmbientColor;
+uniform float uNeblina;
+uniform float uAmbient;
+uniform float uDiffuse;
+
+void main() {
+    vec4 t = texture2D(uTexArvore, vUv);
+
+    // alpha test; longe o mipmap dilui o alfa e a folhagem ralearia, então o limiar cai com o nível do mipmap
+    vec2 tx = vUv * vec2(512.0, 256.0);
+    vec2 dx = dFdx(tx), dy = dFdy(tx);
+    float lod = max(0.0, 0.5 * log2(max(max(dot(dx, dx), dot(dy, dy)), 1e-6)));
+    if (t.a < clamp(0.5 - 0.06 * lod, 0.18, 0.5)) discard;
+
+    // a luz já está pintada; aqui só segue o dia e a noite. 0.67 = o valor com a luz padrão (cor fica como pintada)
+    vec3 luz = (uAmbient * uAmbientColor + uDiffuse * 0.6 * max(uLightDir.y, 0.0) * uLightColor) / 0.67;
+    vec3 cor = t.rgb * vTom * luz;
+
+    float distCam = length(vRel);
+    float fogFactor = clamp((distCam - uFogNear) / max(uFogFar - uFogNear, 1.0), 0.0, 1.0);
+    cor = mix(cor, corHorizonte(vRel / max(distCam, 1e-4)), clamp(fogFactor * uNeblina, 0.0, 1.0));
+    gl_FragColor = vec4(cor, 1.0);
 }
 `;
 
@@ -172,6 +330,49 @@ void main() {
 
 export const fragmentProfundidade = /* glsl */ `
 void main() { gl_FragColor = vec4(1.0); }
+`;
+
+// Sombra das árvores do estilo PS2. O cartão que cai no mapa de sombras NÃO acompanha a câmera: ele fica de frente
+// para o sol (eixo vertical, perpendicular à direção horizontal da luz), então a sombra no chão tem sempre o mesmo
+// formato, não pisca ao girar a câmera e nunca vira uma linha fina. O mesmo hash da posição escolhe a mesma variante
+// do atlas que o quadro principal desenha, e o alpha test recorta o contorno da copa.
+// A largura vem de position.x + position.z: o cartão em X usa x, o segundo cartão da cruz (LOD 0) usa z.
+export const vertexProfundidadeArvore = /* glsl */ `
+uniform mat4 uLightSpaceRel;
+uniform vec3 uOrigemSombra;
+uniform vec3 uLightDir;
+varying vec2 vUv;
+${glslHashArvore}
+
+void main() {
+    mat4 model = modelMatrix;
+    model[3].xyz -= uOrigemSombra;
+    mat4 inst = mat4(1.0);
+#ifdef USE_INSTANCING
+    inst = instanceMatrix;
+#endif
+    float h1 = hash12(inst[3].xz);
+    float h2 = hash12(inst[3].zx + 17.0);
+    vec3 o = (model * inst * vec4(0.0, 0.0, 0.0, 1.0)).xyz;      // base da árvore, relativa à origem da sombra
+    float sx = length(inst[0].xyz), sy = length(inst[1].xyz);
+    vec3 d = vec3(uLightDir.x, 0.0, uLightDir.z);
+    vec3 r = (length(d) > 1e-3) ? normalize(vec3(d.z, 0.0, -d.x)) : vec3(1.0, 0.0, 0.0);
+    float largura = position.x + position.z;
+    vec3 p = o + r * (largura * sx) + vec3(0.0, position.y * sy, 0.0);
+    float variante = floor(h1 * 4.0);
+    float u = (h2 > 0.5) ? 1.0 - uv.x : uv.x;
+    vUv = vec2((u + variante) * 0.25, uv.y);
+    gl_Position = uLightSpaceRel * vec4(p, 1.0);
+}
+`;
+
+export const fragmentProfundidadeArvore = /* glsl */ `
+varying vec2 vUv;
+uniform sampler2D uTexArvore;
+void main() {
+    if (texture2D(uTexArvore, vUv).a < 0.5) discard;
+    gl_FragColor = vec4(1.0);
+}
 `;
 
 // Partículas agora recebem a posição no mundo para o cálculo da neblina
@@ -206,7 +407,7 @@ void main() {
 
     // Aplicamos a mesma neblina (fog) usada no terreno
     float distCam = length(cameraPosition - vFragPos);
-    float fogFactor = clamp((distCam - 5000.0) / (15000.0 - 5000.0), 0.0, 1.0);
+    float fogFactor = clamp((distCam - uFogNear) / max(uFogFar - uFogNear, 1.0), 0.0, 1.0);
     result = mix(result, corHorizonte(normalize(vFragPos - cameraPosition)), clamp(fogFactor * uNeblina, 0.0, 1.0));
 
     gl_FragColor = vec4(result, vCor.a);
@@ -231,6 +432,16 @@ uniform vec3 uSunColor;
 uniform float uSunSize;      // raio angular do disco (radianos)
 uniform float uSunBright;    // intensidade do halo
 uniform float uNight;        // 0 dia .. 1 noite (estrelas)
+#ifdef NUVENS_PS2
+// camada de nuvens do estilo PS2: um plano infinito acima da câmera, lido pixel a pixel (nenhum objeto nasce ou some)
+uniform sampler2D uTexNuvensCeu;
+uniform vec4  uNuvOff;       // fract(posição / tile) calculado no JS: xy = escala grande, zw = fina
+uniform vec2  uNuvTile;      // tamanho de uma repetição da textura: grande, fina
+uniform float uNuvH;         // altura do plano acima da câmera
+uniform float uNuvCobertura; // 0 = limpo .. 1 = encoberto
+uniform float uNuvOn;        // 0 = camada desligada
+uniform float uNuvNoite;     // 0 dia .. 1 noite (escurece as nuvens)
+#endif
 
 float hash13(vec3 p) {
     p = fract(p * 0.1031);
@@ -259,6 +470,34 @@ void main() {
     col += uSunColor * (halo * uSunBright * vis);
     float disco = 1.0 - smoothstep(uSunSize * 0.9, uSunSize, ang);
     col = mix(col, uSunColor * 1.25, disco * vis);
+
+#ifdef NUVENS_PS2
+    // nuvens: onde o raio deste pixel cruza o plano. Perto do horizonte o ponto vai longe e as nuvens ficam pequenas e
+    // achatadas (perspectiva), até sumirem na bruma: o horizonte também tem nuvens, e elas nunca "aparecem do nada"
+    if (uNuvOn > 0.5 && d.y > 0.004) {
+        vec2 rel = d.xz * (uNuvH / d.y);
+        vec2 uvA = rel / uNuvTile.x + uNuvOff.xy;
+        vec2 uvB = rel / uNuvTile.y + uNuvOff.zw;
+        float nA = texture2D(uTexNuvensCeu, uvA).r;
+        float nB = texture2D(uTexNuvensCeu, uvB).g;
+        float n = 0.5 + (nA * 0.62 + nB * 0.38 - 0.5) * 1.3;
+        float limiar = 0.5 - (uNuvCobertura - 0.5) * 0.6;
+        float dens = smoothstep(limiar, limiar + 0.13, n);
+
+        // luz: o lado da nuvem virado para o sol (onde há menos nuvem na direção do sol) é mais claro; o miolo denso, mais escuro
+        vec2 paraSol = normalize(uSunDir).xz;
+        float nSol = texture2D(uTexNuvensCeu, uvA + paraSol * 0.045).r;
+        float luz = clamp(0.58 + 3.2 * (nA - nSol), 0.0, 1.0);
+        luz *= 1.0 - 0.38 * smoothstep(limiar + 0.02, limiar + 0.34, n);
+        vec3 tomSol = uSunColor / max(max(uSunColor.r, uSunColor.g), max(uSunColor.b, 0.001));
+        vec3 claro = mix(vec3(1.0), tomSol, 0.6);                          // o poente tinge a nuvem
+        vec3 ceuMedio = mix(corHorizonte(d), uZenith, 0.5);
+        vec3 nuv = mix(ceuMedio * 0.72, claro, luz) * mix(1.0, 0.08, uNuvNoite);
+
+        nuv = mix(nuv, corHorizonte(d), smoothstep(0.28, 0.02, d.y) * 0.9);   // bruma: as nuvens longe tomam a cor do horizonte
+        col = mix(col, nuv, dens * smoothstep(0.004, 0.05, d.y) * 0.96);
+    }
+#endif
 
     gl_FragColor = vec4(col, 1.0);
 }

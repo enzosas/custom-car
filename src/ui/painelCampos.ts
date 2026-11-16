@@ -42,6 +42,8 @@ export interface SecaoDef {
   interruptores?: InterruptorDef[];
   botoes?: BotaoDef[];
   amostra?: AmostraHSV;
+  /** mostra, logo abaixo do título, a linha com os dois botões "low poly" e "retro" (escolhe opcoes.estiloPS2) */
+  seletorEstilo?: boolean;
   /** o jogo só recebe o novo valor quando o arrasto termina (para ajustes caros, como reconstruir o terreno) */
   aplicarAoSoltar?: boolean;
 }
@@ -254,6 +256,33 @@ export const ABAS: AbaDef[] = [
           { nome: 'nuvensDirecao', apresentacao: 'direcao do vento (graus)', tipo: 'float', min: 0, max: 360, ciclico: true },
         ],
         interruptores: [{ nome: 'nuvens', rotulo: 'mostrar nuvens' }],
+      },
+    ]
+  },
+  {
+    // tudo que muda o visual do jogo (e não o carro): o estilo (low poly ou retro, tecla G) e os ajustes do estilo retro
+    titulo: 'grafico config', secoes: [
+      { titulo: 'estilo grafico (tecla G)', caminho: ['opcoes'], campos: [], seletorEstilo: true },
+      {
+        titulo: 'imagem (retro)', caminho: ['opcoes'], campos: [
+          { nome: 'alturaInternaPS2', apresentacao: 'altura interna (px)', tipo: 'uint', min: 240, max: 1080 },
+          { nome: 'escalaTexturaPS2', apresentacao: 'escala das texturas do chao', tipo: 'float', min: 0.25, max: 4 },
+        ]
+      },
+      {
+        titulo: 'neblina e horizonte (retro)', caminho: ['opcoes'], campos: [
+          { nome: 'neblinaInicioPS2', apresentacao: 'neblina: inicio', tipo: 'float', min: 0, max: 10000 },
+          { nome: 'neblinaFimPS2', apresentacao: 'neblina: fim', tipo: 'float', min: 1000, max: 20000 },
+          { nome: 'tomHorizontePS2', apresentacao: 'horizonte azul-acinzentado', tipo: 'float', min: 0, max: 1 },
+        ]
+      },
+      {
+        titulo: 'chao (retro)', caminho: ['opcoes'], campos: [
+          { nome: 'contrasteGramaPS2', apresentacao: 'detalhe da grama', tipo: 'float', min: 0, max: 1.5 },
+          { nome: 'corDetalheGramaPS2', apresentacao: 'cor do detalhe da grama', tipo: 'float', min: 0, max: 1 },
+          { nome: 'contrasteSuperficiesPS2', apresentacao: 'detalhe de pedra, neve, areia e terra', tipo: 'float', min: 0, max: 1.5 },
+          { nome: 'influenciaCorTerrenoTerraPS2', apresentacao: 'cor do terreno na terra de outono (0 = foto original)', tipo: 'float', min: 0, max: 1 },
+        ]
       },
     ]
   },

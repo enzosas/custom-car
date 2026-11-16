@@ -13,6 +13,7 @@ export interface GeometriasArvore {
     lod2: Malha[];      // cone único de 4 lados
     lod3: Malha[];      // billboard cruzado
     alturaTotal: number;
+    raioCopa: number;   // raio da copa mais larga (base): dá a largura dos cartões do estilo PS2
 }
 
 /** gerarConeDeslocado(): tronco ou copa cônica truncada com deslocamento vertical e rotação angular */
@@ -85,5 +86,27 @@ export function gerarGeometriasArvore(config = GAME_CONFIG): GeometriasArvore {
         lod2: [gerarConeDeslocado(raioCopa1, 0, alturaTotal, 0, 4, corFolhagem, 0)],
         lod3: [gerarBillboardCone(raioCopa1, alturaTotal, corFolhagem)],
         alturaTotal,
+        raioCopa: raioCopa1,
+    };
+}
+
+/**
+ * Estilo PS2: a árvore é um CARTÃO com a textura de uma conífera (ver texturasPS2.ts), do tamanho da árvore de cones.
+ *  - `cruz`: dois cartões em X (perto: de lado a árvore continua com volume)
+ *  - `face`: um cartão só; o vertex shader o gira em torno do eixo vertical para ficar de frente para a câmera
+ * A base fica em y = 0, como o tronco da árvore de cones, então a mesma matriz de instância serve para os dois estilos.
+ */
+export function gerarCartoesArvore(g: GeometriasArvore): { cruz: Malha; face: Malha } {
+    const h = g.alturaTotal, m = g.raioCopa / 0.9;        // a copa ocupa ~90% da largura do cartão
+    const branco = (n: number) => new Float32Array(n * 3).fill(1);
+    const quadXY = [-m, 0, 0, m, 0, 0, m, h, 0, -m, h, 0];
+    const quadZY = [0, 0, -m, 0, 0, m, 0, h, m, 0, h, -m];
+    const uv = [0, 0, 1, 0, 1, 1, 0, 1];
+    return {
+        face: { positions: Float32Array.from(quadXY), colors: branco(4), indices: Uint32Array.from([0, 1, 2, 0, 2, 3]), uvs: Float32Array.from(uv) },
+        cruz: {
+            positions: Float32Array.from([...quadXY, ...quadZY]), colors: branco(8),
+            indices: Uint32Array.from([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]), uvs: Float32Array.from([...uv, ...uv]),
+        },
     };
 }

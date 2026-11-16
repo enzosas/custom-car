@@ -544,3 +544,24 @@
     background: rgba(0, 85, 170, 0.18);
     color: #0055aa;
 }
+
+/* ---------- seletor de estilo gráfico: dois botões lado a lado ("low poly" | "retro") ---------- */
+.painel-seletor {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 4px 0;
+}
+
+.painel-seletor .painel-btn {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    justify-content: center;
+    box-sizing: border-box;
+}
+
+.painel-seletor .painel-btn .rotulo {
+    padding-left: 0;
+}

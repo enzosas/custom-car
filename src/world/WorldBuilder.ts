@@ -4,8 +4,11 @@ import { Terreno, type AtributosChunk } from './Terreno';
 import { Estrada, PASSO } from './Estrada';
 import { Floresta } from './Floresta';
 import { Grama, gerarGeometriaTufo } from './Grama';
-import { gerarGeometriasArvore } from './Arvore';
+import { gerarGeometriasArvore, gerarCartoesArvore } from './Arvore';
 import { geometriaDe } from '@/graphics/Malha';
+import { CAMADA_ARVORE_PS2 } from '@/graphics/ShadowMap';
+import { definirEstiloMaterial } from '@/graphics/materialPrincipal';
+import { texturasChao, texturaArvores, carregarTexturaGrama, definirTexturaGrama, texturaSuperficies, carregarTexturaSuperficies, carregarTexturaTerra, definirTexturaSuperficies, TILE_CHAO } from '@/graphics/texturasPS2';
 
 /** chunks novos montados por frame enquanto o carro anda (carga inicial e mudanças do painel montam tudo de uma vez) */
 const CHUNKS_POR_FRAME = 3;
@@ -33,6 +36,8 @@ export class WorldBuilder {
     public gramaMesh!: THREE.InstancedMesh;
 
     public florestaMeshes: THREE.InstancedMesh[][] = [[], [], [], []];
+    /** estilo PS2: um mesh de cartões por LOD (0 = dois cartões em X; 1 a 3 = um cartão de frente para a câmera). Usam os mesmos buffers de instância do low poly */
+    public florestaMeshesPS2: THREE.InstancedMesh[][] = [[], [], [], []];
     public florestaLotes: Float32Array[] = [];
     private florestaAttrs: THREE.InstancedBufferAttribute[] = [];
     private florestaCap = 0;
@@ -58,9 +63,84 @@ export class WorldBuilder {
     private faltaConstruir = true;
     private marcasPendentes = false;          // há chunks perto do carro ainda sem faixas (criadas aos poucos)
 
-    /** `matOpaco` é compartilhado com o Jogo (quem o cria também o descarta). */
-    constructor(private matOpaco: THREE.ShaderMaterial, private matMarcacao: THREE.ShaderMaterial, private config = GAME_CONFIG) {
+    /** estilo visual ativo (false = low poly, true = PS2); quem decide é o Jogo, via definirEstilo */
+    public estiloPS2 = false;
+
+    /** Os materiais são compartilhados com o Jogo (quem os cria também os descarta). */
+    constructor(
+        private matMarcacao: THREE.ShaderMaterial,
+        private matTerreno: THREE.ShaderMaterial,
+        private matArvore: THREE.ShaderMaterial,
+        private matArvoreCruz: THREE.ShaderMaterial,
+        private matArvoreFace: THREE.ShaderMaterial,
+        private matGrama: THREE.ShaderMaterial,
+        private config = GAME_CONFIG,
+    ) {
         this.terreno.estrada = this.estrada;   // o terreno é derivado da pista
+    }
+
+    /** troca o estilo do mundo: os materiais mudam de variante e continuam sendo os mesmos objetos */
+    definirEstilo(ps2: boolean) {
+        this.estiloPS2 = ps2;
+        if (ps2) {
+            const t = texturasChao();      // geradas na primeira vez
+            this.matTerreno.uniforms.uTexGrama.value = t.grama;
+            this.matTerreno.uniforms.uTexAsfalto.value = t.asfalto;
+            this.matTerreno.uniforms.uTexSup.value = texturaSuperficies();
+            if (!this.matTerreno.uniforms.uTexTerra.value) this.matTerreno.uniforms.uTexTerra.value = texturaSuperficies();   // só um sampler válido; vale só com uFotoTerra = 1
+            const arv = texturaArvores();
+            this.matArvoreCruz.uniforms.uTexArvore.value = arv;
+            this.matArvoreFace.uniforms.uTexArvore.value = arv;
+        }
+        this.terreno.paletaPS2 = ps2;          // as cores que as partículas do carro leem do chão acompanham o estilo
+        definirEstiloMaterial(this.matTerreno, ps2, ['TEXTURA_CHAO', 'PALETA_PS2']);
+    }
+
+    /**
+     * Posição da câmera -> deslocamento das texturas do chão. O shader só conhece a posição RELATIVA à câmera (pequena);
+     * a parte grande da posição do mundo entra aqui, como fract(posição / tile) em dupla precisão, para a textura não
+     * tremer nem "nadar" longe da origem. Chamar todo frame, antes de desenhar.
+     */
+    atualizarTexturaChao(camX: number, camZ: number, escala = 1, contrasteGrama = 1, corDetalheGrama = 1, contrasteSup = 1, influenciaCorTerrenoTerra = 0.15) {
+        if (!this.estiloPS2) return;
+        const fr = (v: number) => v - Math.floor(v);
+        const e = Math.max(0.05, escala);
+        const gF = TILE_CHAO.gramaFino * e, gG = TILE_CHAO.gramaGrosso * e, aF = TILE_CHAO.asfaltoFino * e, aG = TILE_CHAO.asfaltoGrosso * e;
+        (this.matTerreno.uniforms.uTexTile.value as THREE.Vector4).set(gF, gG, aF, aG);
+        (this.matTerreno.uniforms.uTexOffG.value as THREE.Vector4).set(fr(camX / gF), fr(camZ / gF), fr(camX / gG), fr(camZ / gG));
+        (this.matTerreno.uniforms.uTexOffA.value as THREE.Vector4).set(fr(camX / aF), fr(camZ / aF), fr(camX / aG), fr(camZ / aG));
+        const sF = TILE_CHAO.superficieFino * e, sG = TILE_CHAO.superficieGrosso * e;
+        (this.matTerreno.uniforms.uTileSup.value as THREE.Vector2).set(sF, sG);
+        (this.matTerreno.uniforms.uOffSup.value as THREE.Vector4).set(fr(camX / sF), fr(camZ / sF), fr(camX / sG), fr(camZ / sG));
+        this.matTerreno.uniforms.uContrasteSup.value = contrasteSup;
+        this.matTerreno.uniforms.uInfluenciaTerra.value = Math.max(0, Math.min(1, influenciaCorTerrenoTerra));
+        this.matTerreno.uniforms.uContrasteGrama.value = contrasteGrama;
+        this.matTerreno.uniforms.uCorDetalheGrama.value = corDetalheGrama;
+    }
+
+    /**
+     * Procura as texturas de arquivo em public/texturas/ (grama.jpg, rocha.jpg, neve.jpg, areia.jpg, terra.jpg). Se existirem, substituem as geradas
+     * por código; se não, nada muda. Chamar uma vez ao iniciar; funciona mesmo que o estilo PS2 seja ligado antes de terminar.
+     */
+    async carregarTexturasExternas() {
+        const [grama, sup, terra] = await Promise.all([carregarTexturaGrama(), carregarTexturaSuperficies(), carregarTexturaTerra()]);
+        if (terra) {
+            // a foto de terra aparece como ela é (com a cor) na terra de outono; os outros canais continuam como detalhe
+            this.matTerreno.uniforms.uTexTerra.value = terra.textura;
+            (this.matTerreno.uniforms.uCorMediaTerra.value as THREE.Vector3).set(terra.media[0], terra.media[1], terra.media[2]);
+            this.matTerreno.uniforms.uFotoTerra.value = 1;
+            console.log('foto de terra (outono) carregada de texturas/terra.jpg');
+        }
+        if (grama) {
+            definirTexturaGrama(grama);
+            if (this.estiloPS2) this.matTerreno.uniforms.uTexGrama.value = texturasChao().grama;
+            console.log('textura de grama carregada de texturas/grama.jpg');
+        }
+        if (sup) {
+            definirTexturaSuperficies(sup.textura);
+            if (this.estiloPS2) this.matTerreno.uniforms.uTexSup.value = texturaSuperficies();
+            console.log(`texturas de superficie carregadas de texturas/: ${sup.arquivos.join(', ')}`);
+        }
     }
 
     // 1. Inicialização
@@ -68,7 +148,7 @@ export class WorldBuilder {
         this.definirSeed(seed);
 
         // Grama
-        this.gramaMesh = new THREE.InstancedMesh(geometriaDe(gerarGeometriaTufo(this.config)), this.matOpaco, 1);
+        this.gramaMesh = new THREE.InstancedMesh(geometriaDe(gerarGeometriaTufo(this.config)), this.matGrama, 1);
         this.gramaMesh.frustumCulled = false;
         this.gramaMesh.count = 0;
         // cor por instância (a cor do terreno sob cada tufo): precisa existir antes do primeiro desenho, porque é ela que liga a variante do shader
@@ -184,8 +264,15 @@ export class WorldBuilder {
         const cor = new THREE.BufferAttribute(new Float32Array(n * n * 3), 3);
         cor.setUsage(THREE.DynamicDrawUsage);
         geo.setAttribute('color', cor);
+        const corPS2 = new THREE.BufferAttribute(new Float32Array(n * n * 3), 3);   // paleta do estilo PS2 (o shader escolhe)
+        corPS2.setUsage(THREE.DynamicDrawUsage);
+        geo.setAttribute('colorPS2', corPS2);
+        geo.setAttribute('aAsfalto', new THREE.BufferAttribute(new Float32Array(n * n), 1));   // chunk comum: sem asfalto (zeros)
+        const sup = new THREE.BufferAttribute(new Float32Array(n * n * 4), 4);                // pesos [rocha, neve, areia, terra] (estilo PS2)
+        sup.setUsage(THREE.DynamicDrawUsage);
+        geo.setAttribute('aSup', sup);
         geo.setIndex(this.indiceAttr!);
-        const mesh = new THREE.Mesh(geo, this.matOpaco);
+        const mesh = new THREE.Mesh(geo, this.matTerreno);
         mesh.frustumCulled = false;
         this.terrenoGrupo.add(mesh);
         return mesh;
@@ -202,14 +289,17 @@ export class WorldBuilder {
         // Chunk que a pista atravessa: malha PRÓPRIA, com a grama e o asfalto juntos e vértices compartilhados nas bordas.
         // Os triângulos do terreno sob o asfalto não existem (foram trocados por pedaços de asfalto e de grama), então não
         // há duas superfícies no mesmo lugar e nada de z-fighting. Os demais chunks usam a malha comum, em pool.
-        const malha = this.estrada.gerarMalhaTerrenoChunk(cx, cz, tam, this.terreno.espacamento, this.gradeCelulas, this.scratchPos, at.cor);
+        const malha = this.estrada.gerarMalhaTerrenoChunk(cx, cz, tam, this.terreno.espacamento, this.gradeCelulas, this.scratchPos, at.cor, at.corPS2, at.sup);
         let mesh: THREE.Mesh;
         if (malha) {
             const geo = new THREE.BufferGeometry();
             geo.setAttribute('position', new THREE.BufferAttribute(malha.positions, 3));
             geo.setAttribute('color', new THREE.BufferAttribute(malha.colors, 3));
+            if (malha.superficie) geo.setAttribute('aAsfalto', new THREE.BufferAttribute(malha.superficie, 1));
+            if (malha.colorsPS2) geo.setAttribute('colorPS2', new THREE.BufferAttribute(malha.colorsPS2, 3));
+            if (malha.sup) geo.setAttribute('aSup', new THREE.BufferAttribute(malha.sup, 4));
             geo.setIndex(new THREE.BufferAttribute(malha.indices, 1));
-            mesh = new THREE.Mesh(geo, this.matOpaco);
+            mesh = new THREE.Mesh(geo, this.matTerreno);
             mesh.frustumCulled = false;
             this.terrenoGrupo.add(mesh);
         } else {
@@ -220,6 +310,12 @@ export class WorldBuilder {
             const cor = mesh.geometry.getAttribute('color') as THREE.BufferAttribute;
             (cor.array as Float32Array).set(at.cor);
             cor.needsUpdate = true;
+            const corPS2 = mesh.geometry.getAttribute('colorPS2') as THREE.BufferAttribute;
+            (corPS2.array as Float32Array).set(at.corPS2);
+            corPS2.needsUpdate = true;
+            const sup = mesh.geometry.getAttribute('aSup') as THREE.BufferAttribute;
+            (sup.array as Float32Array).set(at.sup);
+            sup.needsUpdate = true;
         }
         mesh.position.set(cx * tam, 0, cz * tam);
         mesh.visible = true;
@@ -344,7 +440,7 @@ export class WorldBuilder {
                 const geo = geometriaDe(m);
                 let mesh = this.florestaMeshes[k][j];
                 if (!mesh) {
-                    mesh = new THREE.InstancedMesh(geo, this.matOpaco, 1);
+                    mesh = new THREE.InstancedMesh(geo, this.matArvore, 1);
                     mesh.frustumCulled = false;
                     mesh.count = 0;
                     this.florestaMeshes[k][j] = mesh;
@@ -354,6 +450,23 @@ export class WorldBuilder {
                 }
             });
         });
+
+        // estilo PS2: cartões do tamanho da árvore; LOD 0 = dois em X, LOD 1 a 3 = um que gira para a câmera
+        const c = gerarCartoesArvore(g);
+        for (let k = 0; k < 4; ++k) {
+            const geo = geometriaDe(k === 0 ? c.cruz : c.face);
+            let mesh = this.florestaMeshesPS2[k][0];
+            if (!mesh) {
+                mesh = new THREE.InstancedMesh(geo, k === 0 ? this.matArvoreCruz : this.matArvoreFace, 1);
+                mesh.frustumCulled = false;
+                mesh.count = 0;
+                mesh.layers.set(CAMADA_ARVORE_PS2);   // a câmera principal enxerga as duas camadas; o passe de sombra as separa
+                this.florestaMeshesPS2[k][0] = mesh;
+            } else {
+                mesh.geometry.dispose();
+                mesh.geometry = geo;
+            }
+        }
         this.garantirCapacidadeFloresta(Math.max(1, this.config.arvore.arvores.quantidade));
     }
 
@@ -367,6 +480,7 @@ export class WorldBuilder {
             attr.setUsage(THREE.DynamicDrawUsage);
             this.florestaLotes.push(arr); this.florestaAttrs.push(attr);
             for (const mesh of this.florestaMeshes[k]) mesh.instanceMatrix = attr;
+            for (const mesh of this.florestaMeshesPS2[k]) mesh.instanceMatrix = attr;
         }
     }
 
@@ -390,12 +504,19 @@ export class WorldBuilder {
     }
 
     atualizarFlorestaLods(ref: { x: number; y: number; z: number }, sombraPass: boolean) {
+        const ps2 = this.estiloPS2;
+        // no passe de sombra o estilo PS2 também seleciona: os cartões entram no mapa pela segunda passada
+        // (material de profundidade com alpha test; ver Jogo.renderizarSombra). A seleção do quadro principal refaz tudo.
         const cont = this.floresta.selecionar(ref, sombraPass, this.florestaLotes);
         for (let k = 0; k < 4; ++k) {
             this.florestaAttrs[k].needsUpdate = true;
             for (const mesh of this.florestaMeshes[k]) {
-                mesh.count = cont[k];
-                mesh.visible = cont[k] > 0;
+                mesh.count = ps2 ? 0 : cont[k];
+                mesh.visible = !ps2 && cont[k] > 0;
+            }
+            for (const mesh of this.florestaMeshesPS2[k]) {
+                mesh.count = ps2 ? cont[k] : 0;
+                mesh.visible = ps2 && cont[k] > 0;
             }
         }
     }

@@ -6,7 +6,9 @@
 // cada nuvem é calculada relativa à câmera (em dupla precisão no JS), então não há perda de precisão longe da origem.
 import * as THREE from 'three';
 import type { GAME_CONFIG } from '@/core/config';
-import { criarMaterialCeu, type UniformsCompartilhados } from './materialPrincipal';
+import { criarMaterialCeu, definirEstiloMaterial, type UniformsCompartilhados } from './materialPrincipal';
+import { texturaNuvensCeu } from './texturasPS2';
+import { calcularCamadaNuvens, type CamadaNuvens } from './camadaNuvens';
 import type { Atmosfera } from './Atmosfera';
 
 type CfgCeu = typeof GAME_CONFIG.ceu.parametros;
@@ -52,6 +54,9 @@ export class Ceu {
     private readonly domo: THREE.Mesh;
     private readonly materialCeu: THREE.ShaderMaterial;
     private readonly nuvens: THREE.InstancedMesh;
+    /** estilo PS2: as nuvens viram uma camada dentro do shader da cúpula (os aglomerados 3D não são desenhados) */
+    private estiloPS2 = false;
+    private readonly camada: CamadaNuvens = { ligada: false, cobertura: 0, altura: 0, tileGrande: 1, tileFino: 1, offGrande: [0, 0], offFino: [0, 0] };
     /** por nuvem: x, z (fração do lado), altura, escala x, escala z, giro, 0, 0 */
     private readonly sorteios = new Float32Array(MAX_NUVENS * 8);
     private tempo = 0;
@@ -69,6 +74,7 @@ export class Ceu {
         this.nuvens.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         this.grupo.add(this.nuvens);
 
+
         for (let i = 0; i < MAX_NUVENS; ++i) {
             const o = i * 8;
             this.sorteios[o] = sorteio(i, 0); this.sorteios[o + 1] = sorteio(i, 1); this.sorteios[o + 2] = sorteio(i, 2);
@@ -76,6 +82,13 @@ export class Ceu {
             this.sorteios[o + 5] = sorteio(i, 5) * Math.PI * 2;
         }
         scene.add(this.grupo);
+    }
+
+    /** troca o estilo das nuvens: aglomerados 3D (low poly) ou camada de nuvens no céu, com textura (PS2) */
+    definirEstilo(ps2: boolean) {
+        this.estiloPS2 = ps2;
+        if (ps2) this.materialCeu.uniforms.uTexNuvensCeu.value = texturaNuvensCeu();      // gerada na primeira vez
+        definirEstiloMaterial(this.materialCeu, ps2, ['NUVENS_PS2']);
     }
 
     /** o passe de profundidade da sombra não deve desenhar o céu nem as nuvens */
@@ -90,9 +103,19 @@ export class Ceu {
         u.uSunBright.value = c.solBrilho;
         u.uNight.value = c.estrelas ? atm.noite : 0;
 
+        if (this.estiloPS2) {
+            const k = calcularCamadaNuvens(c, cam.x, cam.y, cam.z, this.tempo, this.camada);
+            u.uNuvOn.value = k.ligada ? 1 : 0;
+            u.uNuvCobertura.value = k.cobertura;
+            u.uNuvH.value = k.altura;
+            u.uNuvTile.value.set(k.tileGrande, k.tileFino);
+            u.uNuvOff.value.set(k.offGrande[0], k.offGrande[1], k.offFino[0], k.offFino[1]);
+            u.uNuvNoite.value = atm.noite;
+        }
+
         const n = c.nuvens ? Math.max(0, Math.min(MAX_NUVENS, Math.floor(c.nuvensQuantidade))) : 0;
-        this.nuvens.count = n;
-        this.nuvens.visible = n > 0;
+        this.nuvens.count = this.estiloPS2 ? 0 : n;
+        this.nuvens.visible = !this.estiloPS2 && n > 0;
         if (n === 0) return;
 
         // o grupo fica na câmera; as nuvens são posicionadas relativas a ela (e dão a volta no mundo ao sair do raio)

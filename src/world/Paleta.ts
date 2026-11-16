@@ -44,32 +44,55 @@ const ROCHA = [0.50, 0.49, 0.50];
 const ROCHA_DESERTO = [0.74, 0.52, 0.36];      // arenito
 const NEVE = [0.95, 0.97, 1.0];
 
+// Estilo PS2: as MESMAS faixas de bioma (então o que nasce onde não muda), mas com cores de campo de verdade: verdes
+// de gramado com um pouco de amarelo, capim seco, ocres e terras. Perde o azul do verde-turquesa e o laranja vivo do
+// outono do estilo low poly. Os valores são a cor do vértice (a luz do dia e a textura entram por cima).
+const RAMPA_BIOMA_PS2 = [
+    [0.00, 0.42, 0.55, 0.22],   // verde de gramado: fica puro até 0.30
+    [0.30, 0.42, 0.55, 0.22],
+    [0.42, 0.50, 0.57, 0.25],   // oliva
+    [0.50, 0.62, 0.59, 0.30],   // capim seco
+    [0.60, 0.60, 0.47, 0.25],   // outono: ocre terroso
+    [0.72, 0.68, 0.60, 0.38],   // savana
+    [0.84, 0.80, 0.70, 0.52],   // deserto
+    [1.00, 0.80, 0.70, 0.52],
+];
+const ROCHA_PS2 = [0.47, 0.46, 0.45];
+const ROCHA_DESERTO_PS2 = [0.66, 0.50, 0.38];
+const NEVE_PS2 = [0.93, 0.95, 0.98];
+/** cor única do terreno com a paleta desligada, no estilo PS2 */
+export const COR_GRAMA_PADRAO_PS2 = [0.42, 0.55, 0.22];
+
 /**
  * @param bioma  0..1 (ruído de bioma, já com contraste)
  * @param alt    altitude relativa 0..1 (altura / altura máxima do relevo)
  * @param incl   inclinação (tangente: 0 = plano, 1 = 45°)
  * @param ruido  variação de cor em [-1, 1] (por vértice)
+ * @param ps2    true = as cores do estilo PS2 (mesma lógica, outra rampa); só as cores mudam, nunca a vegetação
  */
-export function avaliarPaleta(p: ParamPaleta, bioma: number, alt: number, incl: number, ruido: number, s: SaidaPaleta) {
+export function avaliarPaleta(p: ParamPaleta, bioma: number, alt: number, incl: number, ruido: number, s: SaidaPaleta, ps2 = false) {
     if (!p.ativa) {
-        s.r = COR_GRAMA_PADRAO[0]; s.g = COR_GRAMA_PADRAO[1]; s.b = COR_GRAMA_PADRAO[2];
+        const cg = ps2 ? COR_GRAMA_PADRAO_PS2 : COR_GRAMA_PADRAO;
+        s.r = cg[0]; s.g = cg[1]; s.b = cg[2];
         s.arvore = 1; s.grama = 1;
         s.neve = 0; s.rocha = 0; s.deserto = 0; s.outono = 0;
         return;
     }
 
     // solo por bioma
+    const rampa = ps2 ? RAMPA_BIOMA_PS2 : RAMPA_BIOMA;
     let k = 1;
-    while (k < RAMPA_BIOMA.length - 1 && RAMPA_BIOMA[k][0] < bioma) ++k;
-    const a = RAMPA_BIOMA[k - 1], b = RAMPA_BIOMA[k];
+    while (k < rampa.length - 1 && rampa[k][0] < bioma) ++k;
+    const a = rampa[k - 1], b = rampa[k];
     const u = limitar((bioma - a[0]) / (b[0] - a[0] || 1), 0, 1);
     const sr = a[1] + (b[1] - a[1]) * u, sg = a[2] + (b[2] - a[2]) * u, sb = a[3] + (b[3] - a[3]) * u;
 
     // rocha: nas encostas íngremes e nas altitudes altas (arenito vermelho no deserto)
     const des = suave(0.7, 0.9, bioma);
-    const rr = ROCHA[0] + (ROCHA_DESERTO[0] - ROCHA[0]) * des;
-    const rg = ROCHA[1] + (ROCHA_DESERTO[1] - ROCHA[1]) * des;
-    const rb = ROCHA[2] + (ROCHA_DESERTO[2] - ROCHA[2]) * des;
+    const roc = ps2 ? ROCHA_PS2 : ROCHA, rocD = ps2 ? ROCHA_DESERTO_PS2 : ROCHA_DESERTO, nv = ps2 ? NEVE_PS2 : NEVE;
+    const rr = roc[0] + (rocD[0] - roc[0]) * des;
+    const rg = roc[1] + (rocD[1] - roc[1]) * des;
+    const rb = roc[2] + (rocD[2] - roc[2]) * des;
     const rochaInc = suave(p.inclinacaoRocha, p.inclinacaoRocha + 0.35, incl);
     const rochaAlt = suave(p.altitudeRocha, p.altitudeRocha + 0.12, alt);
     const fRocha = Math.max(rochaInc, rochaAlt);
@@ -78,7 +101,7 @@ export function avaliarPaleta(p: ParamPaleta, bioma: number, alt: number, incl: 
     const fNeve = suave(p.altitudeNeve, p.altitudeNeve + 0.06, alt) * (1 - 0.6 * rochaInc);
 
     let r = sr + (rr - sr) * fRocha, g = sg + (rg - sg) * fRocha, bl = sb + (rb - sb) * fRocha;
-    r += (NEVE[0] - r) * fNeve; g += (NEVE[1] - g) * fNeve; bl += (NEVE[2] - bl) * fNeve;
+    r += (nv[0] - r) * fNeve; g += (nv[1] - g) * fNeve; bl += (nv[2] - bl) * fNeve;
 
     // variação de brilho (a neve é mais lisa)
     const v = 1 + ruido * p.variacaoCor * (1 - 0.6 * fNeve);

@@ -12,16 +12,30 @@ import { lerpFactorDt } from '@/graphics/Mat4';
 import { sementeAleatoria } from './Random';
 import { geometriaDe } from '@/graphics/Malha';
 import { Renderer } from '@/graphics/Renderer';
+import { tirarPerfilEstilo, aplicarPerfilEstilo } from './perfilEstilo';
+import { CAMADA_ARVORE_PS2 } from '@/graphics/ShadowMap';
 import { Ceu } from '@/graphics/Ceu';
-import { calcularAtmosfera, criarAtmosfera } from '@/graphics/Atmosfera';
+import { calcularAtmosfera, criarAtmosfera, type PerfilAtmosferaPS2 } from '@/graphics/Atmosfera';
 import { WorldBuilder } from '@/world/WorldBuilder';
 import { gerarGeometriaTufo } from '@/world/Grama';
+import { liberarTexturasPS2 } from '@/graphics/texturasPS2';
 import {
     criarUniformsCompartilhados,
     criarMaterialPrincipal,
     criarMaterialMarcacao,
+    criarMaterialTerreno,
+    criarMaterialVegetacao,
+    criarMaterialArvorePS2,
     atualizarLuz,
 } from '@/graphics/materialPrincipal';
+
+/** configurações com que o estilo retro começa: as do low poly, com as árvores maiores e mais grossas (cartões de frente, como no GT4) */
+function perfilInicialRetro(): Record<string, unknown> {
+    const perfil = tirarPerfilEstilo(GAME_CONFIG) as { arvore: typeof GAME_CONFIG.arvore };
+    perfil.arvore.arvores.alturaTronco = 850;
+    perfil.arvore.arvores.raioTronco = 50;
+    return perfil;
+}
 
 const mudou = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
 
@@ -57,6 +71,11 @@ export class Jogo {
 
     private matOpaco = criarMaterialPrincipal(this.uniforms);
     private matMarcacao = criarMaterialMarcacao(this.uniforms);
+    private matTerreno = criarMaterialTerreno(this.uniforms);
+    private matArvore = criarMaterialVegetacao(this.uniforms);
+    private matArvoreCruz = criarMaterialArvorePS2(this.uniforms, false);
+    private matArvoreFace = criarMaterialArvorePS2(this.uniforms, true);
+    private matGrama = criarMaterialVegetacao(this.uniforms);
 
     private carro!: CarroVisual;
     private efeitos!: EfeitosDrift;
@@ -70,6 +89,7 @@ export class Jogo {
     private quadroSombra = 0;
     private forcarSombra = true;
     private readonly lightDirTmp = new THREE.Vector3();
+    private readonly perfilAtmPS2: PerfilAtmosferaPS2 = { neblinaInicio: 0, neblinaFim: 0, tomHorizonte: 0 };   // ajustes do estilo PS2, reaproveitado a cada frame
     private readonly atm = criarAtmosfera();       // sol e cores do frame (ver Atmosfera.ts)
     private ceu!: Ceu;
     private readonly alvoSombraTmp = new THREE.Vector3();
@@ -90,12 +110,14 @@ export class Jogo {
     private modoCarroGLB = false;
     private estadoCarroVermelho: PerfilCarro = structuredClone(PERFIL_CARRO_VERMELHO);
     private estadoCarroGLB: PerfilCarro = structuredClone(PERFIL_CARRO_GLB);
+    /** memória das configurações de cada estilo (chave: estiloPS2). Os dois começam nos valores padrão; ver perfilEstilo.ts */
+    private perfisEstilo = new Map<boolean, Record<string, unknown>>([[false, tirarPerfilEstilo(GAME_CONFIG)], [true, perfilInicialRetro()]]);
 
     constructor(canvas: HTMLCanvasElement, opcoes: JogoOpcoes = {}) {
         this.opcoes = opcoes;
         this.controle = new ControleJogador(opcoes.controlesToque ?? criarControlesToque());
         this.renderizador = new Renderer(canvas, this.uniforms);
-        this.world = new WorldBuilder(this.matOpaco, this.matMarcacao, this.config);
+        this.world = new WorldBuilder(this.matMarcacao, this.matTerreno, this.matArvore, this.matArvoreCruz, this.matArvoreFace, this.matGrama, this.config);
         this.ceu = new Ceu(this.renderizador.scene, this.uniforms, this.matOpaco);
         Entrada.iniciar(canvas);
     }
@@ -130,7 +152,12 @@ export class Jogo {
             for (let j = 0; j < this.world.florestaMeshes[i].length; j++) {
                 if (this.world.florestaMeshes[i][j]) this.renderizador.scene.add(this.world.florestaMeshes[i][j]);
             }
+            for (const m of this.world.florestaMeshesPS2[i]) this.renderizador.scene.add(m);   // cartões do estilo PS2
         }
+
+        this.renderizador.camera.layers.enable(CAMADA_ARVORE_PS2);   // cartões de árvore do estilo PS2 (ver ShadowMap)
+        this.aplicarEstiloVisual();
+        void this.world.carregarTexturasExternas();   // public/texturas/grama.jpg, se existir
 
         this.carro = new CarroVisual(this.renderizador.scene, this.veiculo, this.matOpaco, this.config);
         this.carro.carregarModeloPadrao();
@@ -223,8 +250,36 @@ export class Jogo {
         }
     }
 
+    /** aplica ao mundo o estilo escolhido em config.opcoes.estiloPS2 (idempotente) */
+    private aplicarEstiloVisual() {
+        const ps2 = this.config.opcoes.estiloPS2;
+        this.world.definirEstilo(ps2);
+        // a sombra dos cartões recorta o contorno com o MESMO atlas que o quadro principal desenha
+        this.renderizador.sombra.materialProfundidadeArvore.uniforms.uTexArvore.value = this.matArvoreFace.uniforms.uTexArvore.value;
+        this.ceu?.definirEstilo(ps2);
+        this.renderizador.definirAlturaInterna(ps2 ? this.config.opcoes.alturaInternaPS2 : 0);
+    }
+
+    /** tecla G: alterna low poly <-> PS2. A troca de memória e a reconstrução do que mudou acontecem em aplicarMudancasDoPainel */
+    private alternarEstiloVisual() {
+        this.config.opcoes.estiloPS2 = !this.config.opcoes.estiloPS2;
+        this.aplicarMudancasDoPainel();
+        this.opcoes.onConfigRecarregada?.();   // o painel (botões e valores) acompanha
+    }
+
+    /**
+     * O estilo mudou (botões do painel ou tecla G): guarda as configurações atuais no estilo que saiu e traz de volta as
+     * do que entrou. O que ficar diferente (terreno, árvores, grama...) é reconstruído pelo diff de aplicarMudancasDoPainel.
+     */
+    private trocarMemoriaDeEstilo(de: boolean, para: boolean) {
+        this.perfisEstilo.set(de, tirarPerfilEstilo(this.config));
+        aplicarPerfilEstilo(this.config, this.perfisEstilo.get(para)!);
+        this.opcoes.onConfigRecarregada?.();
+    }
+
     private aplicarMudancasDoPainel() {
         const c = this.config, a = this.configAnterior;
+        if (c.opcoes.estiloPS2 !== a.opcoes.estiloPS2) this.trocarMemoriaDeEstilo(a.opcoes.estiloPS2, c.opcoes.estiloPS2);
         const carroMudou = mudou(c.carro.dimensoes, a.carro.dimensoes) || mudou(c.carro.rodas, a.carro.rodas);
         const arvoreMudou = mudou(c.arvore.arvores, a.arvore.arvores);
         const gramaMudou = mudou(c.grama.grama, a.grama.grama);
@@ -253,7 +308,7 @@ export class Jogo {
             this.vegetacaoPendente = true;
         }
 
-        if (opcoesMudou) this.carro.setRodasVisiveis(c.opcoes.rodasVisiveis);
+        if (opcoesMudou) { this.carro.setRodasVisiveis(c.opcoes.rodasVisiveis); this.aplicarEstiloVisual(); }
         if (terrenoMudou) this.terrenoDefasado = true;
         this.configAnterior = structuredClone(c);
     }
@@ -294,8 +349,22 @@ export class Jogo {
         r.setRenderTarget(this.renderizador.sombra.alvo);
         r.clear(true, true, false);
 
+        // passada 1: tudo, menos os cartões de árvore (profundidade simples). passada 2: só os cartões (alpha test),
+        // sem limpar o mapa. O autoClear do three apagaria a passada 1, então fica desligado entre as duas.
+        const cam = this.renderizador.camera;
+        const mascara = cam.layers.mask;
+        const autoClear = r.autoClear;
+        cam.layers.set(0);
         this.renderizador.scene.overrideMaterial = this.renderizador.sombra.materialProfundidade;
         this.renderizador.render();
+        if (this.world.estiloPS2) {
+            cam.layers.set(CAMADA_ARVORE_PS2);
+            r.autoClear = false;
+            this.renderizador.scene.overrideMaterial = this.renderizador.sombra.materialProfundidadeArvore;
+            this.renderizador.render();
+        }
+        r.autoClear = autoClear;
+        cam.layers.mask = mascara;
         this.renderizador.scene.overrideMaterial = null;
         r.setRenderTarget(null);
 
@@ -315,6 +384,7 @@ export class Jogo {
         if (w === 0 || h === 0) return;
 
         if (Entrada.teclaUmaVez('KeyX')) this.alternarModoCarro();
+        if (Entrada.teclaUmaVez('KeyG')) this.alternarEstiloVisual();
 
         if (this.controle.detectarTrocaDeCarro()) this.alternarModoCarro();
 
@@ -322,6 +392,11 @@ export class Jogo {
             this.wireframe = !this.wireframe;
             this.matOpaco.wireframe = this.wireframe;
             this.matMarcacao.wireframe = this.wireframe;
+            this.matTerreno.wireframe = this.wireframe;
+            this.matArvore.wireframe = this.wireframe;
+            this.matArvoreCruz.wireframe = this.wireframe;
+            this.matArvoreFace.wireframe = this.wireframe;
+            this.matGrama.wireframe = this.wireframe;
             this.efeitos.setWireframe(this.wireframe);
             this.carro.setWireframe(this.wireframe);
         }
@@ -384,7 +459,13 @@ export class Jogo {
         // hora do dia -> posição do sol e cores do frame (luz, neblina, céu) -> uniforms, luzes do three e céu
         const cc = this.config.ceu.parametros;
         if (cc.cicloAtivo) cc.hora = (cc.hora + deltaTime / Math.max(1, cc.duracaoDia) * 24) % 24;
-        calcularAtmosfera(this.config.luz.parametros, cc, this.atm);
+        const o = this.config.opcoes;
+        let perfilAtm: PerfilAtmosferaPS2 | null = null;
+        if (o.estiloPS2) {      // neblina e horizonte do estilo PS2 (objeto reaproveitado: sem lixo por frame)
+            perfilAtm = this.perfilAtmPS2;
+            perfilAtm.neblinaInicio = o.neblinaInicioPS2; perfilAtm.neblinaFim = o.neblinaFimPS2; perfilAtm.tomHorizonte = o.tomHorizontePS2;
+        }
+        calcularAtmosfera(this.config.luz.parametros, cc, this.atm, perfilAtm);
         atualizarLuz(this.uniforms, this.atm);
         this.renderizador.sincronizarLuzes(this.atm);
         this.ceu.atualizar(deltaTime, this.renderizador.camera.position, this.atm, cc);
@@ -401,8 +482,12 @@ export class Jogo {
         // a sombra é relativa: a matriz usada na tela depende da posição da câmera, então é refeita todo frame
         this.renderizador.sombra.atualizarParaCamera(this.renderizador.camera.position);
         this.world.atualizarFlorestaLods(this.renderizador.camera.position, false);
+        this.world.atualizarTexturaChao(this.renderizador.camera.position.x, this.renderizador.camera.position.z,
+            this.config.opcoes.escalaTexturaPS2, this.config.opcoes.contrasteGramaPS2, this.config.opcoes.corDetalheGramaPS2,
+            this.config.opcoes.contrasteSuperficiesPS2, this.config.opcoes.influenciaCorTerrenoTerraPS2);
 
-        const nG = this.world.grama.selecionar(this.renderizador.camera.position, false, this.world.gramaLote, this.world.gramaLoteCor);
+        // no estilo PS2 a grama é textura no chão (como no GT4): os tufos 3D não são desenhados nem selecionados
+        const nG = this.world.estiloPS2 ? 0 : this.world.grama.selecionar(this.renderizador.camera.position, false, this.world.gramaLote, this.world.gramaLoteCor);
         this.world.atualizarGrama();
         this.world.gramaMesh.count = nG;
 
@@ -448,6 +533,12 @@ export class Jogo {
         this.carro?.dispose();
         this.matOpaco.dispose();
         this.matMarcacao.dispose();
+        this.matTerreno.dispose();
+        this.matArvore.dispose();
+        this.matArvoreCruz.dispose();
+        this.matArvoreFace.dispose();
+        this.matGrama.dispose();
+        liberarTexturasPS2();
         this.ceu?.dispose();
         this.efeitos?.dispose();
         this.renderizador.dispose();

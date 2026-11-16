@@ -9,7 +9,7 @@
 //    aqui, em dupla precisão, e só valores pequenos chegam ao shader.
 import * as THREE from 'three';
 import type { UniformsCompartilhados } from './materialPrincipal';
-import { criarMaterialProfundidade } from './materialPrincipal';
+import { criarMaterialProfundidade, criarMaterialProfundidadeArvore } from './materialPrincipal';
 
 /** lado do mapa em texels. 2048 é um bom equilíbrio; use 1024 em aparelhos fracos ou 4096 para a qualidade máxima. */
 export const TAMANHO_SOMBRA = 2048;
@@ -21,6 +21,9 @@ export const TAMANHO_SOMBRA = 2048;
  * sombra nas bordas da caixa, então não precisa mexer lá ao trocar este valor.
  */
 export const RAIO_SOMBRA = 600;
+
+/** camada do three dos cartões de árvore do estilo PS2: a passada de sombra os separa do resto (material de profundidade com alpha test) */
+export const CAMADA_ARVORE_PS2 = 1;
 const DISTANCIA_LUZ = 1800;
 
 export class ShadowMap {
@@ -28,6 +31,8 @@ export class ShadowMap {
     readonly altura: number;
     readonly alvo: THREE.WebGLRenderTarget;
     readonly materialProfundidade: THREE.ShaderMaterial;
+    /** cartões de árvore do estilo PS2 (alpha test): desenhados numa segunda passada, só os meshes da camada CAMADA_ARVORE_PS2 */
+    readonly materialProfundidadeArvore: THREE.ShaderMaterial;
 
     /** luz * vista relativa à origem: transforma (posição - origem) em coordenadas do mapa */
     readonly lightSpaceRel = new THREE.Matrix4();
@@ -66,6 +71,7 @@ export class ShadowMap {
             generateMipmaps: false,
         });
         this.materialProfundidade = criarMaterialProfundidade(uniforms);
+        this.materialProfundidadeArvore = criarMaterialProfundidadeArvore(uniforms);
 
         this.proj.makeOrthographic(-RAIO_SOMBRA, RAIO_SOMBRA, RAIO_SOMBRA, -RAIO_SOMBRA, 1, 4000);
         this.texelMundo = (2 * RAIO_SOMBRA) / w;

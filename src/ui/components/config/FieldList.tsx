@@ -8,6 +8,7 @@ import { SectionHeader } from './SectionHeader';
 import { DraggableField } from './DraggableField';
 import { SwitchRow } from './SwitchRow';
 import { ActionButton } from './ActionButton';
+import { SeletorEstilo } from './SeletorEstilo';
 import type { AcoesPainel, ModoPainel } from './tipos';
 
 interface Props {
@@ -60,6 +61,9 @@ export function FieldList({ aba, config, modo, acoes, onAlterado, modoReset, sin
                 return (
                     <Fragment key={`${sec.caminho.join('.')}|${sec.titulo}`}>
                         <SectionHeader titulo={sec.titulo} modo={modo} acao={indice === 0 ? acaoCabecalho : undefined} />
+                        {sec.seletorEstilo && (
+                            <SeletorEstilo objeto={objeto as unknown as Record<string, boolean>} modo={modo} onAlterado={aoAlterar} />
+                        )}
                         {sec.amostra && (
                             <div
                                 className={`painel-amostra ${modo}`}

@@ -7,7 +7,7 @@
 import { GAME_CONFIG } from '@/core/config';
 import { PerlinNoise2D, ruidoFractal, ruidoCristas } from './Ruido';
 import type { Estrada } from './Estrada';
-import { avaliarPaleta, COR_GRAMA_PADRAO, type SaidaPaleta } from './Paleta';
+import { avaliarPaleta, COR_GRAMA_PADRAO, COR_GRAMA_PADRAO_PS2, type SaidaPaleta } from './Paleta';
 
 export type Vec3 = { x: number; y: number; z: number };
 
@@ -41,8 +41,12 @@ export interface AtributosChunk {
     celulas: number;
     /** RGB de cada um dos (celulas+1)² vértices */
     cor: Float32Array;
+    /** o mesmo, com a paleta do estilo PS2 (o shader escolhe qual usar; a troca de estilo não reconstrói nada) */
+    corPS2: Float32Array;
     /** por vértice: [quanto de árvore, quanto de grama] o ponto aceita (0..1) */
     veg: Float32Array;
+    /** por vértice: pesos 0..1 de [rocha, neve, areia (deserto), terra (outono)]; o resto é solo comum (grama). Escolhem a textura do estilo PS2 */
+    sup: Float32Array;
 }
 
 /**
@@ -77,6 +81,9 @@ export class Terreno {
     private perlin = new PerlinNoise2D(1);
     private alturasTmp = new Float32Array(0);        // alturas do chunk com 1 vértice de folga em volta (inclinação sem emenda)
     private paletaTmp: SaidaPaleta = { r: 0, g: 0, b: 0, arvore: 1, grama: 1, neve: 0, rocha: 0, deserto: 0, outono: 0 };
+    private paletaTmp2: SaidaPaleta = { r: 0, g: 0, b: 0, arvore: 1, grama: 1, neve: 0, rocha: 0, deserto: 0, outono: 0 };
+    /** estilo PS2: as cores devolvidas por superficieEm (poeira e partículas do carro) passam a ser as da paleta PS2 */
+    public paletaPS2 = false;
     /** a pista que molda o terreno (definida pelo WorldBuilder); sem ela o terreno é só o relevo */
     estrada: Estrada | null = null;
 
@@ -184,18 +191,18 @@ export class Terreno {
      */
     superficieEm(x: number, z: number, s: SaidaPaleta) {
         const p = this.config.terreno.paleta;
-        if (!p.ativa) { avaliarPaleta(p, 0, 0, 0, 0, s); return; }
+        if (!p.ativa) { avaliarPaleta(p, 0, 0, 0, 0, s, this.paletaPS2); return; }
         const q = this.lerParametros(), esp = this.espacamento;
         const hc = this.obterAlturaMundo(x, z);
         const hx = (this.alturaVertice(x + esp, z, q) - this.alturaVertice(x - esp, z, q)) / (2 * esp);
         const hz = (this.alturaVertice(x, z + esp, q) - this.alturaVertice(x, z - esp, q)) / (2 * esp);
         const ruido = limitar(0.65 * this.manchaEm(x, z) + 0.35 * hash2(Math.round(x / esp), Math.round(z / esp)), -1, 1);
-        avaliarPaleta(p, this.biomaEm(x, z), limitar(hc / q.escala, 0, 1), Math.hypot(hx, hz), ruido, s);
+        avaliarPaleta(p, this.biomaEm(x, z), limitar(hc / q.escala, 0, 1), Math.hypot(hx, hz), ruido, s, this.paletaPS2);
     }
 
     criarAtributosChunk(): AtributosChunk {
         const celulas = this.celulasPorChunk, n = celulas + 1;
-        return { celulas, cor: new Float32Array(n * n * 3), veg: new Float32Array(n * n * 2) };
+        return { celulas, cor: new Float32Array(n * n * 3), corPS2: new Float32Array(n * n * 3), veg: new Float32Array(n * n * 2), sup: new Float32Array(n * n * 4) };
     }
 
     /**
@@ -206,11 +213,12 @@ export class Terreno {
     preencherAtributosChunk(cx: number, cz: number, pos: Float32Array, at: AtributosChunk) {
         const p = this.config.terreno.paleta;
         const celulas = at.celulas, n = celulas + 1, esp = this.espacamento;
-        const s = this.paletaTmp;
+        const s = this.paletaTmp, s2 = this.paletaTmp2;
 
         if (!p.ativa) {
             for (let k = 0; k < n * n; ++k) {
                 at.cor[k * 3] = COR_GRAMA_PADRAO[0]; at.cor[k * 3 + 1] = COR_GRAMA_PADRAO[1]; at.cor[k * 3 + 2] = COR_GRAMA_PADRAO[2];
+                at.corPS2[k * 3] = COR_GRAMA_PADRAO_PS2[0]; at.corPS2[k * 3 + 1] = COR_GRAMA_PADRAO_PS2[1]; at.corPS2[k * 3 + 2] = COR_GRAMA_PADRAO_PS2[2];
                 at.veg[k * 2] = 1; at.veg[k * 2 + 1] = 1;
             }
             return;
@@ -241,10 +249,14 @@ export class Terreno {
                 // variação de cor: manchas grandes (ruído suave) misturadas com um granulado por vértice
                 const ruido = limitar(0.65 * this.manchaEm(gx, gz) + 0.35 * hash2(gi, gj), -1, 1);
 
-                avaliarPaleta(p, this.biomaEm(gx, gz), alt, incl, ruido, s);
+                const bioma = this.biomaEm(gx, gz);
+                avaliarPaleta(p, bioma, alt, incl, ruido, s);
+                avaliarPaleta(p, bioma, alt, incl, ruido, s2, true);      // a mesma entrada, com a rampa do estilo PS2
                 const k = j * n + i;
                 at.cor[k * 3] = s.r; at.cor[k * 3 + 1] = s.g; at.cor[k * 3 + 2] = s.b;
+                at.corPS2[k * 3] = s2.r; at.corPS2[k * 3 + 1] = s2.g; at.corPS2[k * 3 + 2] = s2.b;
                 at.veg[k * 2] = s.arvore; at.veg[k * 2 + 1] = s.grama;
+                at.sup[k * 4] = s.rocha; at.sup[k * 4 + 1] = s.neve; at.sup[k * 4 + 2] = s.deserto; at.sup[k * 4 + 3] = s.outono;
             }
         }
     }

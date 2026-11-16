@@ -19,6 +19,9 @@ export interface Atmosfera {
     corAmbiente: RGB;
     /** cor do céu no horizonte: também é a cor da neblina e do fundo da tela */
     corHorizonte: RGB;
+    /** distância em que a neblina começa e em que cobre tudo (unidades do mundo) */
+    neblinaInicio: number;
+    neblinaFim: number;
     /** cor do céu no alto */
     corZenite: RGB;
     /** cor do disco, do halo e do brilho da neblina em volta do sol */
@@ -36,9 +39,18 @@ export interface Atmosfera {
     elevacao: number;
 }
 
+/** neblina do estilo low poly */
+const NEBLINA_INICIO = 5000;
+const NEBLINA_FIM = 15000;
+/** horizonte de dia no estilo PS2: azul-acinzentado, de céu meio enevoado */
+const HORIZONTE_PS2: RGB = [0.62, 0.70, 0.80];
+
+/** ajustes de atmosfera do estilo PS2 (vêm de config.opcoes); `null`/ausente = estilo low poly */
+export interface PerfilAtmosferaPS2 { neblinaInicio: number; neblinaFim: number; tomHorizonte: number }
+
 export function criarAtmosfera(): Atmosfera {
     return {
-        dirLuz: [0, 1, 0], dirSol: [0, 1, 0],
+        dirLuz: [0, 1, 0], dirSol: [0, 1, 0], neblinaInicio: NEBLINA_INICIO, neblinaFim: NEBLINA_FIM,
         corLuz: [1, 1, 1], corAmbiente: [1, 1, 1], corHorizonte: [1, 1, 1], corZenite: [1, 1, 1], corBrilhoSol: [1, 1, 1],
         intAmbiente: 0.5, intDifusa: 0.45, intEspecular: 0.05, shininess: 20, neblina: 1, brilhoNeblina: 0, noite: 0, elevacao: 1,
     };
@@ -82,7 +94,7 @@ export function direcaoDoSol(c: CfgCeu, out: V3): V3 {
     return out;
 }
 
-export function calcularAtmosfera(l: Luz, c: CfgCeu, a: Atmosfera) {
+export function calcularAtmosfera(l: Luz, c: CfgCeu, a: Atmosfera, ps2: PerfilAtmosferaPS2 | null = null) {
     direcaoDoSol(c, a.dirSol);
     const [sx, sy, sz] = a.dirSol;
     a.elevacao = sy;
@@ -120,6 +132,16 @@ export function calcularAtmosfera(l: Luz, c: CfgCeu, a: Atmosfera) {
     // depois que o sol se põe: o crepúsculo)
     mistura(HORIZONTE_NOITE, corCeu(l), dia, tmpA);
     mistura(tmpA, HORIZONTE_POENTE, poente * 0.8, a.corHorizonte);
+
+    // neblina e horizonte do estilo PS2. O horizonte é também a cor da neblina e do fundo da tela, então o céu, o terreno
+    // distante e as árvores continuam sumindo exatamente na mesma cor. O tom azul-acinzentado só vale de dia: o poente e
+    // a noite mantêm as cores de sempre.
+    a.neblinaInicio = NEBLINA_INICIO; a.neblinaFim = NEBLINA_FIM;
+    if (ps2) {
+        a.neblinaInicio = Math.max(0, ps2.neblinaInicio);
+        a.neblinaFim = Math.max(ps2.neblinaFim, a.neblinaInicio + 1);
+        mistura(a.corHorizonte, HORIZONTE_PS2, limitar(ps2.tomHorizonte, 0, 1) * dia * (1 - poente), a.corHorizonte);
+    }
     mistura(ZENITE_NOITE, hsvParaRgb(c.zeniteH, c.zeniteS, c.zeniteV), dia, tmpB);
     mistura(tmpB, ZENITE_POENTE, poente * 0.55, a.corZenite);
 

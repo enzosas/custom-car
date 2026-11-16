@@ -79,6 +79,28 @@ export const GAME_CONFIG = {
     /** interruptores (liga/desliga) do painel; cada chave aqui vira uma linha de switch via `interruptores` em painelCampos.ts */
     opcoes: {
         rodasVisiveis: true,
+        /** false = low poly (padrão); true = visual de PS2 (GT4). Alterna também com a tecla G */
+        estiloPS2: false,
+        /** estilo PS2: altura interna fixa do desenho, em pixels (o PS2 fazia 480 linhas; o padrão aqui é 360); o navegador amplia com filtro bilinear */
+        alturaInternaPS2: 360,
+        /** estilo PS2: onde a neblina começa e onde cobre tudo (unidades do mundo); no low poly são 5000 e 15000 */
+        neblinaInicioPS2: 1500,
+        neblinaFimPS2: 9000,
+        /** estilo PS2: quanto o horizonte (céu, neblina e fundo) é puxado para um azul-acinzentado de dia; 0 = nada, 1 = todo */
+        tomHorizontePS2: 0.55,
+        /** estilo PS2: tamanho das texturas do chão (1 = padrão; 2 = o dobro, mais esticadas; 0.5 = a metade, mais repetidas) */
+        escalaTexturaPS2: 1,
+        /** estilo PS2: força do detalhe da grama (0 = grama lisa, 1 = a textura inteira) */
+        contrasteGramaPS2: 1,
+        /** estilo PS2: quanto da COR da foto de grama entra no detalhe (0 = só claro e escuro, 1 = a cor toda, com as folhas secas laranja) */
+        corDetalheGramaPS2: 0.35,
+        /** estilo PS2: força do detalhe de pedra, neve, areia e terra de outono (0 = cor lisa, 1 = a textura inteira) */
+        contrasteSuperficiesPS2: 1,
+        /**
+         * estilo PS2: quanto a cor do terreno (bioma) tinge a terra de outono quando existe a foto terra.jpg.
+         * 0 = a foto original, sem tintura; 1 = a foto vira só um detalhe claro/escuro por cima da cor do bioma. Sem a foto, não faz nada.
+         */
+        influenciaCorTerrenoTerraPS2: 0.15,
     },
     terreno: {
         parametros: {
