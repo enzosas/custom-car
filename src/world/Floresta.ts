@@ -122,7 +122,9 @@ export class Floresta {
      */
     selecionar(pontoRef: { x: number; y: number; z: number }, isShadowPass: boolean, lotes: Float32Array[]): number[] {
         const contagem = [0, 0, 0, 0];
-        const raioSombraSq = 1350 * 1350;
+        // árvores que entram no mapa de sombra: até um pouco além da diagonal da caixa da sombra
+        const raioSombra = Math.max(1350, (this.config.opcoes.alcanceSombra ?? 600) * 1.5);
+        const raioSombraSq = raioSombra * raioSombra;
         const raioVisaoSq = 750000000;
         const alcance = Math.sqrt(isShadowPass ? raioSombraSq : raioVisaoSq);
         for (const d of this.chunks.values()) {

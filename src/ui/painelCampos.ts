@@ -252,6 +252,12 @@ export const ABAS: AbaDef[] = [
     titulo: 'grafico config', secoes: [
       { titulo: 'estilo grafico (tecla G)', caminho: ['opcoes'], campos: [], seletorEstilo: true },
       {
+        titulo: 'sombras', caminho: ['opcoes'], campos: [
+          { nome: 'alcanceSombra', apresentacao: 'alcance', tipo: 'float', min: 200, max: 4000 },
+          { nome: 'qualidadeSombra', apresentacao: 'qualidade (1 a 4)', tipo: 'uint', min: 1, max: 4 },
+        ]
+      },
+      {
         titulo: 'imagem (retro)', caminho: ['opcoes'], campos: [
           { nome: 'alturaInternaPS2', apresentacao: 'altura interna (px)', tipo: 'uint', min: 240, max: 1080 },
           { nome: 'escalaTexturaPS2', apresentacao: 'escala das texturas do chao', tipo: 'float', min: 0.25, max: 4 },

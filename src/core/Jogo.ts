@@ -361,6 +361,8 @@ export class Jogo {
 
     private renderizarSombra(lightDir: THREE.Vector3, p: { x: number; y: number; z: number }) {
         this.alvoSombraTmp.set(p.x, p.y, p.z);
+        const op = this.config.opcoes;
+        this.renderizador.sombra.configurar(op.alcanceSombra, 1024 * 2 ** (Math.round(op.qualidadeSombra) - 1));
         this.renderizador.sombra.atualizarMatriz(lightDir, this.alvoSombraTmp);
 
         this.world.gramaMesh.visible = false;

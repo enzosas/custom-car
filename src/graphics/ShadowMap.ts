@@ -20,16 +20,18 @@ export const TAMANHO_SOMBRA = 2048;
  * 1200 e 4096 do original). Menor raio = sombra mais nítida, porém com menos alcance. O shader faz o fade da
  * sombra nas bordas da caixa, então não precisa mexer lá ao trocar este valor.
  */
-export const RAIO_SOMBRA = 600;
+export const RAIO_SOMBRA = 600;   // valor inicial: o painel muda com opcoes.alcanceSombra
 
 /** camada do three dos cartões de árvore do estilo PS2: a passada de sombra os separa do resto (material de profundidade com alpha test) */
 export const CAMADA_ARVORE_PS2 = 1;
 const DISTANCIA_LUZ = 1800;
 
 export class ShadowMap {
-    readonly largura: number;
-    readonly altura: number;
-    readonly alvo: THREE.WebGLRenderTarget;
+    largura: number;
+    altura: number;
+    alvo: THREE.WebGLRenderTarget;
+    /** meia largura atual da caixa (opcoes.alcanceSombra); começa em RAIO_SOMBRA */
+    private raio = RAIO_SOMBRA;
     readonly materialProfundidade: THREE.ShaderMaterial;
     /** cartões de árvore do estilo PS2 (alpha test): desenhados numa segunda passada, só os meshes da camada CAMADA_ARVORE_PS2 */
     readonly materialProfundidadeArvore: THREE.ShaderMaterial;
@@ -48,11 +50,39 @@ export class ShadowMap {
     private readonly zero = new THREE.Vector3();
     private readonly cima = new THREE.Vector3(0, 1, 0);
     /** tamanho de um texel em unidades de mundo */
-    private readonly texelMundo: number;
+    private texelMundo: number;
 
     constructor(private uniforms: UniformsCompartilhados, w = TAMANHO_SOMBRA, h = w) {
         this.largura = w; this.altura = h;
+        this.alvo = this.criarAlvo(w, h);
+        this.materialProfundidade = criarMaterialProfundidade(uniforms);
+        this.materialProfundidadeArvore = criarMaterialProfundidadeArvore(uniforms);
 
+        this.proj.makeOrthographic(-this.raio, this.raio, this.raio, -this.raio, 1, 4000);
+        this.texelMundo = (2 * this.raio) / w;
+    }
+
+    /**
+     * Alcance (meia largura da caixa, em unidades do mundo) e lado do mapa em texels. Barato quando nada muda: pode ser
+     * chamado todo frame. Mais alcance com a mesma resolução = sombra menos nítida; o lado é arredondado para potência de 2.
+     */
+    configurar(alcance: number, lado: number) {
+        const raio = Math.min(8000, Math.max(100, alcance));
+        const tam = Math.pow(2, Math.round(Math.log2(Math.min(8192, Math.max(512, lado)))));
+        if (tam !== this.largura) {
+            this.alvo.depthTexture?.dispose();
+            this.alvo.dispose();
+            this.largura = this.altura = tam;
+            this.alvo = this.criarAlvo(tam, tam);
+        }
+        if (raio !== this.raio || tam !== this.largura || this.texelMundo !== (2 * raio) / tam) {
+            this.raio = raio;
+            this.proj.makeOrthographic(-raio, raio, raio, -raio, 1, 4000);
+            this.texelMundo = (2 * raio) / tam;
+        }
+    }
+
+    private criarAlvo(w: number, h: number): THREE.WebGLRenderTarget {
         const depth = new THREE.DepthTexture(w, h);
         depth.format = THREE.DepthFormat;
         depth.type = THREE.UnsignedIntType;
@@ -61,7 +91,7 @@ export class ShadowMap {
         depth.wrapS = THREE.ClampToEdgeWrapping;
         depth.wrapT = THREE.ClampToEdgeWrapping;
 
-        this.alvo = new THREE.WebGLRenderTarget(w, h, {
+        const alvo = new THREE.WebGLRenderTarget(w, h, {
             format: THREE.RedFormat,             // anexo de cor mínimo (só a profundidade interessa)
             type: THREE.UnsignedByteType,
             depthBuffer: true,
@@ -70,14 +100,9 @@ export class ShadowMap {
             magFilter: THREE.NearestFilter,
             generateMipmaps: false,
         });
-        this.materialProfundidade = criarMaterialProfundidade(uniforms);
-        this.materialProfundidadeArvore = criarMaterialProfundidadeArvore(uniforms);
-
-        this.proj.makeOrthographic(-RAIO_SOMBRA, RAIO_SOMBRA, RAIO_SOMBRA, -RAIO_SOMBRA, 1, 4000);
-        this.texelMundo = (2 * RAIO_SOMBRA) / w;
-
-        uniforms.uShadowMap.value = depth;
-        uniforms.uShadowTexel.value.set(1 / w, 1 / h);
+        this.uniforms.uShadowMap.value = depth;
+        this.uniforms.uShadowTexel.value.set(1 / w, 1 / h);
+        return alvo;
     }
 
     /**

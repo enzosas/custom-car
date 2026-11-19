@@ -79,6 +79,10 @@ export const GAME_CONFIG = {
     /** interruptores (liga/desliga) do painel; cada chave aqui vira uma linha de switch via `interruptores` em painelCampos.ts */
     opcoes: {
         rodasVisiveis: true,
+        /** sombras: meia largura da área com sombra em volta do carro (unidades do mundo); mais = vai mais longe, menos nítida */
+        alcanceSombra: 1800,
+        /** sombras: resolução do mapa (1 = 1024, 2 = 2048, 3 = 4096, 4 = 8192); mais = mais nítida e mais pesada */
+        qualidadeSombra: 3,
         /** false = low poly (padrão); true = visual de PS2 (GT4). Alterna também com a tecla G */
         estiloPS2: false,
         /** estilo PS2: altura interna fixa do desenho, em pixels (o PS2 fazia 480 linhas; o padrão aqui é 360); o navegador amplia com filtro bilinear */
