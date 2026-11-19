@@ -13,7 +13,8 @@ import type { Atmosfera } from './Atmosfera';
 
 type CfgCeu = typeof GAME_CONFIG.ceu.parametros;
 
-const MAX_NUVENS = 400;
+/** capacidade inicial do buffer de nuvens; cresce (dobrando) se a quantidade configurada passar disso */
+const CAPACIDADE_INICIAL_NUVENS = 400;
 
 /** hash inteiro -> [0, 1): sorteio por nuvem, sempre o mesmo para o mesmo índice */
 function sorteio(i: number, k: number): number {
@@ -53,12 +54,14 @@ export class Ceu {
     private readonly grupo = new THREE.Group();
     private readonly domo: THREE.Mesh;
     private readonly materialCeu: THREE.ShaderMaterial;
-    private readonly nuvens: THREE.InstancedMesh;
+    private nuvens: THREE.InstancedMesh;
+    private readonly geometriaNuvem: THREE.BufferGeometry;
+    private readonly materialNuvem: THREE.ShaderMaterial;
     /** estilo PS2: as nuvens viram uma camada dentro do shader da cúpula (os aglomerados 3D não são desenhados) */
     private estiloPS2 = false;
     private readonly camada: CamadaNuvens = { ligada: false, cobertura: 0, altura: 0, tileGrande: 1, tileFino: 1, offGrande: [0, 0], offFino: [0, 0] };
     /** por nuvem: x, z (fração do lado), altura, escala x, escala z, giro, 0, 0 */
-    private readonly sorteios = new Float32Array(MAX_NUVENS * 8);
+    private sorteios = new Float32Array(0);
     private tempo = 0;
 
     constructor(private scene: THREE.Scene, uniforms: UniformsCompartilhados, materialNuvem: THREE.ShaderMaterial) {
@@ -68,20 +71,44 @@ export class Ceu {
         this.domo.renderOrder = -1000;                 // desenhado primeiro; o terreno e o resto cobrem
         this.grupo.add(this.domo);
 
-        this.nuvens = new THREE.InstancedMesh(criarGeometriaNuvem(), materialNuvem, MAX_NUVENS);
-        this.nuvens.frustumCulled = false;
-        this.nuvens.count = 0;
-        this.nuvens.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        this.geometriaNuvem = criarGeometriaNuvem();
+        this.materialNuvem = materialNuvem;
+        this.nuvens = this.criarNuvens(CAPACIDADE_INICIAL_NUVENS);
         this.grupo.add(this.nuvens);
+        scene.add(this.grupo);
+    }
 
+    /** cria o InstancedMesh com espaço para `capacidade` nuvens e completa os sorteios até lá */
+    private criarNuvens(capacidade: number): THREE.InstancedMesh {
+        const malha = new THREE.InstancedMesh(this.geometriaNuvem, this.materialNuvem, capacidade);
+        malha.frustumCulled = false;
+        malha.count = 0;
+        malha.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 
-        for (let i = 0; i < MAX_NUVENS; ++i) {
+        // os sorteios são determinísticos por índice: as nuvens que já existiam continuam no mesmo lugar
+        const antigos = this.sorteios;
+        this.sorteios = new Float32Array(capacidade * 8);
+        this.sorteios.set(antigos);
+        for (let i = antigos.length / 8; i < capacidade; ++i) {
             const o = i * 8;
             this.sorteios[o] = sorteio(i, 0); this.sorteios[o + 1] = sorteio(i, 1); this.sorteios[o + 2] = sorteio(i, 2);
             this.sorteios[o + 3] = 0.7 + 1.0 * sorteio(i, 3); this.sorteios[o + 4] = 0.8 + 0.5 * sorteio(i, 4);
             this.sorteios[o + 5] = sorteio(i, 5) * Math.PI * 2;
         }
-        scene.add(this.grupo);
+        return malha;
+    }
+
+    /** troca o buffer de nuvens por um maior quando a quantidade configurada não cabe mais */
+    private garantirCapacidade(n: number) {
+        const atual = this.nuvens.instanceMatrix.count;
+        if (n <= atual) return;
+        let capacidade = atual;
+        while (capacidade < n) capacidade *= 2;
+        const nova = this.criarNuvens(capacidade);
+        this.grupo.remove(this.nuvens);
+        this.nuvens.dispose();             // libera só o buffer de instâncias; geometria e material são reaproveitados
+        this.nuvens = nova;
+        this.grupo.add(nova);
     }
 
     /** troca o estilo das nuvens: aglomerados 3D (low poly) ou camada de nuvens no céu, com textura (PS2) */
@@ -113,7 +140,8 @@ export class Ceu {
             u.uNuvNoite.value = atm.noite;
         }
 
-        const n = c.nuvens ? Math.max(0, Math.min(MAX_NUVENS, Math.floor(c.nuvensQuantidade))) : 0;
+        const n = c.nuvens ? Math.max(0, Math.floor(c.nuvensQuantidade)) : 0;
+        if (!this.estiloPS2) this.garantirCapacidade(n);
         this.nuvens.count = this.estiloPS2 ? 0 : n;
         this.nuvens.visible = !this.estiloPS2 && n > 0;
         if (n === 0) return;
@@ -143,7 +171,7 @@ export class Ceu {
     dispose() {
         this.scene.remove(this.grupo);
         this.domo.geometry.dispose();
-        this.nuvens.geometry.dispose();
+        this.geometriaNuvem.dispose();
         this.nuvens.dispose();
         this.materialCeu.dispose();
     }

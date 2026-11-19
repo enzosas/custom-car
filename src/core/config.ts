@@ -196,7 +196,7 @@ export const GAME_CONFIG = {
             duracaoDia: 480.0,       // segundos reais que um dia inteiro leva
             azimute: 283.0,          // graus: direção horizontal do nascente (0 = +x, 90 = +z); o pôr do sol fica no lado oposto
             inclinacaoSol: 25.0,     // graus: quanto a trajetória do sol se inclina (o sol a pino fica a 90 - isto de altura)
-            // cor do céu no alto (o horizonte usa a cor do céu de luz.parametros, que também é a da neblina)
+            // cor do céu no alto, fixa (não aparece mais no painel); o horizonte usa a cor do céu de luz.parametros
             zeniteH: 215.0,
             zeniteS: 0.55,
             zeniteV: 0.85,
@@ -204,7 +204,7 @@ export const GAME_CONFIG = {
             solBrilho: 1.0,          // intensidade do halo em volta do sol
             estrelas: true,
             nuvens: true,
-            nuvensQuantidade: 60.0,  // até 400
+            nuvensQuantidade: 60.0,  // sem limite: o buffer de instâncias cresce conforme precisa
             nuvensAltura: 2100.0,    // altitude das nuvens (as montanhas chegam a ~1200)
             nuvensRaio: 14000.0,     // até onde as nuvens aparecem em volta da câmera
             nuvensEscala: 1.0,

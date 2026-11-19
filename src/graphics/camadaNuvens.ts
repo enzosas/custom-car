@@ -7,7 +7,7 @@
 
 export interface ParamNuvens {
     nuvens: boolean;
-    nuvensQuantidade: number;      // 0..400: vira a cobertura do céu
+    nuvensQuantidade: number;      // 0..: vira a cobertura do céu (satura em 150)
     nuvensAltura: number;          // altura do plano de nuvens (muda a perspectiva)
     nuvensEscala: number;          // tamanho das nuvens
     nuvensVelocidade: number;      // unidades por segundo

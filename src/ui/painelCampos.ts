@@ -50,18 +50,6 @@ export interface SecaoDef {
 
 export interface AbaDef { titulo: string; secoes: SecaoDef[] }
 
-// ---- cores em HSV (ceu config) ----
-const camposHSV = (p: string): CampoDef[] => [
-  { nome: `${p}H`, apresentacao: 'matiz', tipo: 'float', min: 0, max: 360, ciclico: true },
-  { nome: `${p}S`, apresentacao: 'saturacao', tipo: 'float', min: 0, max: 1 },
-  { nome: `${p}V`, apresentacao: 'valor (brilho)', tipo: 'float', min: 0, max: 1 },
-];
-
-const secaoCor = (titulo: string, p: string, extras: CampoDef[] = [], caminho: string[] = ['luz', 'parametros']): SecaoDef => ({
-  titulo, caminho, campos: [...camposHSV(p), ...extras],
-  amostra: { h: `${p}H`, s: `${p}S`, v: `${p}V` },
-});
-
 export const ABAS: AbaDef[] = [
   {
     titulo: 'carro config 1', secoes: [
@@ -238,7 +226,6 @@ export const ABAS: AbaDef[] = [
         ],
         interruptores: [{ nome: 'cicloAtivo', rotulo: 'o tempo passa sozinho' }],
       },
-      secaoCor('ceu (cor do alto)', 'zenite', [], ['ceu', 'parametros']),
       {
         titulo: 'sol e estrelas', caminho: ['ceu', 'parametros'], campos: [
           { nome: 'solTamanho', apresentacao: 'tamanho do sol', tipo: 'float', min: 0.005, max: 0.15 },
@@ -248,7 +235,7 @@ export const ABAS: AbaDef[] = [
       },
       {
         titulo: 'nuvens', caminho: ['ceu', 'parametros'], campos: [
-          { nome: 'nuvensQuantidade', apresentacao: 'quantidade', tipo: 'uint', min: 0, max: 400 },
+          { nome: 'nuvensQuantidade', apresentacao: 'quantidade', tipo: 'uint', min: 0 },
           { nome: 'nuvensAltura', apresentacao: 'altitude', tipo: 'float' },
           { nome: 'nuvensRaio', apresentacao: 'alcance em volta da camera', tipo: 'float' },
           { nome: 'nuvensEscala', apresentacao: 'tamanho', tipo: 'float' },
