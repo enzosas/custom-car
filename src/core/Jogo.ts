@@ -243,11 +243,35 @@ export class Jogo {
 
             if (!this.modoCarroGLB) this.alternarModoCarro();
             else this.carro.aplicarModeloEmCache();
+            this.aplicarMedidasDoModelo();
             console.log(`Modelo ${arquivo.name} importado com sucesso!`);
         } catch (err) {
             console.error('Falha ao processar o ficheiro .glb:', err);
             alert('Erro ao carregar o modelo .glb.');
         }
+    }
+
+    /** ajusta entre eixos, distância entre rodas, offset, altura e raio às rodas do .glb recém-importado (se ele tiver wheelFL/FR/RL/RR) */
+    private aplicarMedidasDoModelo() {
+        const m = this.carro.medidasEstimadas();
+        if (!m) return;
+        const { dimensoes, rodas } = this.config.carro;
+        dimensoes.comprimentorodas = m.comprimentorodas;
+        dimensoes.largurarodas = m.largurarodas;
+        dimensoes.offsetchassi = m.offsetchassi;
+        dimensoes.alturachao = m.alturachao;
+        rodas.raio = m.raio;
+        rodas.largura = m.larguraRoda;
+
+        this.veiculo.reconstruirGeometria();
+        this.carro.atualizarDimensoes();
+        this.efeitos.setLarguraRastro(rodas.largura);
+        this.reposicionarCarro();
+        this.estadoCarroGLB = structuredClone(this.config.carro);
+        this.configAnterior = structuredClone(this.config);
+        this.opcoes.onConfigRecarregada?.();   // o painel mostra os novos valores
+        this.emitirStats();
+        console.log('Medidas estimadas das rodas do modelo:', m);
     }
 
     /** aplica ao mundo o estilo escolhido em config.opcoes.estiloPS2 (idempotente) */

@@ -10,6 +10,26 @@ import { geometriaDe } from '@/graphics/Malha';
 const ROT_RODA_GLB = new THREE.Matrix4().makeRotationZ(-Math.PI / 2);
 const OFFSET_BASE_MODELO_Y = -3.8;
 
+/** medidas das rodas lidas do .glb, em unidades do modelo (antes da escala que o ajusta ao carro) */
+interface MedidasRodasModelo {
+    bitola: number;          // distância entre as rodas esquerda/direita (centro a centro)
+    entreEixos: number;      // distância entre o eixo dianteiro e o traseiro
+    raio: number;
+    larguraPneu: number;
+    deslocZ: number;         // centro das rodas (em z) menos o centro da carroceria
+    alturaCentro: number;    // altura do centro das rodas acima da base da carroceria
+}
+
+/** valores estimados para a config (unidades do jogo), a partir das rodas do .glb */
+export interface MedidasEstimadas {
+    comprimentorodas: number;
+    largurarodas: number;
+    offsetchassi: number;
+    alturachao: number;
+    raio: number;
+    larguraRoda: number;
+}
+
 /** libera geometrias, materiais e texturas de um modelo carregado (o que o GLTFLoader criou) */
 function liberarModelo(raiz: THREE.Object3D) {
     raiz.traverse((o) => {
@@ -73,7 +93,9 @@ export class CarroVisual {
     // modo .glb: cada roda do modelo é extraída para um wrapper que segue a física
     private readonly rodasGLBGroup = new THREE.Group();
     private rodasGLB: (THREE.Group | null)[] = [null, null, null, null];
-    private raiosOriginaisGLB: number[] = [];
+    private raiosOriginaisGLB: number[] = [1, 1, 1, 1];
+    private largurasOriginaisGLB: number[] = [0, 0, 0, 0];
+    private medidasRodasModelo: MedidasRodasModelo | null = null;
 
     private modeloAtual: THREE.Object3D | null = null;
     private bboxOriginal = new THREE.Box3();
@@ -240,7 +262,9 @@ export class CarroVisual {
     private limparRodasGLB() {
         while (this.rodasGLBGroup.children.length > 0) this.rodasGLBGroup.remove(this.rodasGLBGroup.children[0]);
         this.rodasGLB = [null, null, null, null];
-        this.raiosOriginaisGLB = [];
+        this.raiosOriginaisGLB = [1, 1, 1, 1];
+        this.largurasOriginaisGLB = [0, 0, 0, 0];
+        this.medidasRodasModelo = null;
     }
 
     private aplicarModelo(modelo: THREE.Object3D) {
@@ -253,16 +277,22 @@ export class CarroVisual {
         modelo.updateMatrixWorld(true);
 
         const rodas = ['wheelfl', 'wheelfr', 'wheelrl', 'wheelrr'].map((nome) => this.encontrarPorNome(modelo, nome));
+        let centros: THREE.Vector3[] | null = null;
         if (rodas.every((r) => r)) {
-            // 1. extrair as rodas ANTES de medir o carro
-            (rodas as THREE.Object3D[]).forEach((r, i) => this.extrairRoda(r, i));
-            // 2. só agora medimos a caixa do carro (sem as rodas)
+            // 1. onde cada roda está no modelo: decide em qual roda da física ela entra (o nome só serve para achá-la)
+            centros = (rodas as THREE.Object3D[]).map((r) => new THREE.Box3().setFromObject(r).getCenter(new THREE.Vector3()));
+            const slots = this.slotsPorPosicao(centros);
+            // 2. extrair as rodas ANTES de medir o carro
+            (rodas as THREE.Object3D[]).forEach((r, i) => this.extrairRoda(r, slots[i]));
+            // 3. só agora medimos a caixa do carro (sem as rodas)
             modelo.updateMatrixWorld(true);
+            centros = slots.map((_, slot) => centros![slots.indexOf(slot)]);   // reordena por slot da física
         }
 
         this.atualizarVisibilidadeRodas();  // com rodas extraídas do .glb, as procedurais ficam escondidas
 
         this.bboxOriginal = new THREE.Box3().setFromObject(modelo);
+        if (centros) this.medirRodas(centros);
         this.modeloAtual = modelo;
         this.ajustarModeloAoCarro();
 
@@ -327,34 +357,96 @@ export class CarroVisual {
         return encontrada;
     }
 
-    /** tira a roda do modelo, centraliza seu pivô e a coloca num wrapper controlado pela física */
+    /**
+     * tira a roda do modelo, centraliza seu pivô e a coloca num wrapper controlado pela física.
+     * A orientação e a escala que a roda tinha DENTRO do modelo são preservadas (inclusive escala negativa/espelhada):
+     * em muitos .glb as rodas de um lado são a mesma malha girada 180° ou espelhada, e zerar a rotação deixava
+     * o lado de fora (aro) de algumas rodas virado para dentro do carro.
+     */
     private extrairRoda(r: THREE.Object3D, indice: number) {
+        // transformação da roda em relação à raiz do modelo (a raiz está na identidade, então matrixWorld serve)
+        const pos = new THREE.Vector3();
+        const quat = new THREE.Quaternion();
+        const escala = new THREE.Vector3();
+        r.matrixWorld.decompose(pos, quat, escala);
+
         const wrapper = new THREE.Group();
         wrapper.matrixAutoUpdate = false;
-        wrapper.add(r);
+        wrapper.add(r);   // remove do modelo
 
+        // mantém rotação/escala originais, só descarta a posição
+        r.position.set(0, 0, 0);
+        r.quaternion.copy(quat);
+        r.scale.copy(escala);
         wrapper.updateMatrixWorld(true);
+
         const box = new THREE.Box3().setFromObject(r);
         const size = new THREE.Vector3();
         box.getSize(size);
-        this.raiosOriginaisGLB.push(Math.max(size.x, size.y, size.z) / 2);
+        this.raiosOriginaisGLB[indice] = Math.max(size.x, size.y, size.z) / 2;
+        this.largurasOriginaisGLB[indice] = size.x;   // eixo da roda = X do carro
 
-        const centroMundo = new THREE.Vector3();
-        box.getCenter(centroMundo);
-        const centroLocal = r.worldToLocal(centroMundo.clone());
-
-        if ((r as THREE.Mesh).isMesh && (r as THREE.Mesh).geometry) {
-            (r as THREE.Mesh).geometry.translate(-centroLocal.x, -centroLocal.y, -centroLocal.z);
-        }
-        for (const filho of [...r.children]) filho.position.sub(centroLocal);
-
-        // sem rotação manual aqui: ela conflitava com a rotação aplicada em atualizar()
-        r.position.set(0, 0, 0);
-        r.rotation.set(0, 0, 0);
-        r.scale.set(1, 1, 1);
+        // centraliza o pivô no centro da caixa (no espaço do wrapper), sem mexer na geometria compartilhada
+        const centro = new THREE.Vector3();
+        box.getCenter(centro);
+        r.position.copy(centro).negate();
+        r.updateMatrixWorld(true);
 
         this.rodasGLBGroup.add(wrapper);
         this.rodasGLB[indice] = wrapper;
+    }
+
+    /**
+     * Slot da física de cada roda do modelo, pela POSIÇÃO e não pelo nome.
+     * A física usa 0 = (-x, frente), 1 = (+x, frente), 2 = (-x, trás), 3 = (+x, trás), com a frente em +z.
+     * No glTF o carro olha para +z e a esquerda dele fica em +x, ou seja, o lado oposto ao que os nomes
+     * (wheelFL...) sugeriam para a física: casar pelo nome punha cada roda do lado errado, com o aro para dentro.
+     */
+    private slotsPorPosicao(centros: THREE.Vector3[]): number[] {
+        const mx = centros.reduce((a, c) => a + c.x, 0) / centros.length;
+        const mz = centros.reduce((a, c) => a + c.z, 0) / centros.length;
+        const slots = centros.map((c) => (c.z >= mz ? 0 : 2) + (c.x >= mx ? 1 : 0));
+        // posições ambíguas (duas rodas no mesmo slot): mantém a ordem dos nomes
+        return new Set(slots).size === 4 ? slots : [0, 1, 2, 3];
+    }
+
+    /** guarda as medidas das rodas no espaço do modelo (centros já ordenados por slot da física) */
+    private medirRodas(c: THREE.Vector3[]) {
+        const bbox = this.bboxOriginal;
+        if (bbox.isEmpty()) return;
+        const centroCarro = bbox.getCenter(new THREE.Vector3());
+        const media = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length;
+        this.medidasRodasModelo = {
+            bitola: media([Math.abs(c[1].x - c[0].x), Math.abs(c[3].x - c[2].x)]),
+            entreEixos: media([Math.abs(c[0].z - c[2].z), Math.abs(c[1].z - c[3].z)]),
+            raio: media(this.raiosOriginaisGLB),
+            larguraPneu: media(this.largurasOriginaisGLB),
+            deslocZ: media(c.map((v) => v.z)) - centroCarro.z,
+            alturaCentro: media(c.map((v) => v.y)) - bbox.min.y,
+        };
+    }
+
+    /**
+     * Estima, a partir das rodas do .glb atual, os valores da config que alinham as rodas da física com as do modelo
+     * (na escala atual, que vem de dimensoes.comprimento). null se o modelo não tem as 4 rodas.
+     */
+    medidasEstimadas(): MedidasEstimadas | null {
+        const m = this.medidasRodasModelo;
+        if (!m || !this.modeloAtual || this.bboxOriginal.isEmpty()) return null;
+        const size = this.bboxOriginal.getSize(new THREE.Vector3());
+        const dimMaior = Math.max(size.z, size.x);
+        const esc = dimMaior > 0 ? this.config.carro.dimensoes.comprimento / dimMaior : 1;
+        const r2 = (v: number) => Math.round(v * 100) / 100;
+        return {
+            comprimentorodas: r2(m.entreEixos * esc),
+            largurarodas: r2(m.bitola * esc),
+            // a carroceria fica em offsetchassi (z) em relação ao centro das rodas da física
+            offsetchassi: r2(-m.deslocZ * esc),
+            // em ajustarModeloAoCarro, o centro das rodas do modelo cai em y = 0 (centro das rodas da física) quando:
+            alturachao: r2(Math.max(0.05, -OFFSET_BASE_MODELO_Y - m.alturaCentro * esc)),
+            raio: r2(m.raio * esc),
+            larguraRoda: r2(Math.max(0.1, m.larguraPneu * esc)),
+        };
     }
 
     /** escala o modelo para o comprimento configurado e o centraliza sobre o chassi */
