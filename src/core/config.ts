@@ -208,6 +208,7 @@ export const GAME_CONFIG = {
             nuvensAltura: 2100.0,    // altitude das nuvens (as montanhas chegam a ~1200)
             nuvensRaio: 14000.0,     // até onde as nuvens aparecem em volta da câmera
             nuvensEscala: 1.0,
+            nuvensBrilho: 1.0,       // multiplica a luz das nuvens low poly (1 = padrão)
             nuvensVelocidade: 12.0,  // unidades por segundo
             nuvensDirecao: 30.0,     // graus (0 = +x, 90 = +z)
         }

@@ -96,6 +96,18 @@ export function criarMaterialPrincipal(u: UniformsCompartilhados): THREE.ShaderM
     });
 }
 
+/** nuvens low poly: o shader principal com a luz própria de nuvem (#define NUVEM); o brilho vem de ceu.nuvensBrilho */
+export function criarMaterialNuvem(u: UniformsCompartilhados): THREE.ShaderMaterial {
+    return new THREE.ShaderMaterial({
+        vertexShader: vertexPrincipal,
+        fragmentShader: fragmentPrincipal,
+        vertexColors: true,
+        side: THREE.DoubleSide,
+        defines: { NUVEM: '' },
+        uniforms: { ...u, uAlpha: { value: 1.0 }, uBrilhoNuvens: { value: 1.0 } },
+    });
+}
+
 /**
  * Vegetação (árvores e tufos de grama): por enquanto o mesmo shader do asfalto, mas em materiais PRÓPRIOS, porque no
  * estilo PS2 eles passam a ter alpha test e textura, enquanto o terreno, o céu e o carro continuam no `matOpaco`.

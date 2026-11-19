@@ -91,6 +91,9 @@ uniform float uAmbient;
 uniform float uDiffuse;
 uniform float uSpecular;
 uniform float uShininess;
+#ifdef NUVEM
+uniform float uBrilhoNuvens;
+#endif
 
 uniform sampler2D uShadowMap;
 uniform vec2  uShadowTexel;
@@ -207,6 +210,14 @@ void main() {
     albedo += fotoTerra * (wSup.w * uFotoTerra * (1.0 - clamp(vAsfalto, 0.0, 1.0)));
 #endif
 
+#ifdef NUVEM
+    // nuvens low poly: vistas quase sempre de baixo, com a luz do terreno ficariam só com a ambiente (cinza escuro).
+    // Luz "enrolada" (meio Lambert): o lado do sol fica claro, o oposto escurece pouco; sem brilho especular nem sombra.
+    // A cor da luz (poente) e as intensidades (noite) continuam valendo.
+    float envolta = dot(normal, lDir) * 0.5 + 0.5;
+    vec3 luzNuvem = uAmbient * uAmbientColor + uDiffuse * uLightColor * (0.45 + 0.55 * envolta);
+    vec3 result = albedo * luzNuvem * uBrilhoNuvens;
+#else
     vec3 ambient = uAmbient * uAmbientColor * albedo;
 
     float diff = max(dot(normal, lDir), 0.0);
@@ -220,6 +231,7 @@ void main() {
     shadow *= 0.60;
 
     vec3 result = ambient + (1.0 - shadow) * (diffuse + specular);
+#endif
 
     float distCam = length(vRel);
     float fogFactor = clamp((distCam - uFogNear) / max(uFogFar - uFogNear, 1.0), 0.0, 1.0);

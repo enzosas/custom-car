@@ -239,6 +239,7 @@ export const ABAS: AbaDef[] = [
           { nome: 'nuvensAltura', apresentacao: 'altitude', tipo: 'float' },
           { nome: 'nuvensRaio', apresentacao: 'alcance em volta da camera', tipo: 'float' },
           { nome: 'nuvensEscala', apresentacao: 'tamanho', tipo: 'float' },
+          { nome: 'nuvensBrilho', apresentacao: 'brilho (low poly)', tipo: 'float', min: 0, max: 2 },
           { nome: 'nuvensVelocidade', apresentacao: 'velocidade do vento', tipo: 'float' },
           { nome: 'nuvensDirecao', apresentacao: 'direcao do vento (graus)', tipo: 'float', min: 0, max: 360, ciclico: true },
         ],

@@ -6,7 +6,7 @@
 // cada nuvem é calculada relativa à câmera (em dupla precisão no JS), então não há perda de precisão longe da origem.
 import * as THREE from 'three';
 import type { GAME_CONFIG } from '@/core/config';
-import { criarMaterialCeu, definirEstiloMaterial, type UniformsCompartilhados } from './materialPrincipal';
+import { criarMaterialCeu, criarMaterialNuvem, definirEstiloMaterial, type UniformsCompartilhados } from './materialPrincipal';
 import { texturaNuvensCeu } from './texturasPS2';
 import { calcularCamadaNuvens, type CamadaNuvens } from './camadaNuvens';
 import type { Atmosfera } from './Atmosfera';
@@ -64,7 +64,7 @@ export class Ceu {
     private sorteios = new Float32Array(0);
     private tempo = 0;
 
-    constructor(private scene: THREE.Scene, uniforms: UniformsCompartilhados, materialNuvem: THREE.ShaderMaterial) {
+    constructor(private scene: THREE.Scene, uniforms: UniformsCompartilhados) {
         this.materialCeu = criarMaterialCeu(uniforms);
         this.domo = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 16), this.materialCeu);
         this.domo.frustumCulled = false;
@@ -72,7 +72,7 @@ export class Ceu {
         this.grupo.add(this.domo);
 
         this.geometriaNuvem = criarGeometriaNuvem();
-        this.materialNuvem = materialNuvem;
+        this.materialNuvem = criarMaterialNuvem(uniforms);
         this.nuvens = this.criarNuvens(CAPACIDADE_INICIAL_NUVENS);
         this.grupo.add(this.nuvens);
         scene.add(this.grupo);
@@ -129,6 +129,7 @@ export class Ceu {
         u.uSunSize.value = c.solTamanho;
         u.uSunBright.value = c.solBrilho;
         u.uNight.value = c.estrelas ? atm.noite : 0;
+        this.materialNuvem.uniforms.uBrilhoNuvens.value = Math.max(0, c.nuvensBrilho ?? 1);
 
         if (this.estiloPS2) {
             const k = calcularCamadaNuvens(c, cam.x, cam.y, cam.z, this.tempo, this.camada);
@@ -172,6 +173,7 @@ export class Ceu {
         this.scene.remove(this.grupo);
         this.domo.geometry.dispose();
         this.geometriaNuvem.dispose();
+        this.materialNuvem.dispose();
         this.nuvens.dispose();
         this.materialCeu.dispose();
     }

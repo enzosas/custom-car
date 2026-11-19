@@ -118,7 +118,7 @@ export class Jogo {
         this.controle = new ControleJogador(opcoes.controlesToque ?? criarControlesToque());
         this.renderizador = new Renderer(canvas, this.uniforms);
         this.world = new WorldBuilder(this.matMarcacao, this.matTerreno, this.matArvore, this.matArvoreCruz, this.matArvoreFace, this.matGrama, this.config);
-        this.ceu = new Ceu(this.renderizador.scene, this.uniforms, this.matOpaco);
+        this.ceu = new Ceu(this.renderizador.scene, this.uniforms);
         Entrada.iniciar(canvas);
     }
 
