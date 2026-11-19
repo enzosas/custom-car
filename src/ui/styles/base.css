@@ -169,19 +169,83 @@ html {
     }
 }
 
+/* ---------- overlay do drag & drop de .glb ---------- */
 .drop-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
-    border: 3px dashed #ffffff;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    color: #ffffff;
-    font-size: 24px;
-    font-family: monospace;
     z-index: 9999;
     pointer-events: none;
+    box-sizing: border-box;
+    padding: 40px;
+    display: flex;
+    background: rgba(12, 20, 28, 0.5);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    font-family: Inter, system-ui, sans-serif;
+    color: #ffffff;
+    text-align: center;
+}
+
+.drop-overlay-moldura {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    border: 3px solid #ffffff;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.16);
+}
+
+.drop-overlay-titulo { font-size: 34px; font-weight: 700; }
+.drop-overlay-subtitulo { font-size: 17px; opacity: 0.9; }
+.drop-overlay-icone svg { display: block; animation: drop-quica 1s ease-in-out infinite; }
+
+/* 1. arquivo entra: fundo aparece, moldura assenta com um leve zoom, textos sobem em sequência */
+.drop-overlay--arrastando { animation: drop-fundo-entra 0.25s ease-out both; }
+.drop-overlay--arrastando .drop-overlay-moldura { animation: drop-moldura-entra 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+.drop-overlay--arrastando .drop-overlay-titulo { animation: drop-sobe 0.35s ease-out 0.1s both; }
+.drop-overlay--arrastando .drop-overlay-subtitulo { animation: drop-sobe 0.35s ease-out 0.18s both; }
+
+/* 2. soltou: seta mergulha, textos somem para cima, moldura pulsa e se contrai, fundo some (450 ms) */
+.drop-overlay--soltou { animation: drop-fundo-sai 0.2s ease-in 0.25s both; }
+.drop-overlay--soltou .drop-overlay-moldura { animation: drop-moldura-solta 0.45s ease-out both; }
+.drop-overlay--soltou .drop-overlay-icone { animation: drop-mergulha 0.25s ease-in both; }
+.drop-overlay--soltou .drop-overlay-titulo,
+.drop-overlay--soltou .drop-overlay-subtitulo { animation: drop-some 0.25s ease-in both; }
+
+/* arquivo saiu da janela (ou não era .glb): tudo some rápido (250 ms) */
+.drop-overlay--cancelou { animation: drop-fundo-sai 0.25s ease-in both; }
+.drop-overlay--cancelou .drop-overlay-moldura { animation: drop-moldura-cancela 0.25s ease-in both; }
+
+@keyframes drop-fundo-entra { from { opacity: 0; } to { opacity: 1; } }
+@keyframes drop-fundo-sai { from { opacity: 1; } to { opacity: 0; } }
+@keyframes drop-moldura-entra { from { transform: scale(1.06); } to { transform: scale(1); } }
+@keyframes drop-sobe { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes drop-quica { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(10px); } }
+@keyframes drop-mergulha { to { opacity: 0; transform: translateY(34px) scale(0.8); } }
+@keyframes drop-some { to { opacity: 0; transform: translateY(-10px); } }
+@keyframes drop-moldura-solta {
+    0% { transform: scale(1); box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.16); }
+    25% { transform: scale(0.97); box-shadow: 0 0 0 18px rgba(255, 255, 255, 0.35); }
+    100% { transform: scale(0.94); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
+@keyframes drop-moldura-cancela { to { transform: scale(1.04); } }
+
+@media (prefers-reduced-motion: reduce) {
+    .drop-overlay,
+    .drop-overlay *,
+    .drop-overlay-icone svg {
+        animation: none !important;
+    }
+}
+
+@media (max-width: 700px) {
+    .drop-overlay { padding: 16px; }
+    .drop-overlay-titulo { font-size: 24px; }
+    .drop-overlay-subtitulo { font-size: 15px; }
 }
 
 .mensagem-erro {

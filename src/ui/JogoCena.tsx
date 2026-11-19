@@ -56,7 +56,7 @@ export default function JogoCena() {
                 />
             )}
 
-            {drop.arrastando && <DropOverlay />}
+            {drop.fase && <DropOverlay fase={drop.fase} />}
             {erro && <ErrorMessage mensagem={erro} />}
         </div>
     );
