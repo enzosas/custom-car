@@ -94,12 +94,61 @@ const estadoFisicaInicial = () => ({
     yawAngle: 0, currentSteer: 0, currentGrip: 0,
     derrapando: false, intensidadeDrift: 0,
 });
+/** uma mola amortecida: posição e velocidade (ver integrarMola) */
+interface Mola { x: number; v: number }
+const mola = (): Mola => ({ x: 0, v: 0 });
+
 const estadoSuspensaoInicial = () => ({
-    chassiPitchAngle: 0, chassiRollAngle: 0, chassiPitchVelocity: 0, chassiRollVelocity: 0,
+    // a carroceria, presa ao carro por UMA mola nos três eixos
+    altura: mola(),     // quanto afundou (+) ou subiu (-) em relação à posição normal; pulo, pouso e relevo empurram esta mola
+    pitch: mola(),      // graus: inclinação para frente/trás
+    roll: mola(),       // graus: inclinação para os lados
+    // base do carro: segue a inclinação do terreno (no chão) ou a atitude do salto (no ar)
     terrenoPitchAngle: 0, terrenoRollAngle: 0,
-    soloPitchSuave: 0, soloRollSuave: 0, vySoloSuave: 0,   // referências suavizadas do relevo (reação do chassi)
-    compressaoPulo: 0, compressaoVel: 0, molaPouso: 0, molaPousoVel: 0,
+    // referências do relevo, suavizadas, só do chão: de onde sai a reação da carroceria ao relevo. Não dá para usar a
+    // base acima, porque no ar ela segue o salto e, ao pousar, a reação contaria o pouso uma segunda vez
+    soloPitchSuave: 0, soloRollSuave: 0, vySoloSuave: 0,
 });
+
+/** ajustes internos da suspensão (o painel só mostra grandezas reais: ver SUSPENSAO_BASE em config.ts) */
+const SUSP = {
+    passoMax: 0.008,              // s: passo máximo da integração das molas (estável mesmo com o jogo travando)
+    fracaoAlturaChao: 0.95,       // a carroceria nunca afunda mais que esta fração da altura do chão (não atravessa o chão)
+    impulsoPulo: 0.25,            // ao pular, a carroceria é empurrada para cima com esta fração da força do pulo
+    impulsoPouso: 0.6,            // ao pousar, a carroceria segue descendo com esta fração da velocidade do impacto
+                                  // (o resto o pneu absorve); o curso da suspensão segura o excesso
+    trancoPousoAngular: 0.5,      // ao pousar torto, a carroceria herda esta fração da diferença de inclinação
+    ganhoRelevoAngular: 0.5,      // quanto das mudanças de inclinação do terreno chega à carroceria (o pneu filtra o resto)
+    ganhoRelevoVertical: 0.15,    // idem para vales e cristas
+    aderenciaPneu: 1.0,           // em "g": a aceleração que inclina a carroceria nunca passa disso (as curvas do jogo são
+                                  // arcade e chegam a vários g; um pneu de verdade não segura muito mais que 1g)
+    amortMin: 0.05, amortMax: 1.0,// faixa do amortecimento relativo
+    suavRelevoVertical: 0.25,     // suavização (por frame a 60 Hz) das referências do relevo...
+    suavRelevoAngular: 0.15,
+    suavTerreno: 0.20,            // ...da base seguindo o terreno...
+    suavAtitudeAr: 0.04,          // ...e da base seguindo o salto
+};
+
+/**
+ * Um passo da mola `m` puxada para `alvo` (Euler semi-implícito em subpassos, para não explodir com dt grande).
+ * `k` e `c` vêm de constantesMola; a posição fica entre `min` e `max` (batendo no limite, a velocidade para).
+ */
+function integrarMola(m: Mola, alvo: number, k: number, c: number, dt: number, min: number, max: number) {
+    const passos = Math.max(1, Math.ceil(dt / Math.min(SUSP.passoMax, 0.25 / Math.sqrt(Math.max(k, 1e-6)))));
+    const h = dt / passos;
+    for (let i = 0; i < passos; ++i) {
+        m.v += ((alvo - m.x) * k - m.v * c) * h;
+        m.x += m.v * h;
+        if (m.x > max) { m.x = max; if (m.v > 0) m.v = 0; }
+        else if (m.x < min) { m.x = min; if (m.v < 0) m.v = 0; }
+    }
+}
+
+/** frequência (Hz) e amortecimento relativo -> rigidez e amortecimento da mola (por unidade de massa) */
+function constantesMola(frequencia: number, amortecimento: number) {
+    const w = 2 * Math.PI * Math.max(0.01, frequencia);
+    return { k: w * w, c: 2 * clamp(amortecimento, SUSP.amortMin, SUSP.amortMax) * w };
+}
 const estadoPuloInicial = () => ({
     noAr: false, segurando: false, segurandoAnterior: false,
     buffer: 0, carga: 0, alturaChaoAnterior: 0, vyChaoAnterior: 0,
@@ -142,43 +191,30 @@ export class Veiculo {
     reconstruirGeometria() { this.rodas.radius = this.config.carro.rodas.raio; }
 
     // ---------- suspensão ----------
-    private limiteCompressao() { return Math.max(0, this.config.carro.dimensoes.alturachao * 0.95); }
-    private deslocamentoCarroceria() {
-        return clamp(this.suspensao.compressaoPulo + this.suspensao.molaPouso, -0.8, this.limiteCompressao());
+    /** curso que vale: o da config, mas nunca maior que a distância até o chão (a carroceria não atravessa o chão) */
+    private limiteCompressao() {
+        const curso = Math.max(0, this.config.carro.suspensao.curso);
+        return Math.min(curso, Math.max(0, this.config.carro.dimensoes.alturachao * SUSP.fracaoAlturaChao));
     }
 
-    private atualizarCompressao(dt: number) {
-        const fis = this.config.carro.fisica, s = this.suspensao;
+    /** ângulos máximos (graus): um lado do carro no fim do curso para cima e o outro no fim do curso para baixo */
+    private limitesAngulo() {
+        const dim = this.config.carro.dimensoes, curso = this.limiteCompressao();
+        return {
+            pitch: degrees(Math.atan2(2 * curso, Math.max(0.1, dim.comprimentorodas))),
+            roll: degrees(Math.atan2(2 * curso, Math.max(0.1, dim.largurarodas))),
+        };
+    }
+    private deslocamentoCarroceria() { return this.suspensao.altura.x; }
+    private molaSuspensao() { const su = this.config.carro.suspensao; return constantesMola(su.frequencia, su.amortecimento); }
+
+    /** altura da carroceria: a mola puxa para a posição normal, ou para baixo enquanto o pulo é carregado */
+    private atualizarAltura(dt: number) {
         const limiteSup = this.limiteCompressao();
-        const maxComp = clamp(fis.compressaoPulo, 0, limiteSup);
+        const maxComp = clamp(this.config.carro.fisica.compressaoPulo, 0, limiteSup);
         const alvo = (!this.pulo.noAr && this.pulo.segurando) ? maxComp * this.pulo.carga : 0;
-        const K = fis.suspensaoRigidez, C = fis.suspensaoAmortecimento;
-        const passos = Math.max(1, Math.ceil(dt / 0.008));
-        const h = dt / passos;
-        for (let i = 0; i < passos; ++i) {
-            const forca = (alvo - s.compressaoPulo) * K - s.compressaoVel * C;
-            s.compressaoVel += forca * h;
-            s.compressaoPulo += s.compressaoVel * h;
-            if (s.compressaoPulo > limiteSup) { s.compressaoPulo = limiteSup; if (s.compressaoVel > 0) s.compressaoVel = 0; }
-            else if (s.compressaoPulo < -0.6) { s.compressaoPulo = -0.6; if (s.compressaoVel < 0) s.compressaoVel = 0; }
-        }
-    }
-
-    private atualizarMolaPouso(dt: number) {
-        const fis = this.config.carro.fisica, s = this.suspensao;
-        const limiteSup = this.limiteCompressao();
-        const k = Math.max(1, fis.suspensaoRigidez), c = Math.max(0, fis.suspensaoAmortecimento);
-        const omega = Math.sqrt(k);
-        const hMax = Math.min(0.008, 0.25 / omega);
-        const passos = Math.max(1, Math.ceil(dt / hMax));
-        const h = dt / passos;
-        for (let i = 0; i < passos; ++i) {
-            const forca = -s.molaPouso * k - s.molaPousoVel * c;
-            s.molaPousoVel += forca * h;
-            s.molaPouso += s.molaPousoVel * h;
-            if (s.molaPouso > limiteSup) { s.molaPouso = limiteSup; if (s.molaPousoVel > 0) s.molaPousoVel = 0; }
-            else if (s.molaPouso < -0.8) { s.molaPouso = -0.8; if (s.molaPousoVel < 0) s.molaPousoVel = 0; }
-        }
+        const { k, c } = this.molaSuspensao();
+        integrarMola(this.suspensao.altura, alvo, k, c, dt, -limiteSup, limiteSup);
     }
 
     // ---------- vertical: pulo, decolagem natural, aterrissagem ----------
@@ -207,7 +243,7 @@ export class Veiculo {
                 const fatorMin = clamp(fis.fatorPuloMinimo, 0, 1);
                 const forca = fis.forcaPulo * mix(fatorMin, 1, p.carga);
                 f.velocityY = vyChaoAnt + forca;
-                this.suspensao.compressaoVel -= forca * 0.25;
+                this.suspensao.altura.v -= forca * SUSP.impulsoPulo;
                 p.noAr = true; p.carga = 0; p.buffer = 0;
             } else if (soloConhecido) {
                 const yBalistico = f.position.y + vyChaoAnt * dt - 0.5 * g * dt * dt;
@@ -225,13 +261,12 @@ export class Veiculo {
                 f.position.y = alturaChao;
                 f.velocityY = 0;
                 p.noAr = false;
-                this.suspensao.molaPousoVel += Math.min(impacto * 0.6 * fis.reacaoPouso, 90);
+                this.suspensao.altura.v += impacto * SUSP.impulsoPouso;
                 p.pousouNoFrame = true;
             }
         }
         this.reagirAoRelevoVertical(vyChao, soloConhecido, dt, g);
-        this.atualizarCompressao(dt);
-        this.atualizarMolaPouso(dt);
+        this.atualizarAltura(dt);
     }
 
     /**
@@ -241,19 +276,18 @@ export class Veiculo {
      * para baixo (crista) ela alivia e sobe. A aceleração vem da velocidade vertical do solo, já suavizada.
      */
     private reagirAoRelevoVertical(vyChao: number, soloConhecido: boolean, dt: number, g: number) {
-        const fis = this.config.carro.fisica, s = this.suspensao, p = this.pulo;
+        const s = this.suspensao, p = this.pulo;
         if (p.noAr || !soloConhecido || p.pousouNoFrame) {
             s.vySoloSuave = soloConhecido ? vyChao : 0;   // sem referência confiável: só acompanha, sem empurrar
             return;
         }
         const antes = s.vySoloSuave;
-        s.vySoloSuave = mix(antes, vyChao, lerpFactorDt(0.25, dt * 60));
+        s.vySoloSuave = mix(antes, vyChao, lerpFactorDt(SUSP.suavRelevoVertical, dt * 60));
 
-        const ganho = Math.max(0, fis.reacaoTerrenoVertical);
-        if (ganho <= 0) return;
+        const ganho = SUSP.ganhoRelevoVertical;
         const limite = 3 * Math.max(g, 50);               // evita picos nos "joelhos" entre triângulos do terreno
         const aSolo = clamp((s.vySoloSuave - antes) / dt, -limite, limite);
-        s.molaPousoVel += aSolo * ganho * dt;
+        s.altura.v += aSolo * ganho * dt;
     }
 
     /**
@@ -263,19 +297,17 @@ export class Veiculo {
      * ar -> chão não conta (ela já é tratada pelo impulso de aterrissagem).
      */
     private reagirAoRelevoAngular(pitchAlvo: number, rollAlvo: number, dt60: number, primeiroFrame: boolean) {
-        const fis = this.config.carro.fisica, s = this.suspensao;
+        const s = this.suspensao;
         const pAnt = s.soloPitchSuave, rAnt = s.soloRollSuave;
         if (primeiroFrame) { s.soloPitchSuave = pitchAlvo; s.soloRollSuave = rollAlvo; return; }
 
-        const fator = lerpFactorDt(0.15, dt60);
+        const fator = lerpFactorDt(SUSP.suavRelevoAngular, dt60);
         s.soloPitchSuave = mix(pAnt, pitchAlvo, fator);
         s.soloRollSuave = mix(rAnt, rollAlvo, fator);
 
-        const ganho = Math.max(0, fis.reacaoTerrenoAngular);
-        if (ganho <= 0) return;
-        const lim = Math.max(0, fis.suspensaoInclinacaoMax) * 1.5;
-        s.chassiPitchAngle = clamp(s.chassiPitchAngle - (s.soloPitchSuave - pAnt) * ganho, -lim, lim);
-        s.chassiRollAngle = clamp(s.chassiRollAngle - (s.soloRollSuave - rAnt) * ganho, -lim, lim);
+        const ganho = SUSP.ganhoRelevoAngular, lim = this.limitesAngulo();
+        s.pitch.x = clamp(s.pitch.x - (s.soloPitchSuave - pAnt) * ganho, -lim.pitch, lim.pitch);
+        s.roll.x = clamp(s.roll.x - (s.soloRollSuave - rAnt) * ganho, -lim.roll, lim.roll);
     }
 
     // ---------- direção e aceleração ----------
@@ -368,22 +400,26 @@ export class Veiculo {
         const globalAccel = mul(sub(f.velocity, f.lastVelocity), 1 / dt60);
         f.lastVelocity = { ...f.velocity };
 
-        let tx = dot(globalAccel, right) * fis.suspensaoRigidez;
-        let ty = -dot(globalAccel, forward) * fis.suspensaoRigidez;
+        const su = this.config.carro.suspensao, dim = this.config.carro.dimensoes;
+        const { k, c } = this.molaSuspensao();
 
-        const inclinacaoTotal = Math.hypot(tx, ty);
-        if (inclinacaoTotal > fis.suspensaoInclinacaoMax) {
-            const k = fis.suspensaoInclinacaoMax / inclinacaoTotal;
-            tx *= k; ty *= k;
-        }
+        // aceleração do carro (unidades/s²), limitada ao que o pneu consegue transmitir: as curvas do jogo são arcade
+        // (chegam a vários g) e um carro de verdade não passa de ~1g
+        const aMax = SUSP.aderenciaPneu * Math.max(0, fis.gravidade);
+        const aLong = clamp(-dot(globalAccel, forward) * 3600, -aMax, aMax);   // dt60 -> por segundo: x 60²
+        const aLat = clamp(dot(globalAccel, right) * 3600, -aMax, aMax);
 
-        const forcaPitch = (ty - s.chassiPitchAngle) * fis.suspensaoRigidez - (s.chassiPitchVelocity * fis.suspensaoAmortecimento);
-        const forcaRoll = (tx - s.chassiRollAngle) * fis.suspensaoRigidez - (s.chassiRollVelocity * fis.suspensaoAmortecimento);
+        // transferência de peso: a carroceria inclina até as molas segurarem o momento m·a·h. Com as molas da
+        // frequência dada (k = m/4 · ω² em cada roda), o ângulo de equilíbrio é atan(4·a·h / (ω²·L²)): a massa se
+        // cancela. L = entre-eixos (frear/acelerar) ou distância entre rodas dividida pela barra (curva)
+        const h = Math.max(0, su.alturaCentroMassa);
+        const L = Math.max(0.1, dim.comprimentorodas), T = Math.max(0.1, dim.largurarodas);
+        const ty = degrees(Math.atan(4 * aLong * h / (k * L * L)));
+        const tx = degrees(Math.atan(4 * aLat * h / (Math.max(0.01, su.barraEstabilizadora) * k * T * T)));
 
-        s.chassiPitchVelocity += forcaPitch * dt;
-        s.chassiRollVelocity += forcaRoll * dt;
-        s.chassiPitchAngle += s.chassiPitchVelocity * dt;
-        s.chassiRollAngle += s.chassiRollVelocity * dt;
+        const lim = this.limitesAngulo();
+        integrarMola(s.pitch, ty, k, c, dt, -lim.pitch, lim.pitch);
+        integrarMola(s.roll, tx, k, c, dt, -lim.roll, lim.roll);
     }
 
     // ---------- rodas: contato, atitude, esterçamento ----------
@@ -412,13 +448,13 @@ export class Veiculo {
             const rollAlvo = degrees(Math.atan2(((hFD + hTD) * 0.5) - ((hFE + hTE) * 0.5), deltaX));
 
             if (this.pulo.pousouNoFrame) {
-                const lim = Math.max(0, fis.suspensaoInclinacaoMax);
-                s.chassiPitchAngle += clamp((s.terrenoPitchAngle - pitchAlvo) * 0.5 * fis.reacaoPouso, -lim, lim);
-                s.chassiRollAngle += clamp((s.terrenoRollAngle - rollAlvo) * 0.5 * fis.reacaoPouso, -lim, lim);
+                const lim = this.limitesAngulo(), tranco = SUSP.trancoPousoAngular;
+                s.pitch.x = clamp(s.pitch.x + (s.terrenoPitchAngle - pitchAlvo) * tranco, -lim.pitch, lim.pitch);
+                s.roll.x = clamp(s.roll.x + (s.terrenoRollAngle - rollAlvo) * tranco, -lim.roll, lim.roll);
             }
 
             if (!this.pulo.noAr) {
-                const fator = lerpFactorDt(0.20, dt60);
+                const fator = lerpFactorDt(SUSP.suavTerreno, dt60);
                 s.terrenoPitchAngle = mix(s.terrenoPitchAngle, pitchAlvo, fator);
                 s.terrenoRollAngle = mix(s.terrenoRollAngle, rollAlvo, fator);
                 this.reagirAoRelevoAngular(pitchAlvo, rollAlvo, dt60, primeiroFrameSolo);
@@ -427,7 +463,7 @@ export class Veiculo {
                 const velHorizontal = len(f.velocity) * 60;
                 const fatorAtitude = clamp(velHorizontal / 150, 0, 1);
                 const pitchAr = clamp(-degrees(Math.atan2(f.velocityY, Math.max(velHorizontal, 1))), -25, 25) * fatorAtitude;
-                const fator = lerpFactorDt(0.04, dt60);
+                const fator = lerpFactorDt(SUSP.suavAtitudeAr, dt60);
                 s.terrenoPitchAngle = mix(s.terrenoPitchAngle, pitchAr, fator);
                 s.terrenoRollAngle = mix(s.terrenoRollAngle, 0, fator);
             }
@@ -491,8 +527,8 @@ export class Veiculo {
     matrizChassi(): Mat4 {
         const offZ = this.config.carro.dimensoes.offsetchassi ?? 0;
         let m = this.modelMatrix.translate(v3(0, -this.deslocamentoCarroceria(), offZ));
-        m = m.rotate(radians(this.suspensao.chassiPitchAngle), X_AXIS);
-        m = m.rotate(radians(this.suspensao.chassiRollAngle), Z_AXIS);
+        m = m.rotate(radians(this.suspensao.pitch.x), X_AXIS);
+        m = m.rotate(radians(this.suspensao.roll.x), Z_AXIS);
         return m;
     }
 

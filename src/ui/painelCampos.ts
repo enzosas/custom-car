@@ -93,9 +93,6 @@ export const ABAS: AbaDef[] = [
           { nome: 'aderenciaPista', apresentacao: 'aderencia da pista', tipo: 'float' },
           { nome: 'atritoEscalar', apresentacao: 'atrito escalar', tipo: 'float' },
           { nome: 'atritoLinear', apresentacao: 'atrito linear', tipo: 'float' },
-          { nome: 'suspensaoRigidez', apresentacao: 'rigidez da suspensao', tipo: 'float' },
-          { nome: 'suspensaoAmortecimento', apresentacao: 'amortecimento da suspensao', tipo: 'float' },
-          { nome: 'suspensaoInclinacaoMax', apresentacao: 'inclinacao maxima da suspensao', tipo: 'float' },
           { nome: 'velReferenciaGiro', apresentacao: 'velocidade de referencia do giro', tipo: 'float' },
           { nome: 'taxaRecuperacaoGrip', apresentacao: 'recuperacao da aderencia', tipo: 'float' },
           { nome: 'forcaPulo', apresentacao: 'forca do pulo', tipo: 'float' },
@@ -103,11 +100,17 @@ export const ABAS: AbaDef[] = [
           { nome: 'fatorPuloMinimo', apresentacao: 'pulo minimo', tipo: 'float' },
           { nome: 'tempoCargaPulo', apresentacao: 'tempo de carga do pulo', tipo: 'float' },
           { nome: 'compressaoPulo', apresentacao: 'compressao do pulo', tipo: 'float' },
-          { nome: 'reacaoPouso', apresentacao: 'reacao ao pouso', tipo: 'float' },
-          { nome: 'reacaoTerrenoAngular', apresentacao: 'reacao ao relevo (inclinacao)', tipo: 'float' },
-          { nome: 'reacaoTerrenoVertical', apresentacao: 'reacao ao relevo (vertical)', tipo: 'float' },
           { nome: 'limiarDecolagem', apresentacao: 'limiar de decolagem', tipo: 'float' },
           { nome: 'limiarDriftRastro', apresentacao: 'limiar do rastro de drift', tipo: 'float' },
+        ]
+      },
+      {
+        titulo: 'suspensao', caminho: ['carro', 'suspensao'], campos: [
+          { nome: 'frequencia', apresentacao: 'frequencia (Hz)', tipo: 'float' },
+          { nome: 'amortecimento', apresentacao: 'amortecimento (0 a 1)', tipo: 'float', min: 0.05, max: 1 },
+          { nome: 'alturaCentroMassa', apresentacao: 'altura do centro de massa', tipo: 'float' },
+          { nome: 'barraEstabilizadora', apresentacao: 'barra estabilizadora (x)', tipo: 'float' },
+          { nome: 'curso', apresentacao: 'curso da suspensao', tipo: 'float' },
         ]
       },
     ]

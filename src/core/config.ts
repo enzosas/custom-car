@@ -11,22 +11,28 @@ const FISICA_BASE = {
     aderenciaPista: 0.03,
     atritoEscalar: 0.9999,
     atritoLinear: 0.001,
-    suspensaoRigidez: 80.0,
-    suspensaoAmortecimento: 8.0,
-    suspensaoInclinacaoMax: 8.0,
     velReferenciaGiro: 0.5,
     taxaRecuperacaoGrip: 0.02,
     forcaPulo: 70.0,
     gravidade: 150.0,
     fatorPuloMinimo: 0.55,
     tempoCargaPulo: 0.6,
-    compressaoPulo: 1.4,
-    reacaoPouso: 1.0,
-    // reação do chassi ao relevo (só visual; 0 desliga e o chassi acompanha o terreno de forma rígida)
-    reacaoTerrenoAngular: 0.5,    // quanto o chassi "fica para trás" nas mudanças de inclinação do terreno (pitch/roll)
-    reacaoTerrenoVertical: 0.15,  // quanto a carroceria comprime/alivia em vales e cristas
+    compressaoPulo: 1.4,          // quanto a carroceria afunda ao segurar o pulo (carga cheia)
     limiarDecolagem: 10.0,
     limiarDriftRastro: 0.9,
+};
+
+/**
+ * Suspensão da carroceria (só visual: não muda por onde o carro anda), com grandezas de um carro de verdade.
+ * A inclinação ao frear, acelerar e fazer curva SAI DELAS (transferência de peso), junto com o entre-eixos e a
+ * distância entre rodas das dimensões; a massa do carro se cancela nas contas, por isso não aparece aqui.
+ */
+const SUSPENSAO_BASE = {
+    frequencia: 1.42,             // Hz: frequência natural da suspensão (carro comum 1 a 1,5; esportivo 2 a 3)
+    amortecimento: 0.45,          // fração do amortecimento crítico (carro comum 0,2 a 0,4; 1 = volta sem balançar)
+    alturaCentroMassa: 5.5,       // altura do centro de massa acima do chão (unidades do jogo): mais alto = inclina mais
+    barraEstabilizadora: 2.5,     // quantas vezes a rolagem nas curvas é mais dura que a mola sozinha (1 = sem barra)
+    curso: 1.9,                   // quanto a suspensão comprime ou estica (unidades do jogo); nunca passa da altura do chão
 };
 
 const COCKPIT_BASE = {
@@ -50,7 +56,9 @@ export const PERFIL_CARRO_VERMELHO = {
         ...COCKPIT_BASE,
     },
     rodas: { raio: 2.0, largura: 1.5, segmentos: 16 },
-    fisica: { ...FISICA_BASE, suspensaoRigidez: 150.0 },
+    fisica: { ...FISICA_BASE },
+    // carro menor e mais duro que o GLB
+    suspensao: { ...SUSPENSAO_BASE, frequencia: 1.95, amortecimento: 0.33, alturaCentroMassa: 3.5 },
 };
 
 /** Carro carregado de um modelo .glb */
@@ -68,6 +76,7 @@ export const PERFIL_CARRO_GLB = {
     },
     rodas: { raio: 3.2, largura: 1.5, segmentos: 16 },
     fisica: { ...FISICA_BASE },
+    suspensao: { ...SUSPENSAO_BASE },
 };
 
 export type PerfilCarro = typeof PERFIL_CARRO_VERMELHO;
