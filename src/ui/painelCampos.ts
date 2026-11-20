@@ -183,6 +183,14 @@ export const ABAS: AbaDef[] = [
           { nome: 'distanciaEstrada', apresentacao: 'distancia da estrada', tipo: 'float' },
         ]
       },
+      {
+        titulo: 'distancias de LOD', caminho: ['arvore', 'lod'], campos: [
+          { nome: 'lod1', apresentacao: 'fim do LOD 0 (completa / cruz)', tipo: 'float', min: 0 },
+          { nome: 'lod2', apresentacao: 'fim do LOD 1 (3 segmentos)', tipo: 'float', min: 0 },
+          { nome: 'lod3', apresentacao: 'fim do LOD 2 (cone)', tipo: 'float', min: 0 },
+          { nome: 'maxima', apresentacao: 'distancia maxima', tipo: 'float', min: 0 },
+        ]
+      },
     ]
   },
   {

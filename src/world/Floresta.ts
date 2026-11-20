@@ -41,10 +41,17 @@ export class Floresta {
         this.chunks.delete(chave);
     }
 
-    private calcularLOD(distSq: number): NivelLOD {
-        if (distSq < 3000000) return NivelLOD.LOD_0_NORMAL;
-        if (distSq < 17500000) return NivelLOD.LOD_1_TRES_SEGMENTOS;
-        if (distSq < 37500000) return NivelLOD.LOD_2_CONE_UNICO;
+    /** limites de LOD da config, ao quadrado e sempre em ordem crescente (um valor menor que o anterior vira o anterior) */
+    private limitesLOD() {
+        const l = this.config.arvore.lod;
+        const d1 = Math.max(0, l.lod1), d2 = Math.max(d1, l.lod2), d3 = Math.max(d2, l.lod3), max = Math.max(0, l.maxima);
+        return { l1: d1 * d1, l2: d2 * d2, l3: d3 * d3, max: max * max };
+    }
+
+    private calcularLOD(distSq: number, lim: { l1: number; l2: number; l3: number }): NivelLOD {
+        if (distSq < lim.l1) return NivelLOD.LOD_0_NORMAL;
+        if (distSq < lim.l2) return NivelLOD.LOD_1_TRES_SEGMENTOS;
+        if (distSq < lim.l3) return NivelLOD.LOD_2_CONE_UNICO;
         return NivelLOD.LOD_3_BILLBOARD;
     }
 
@@ -125,7 +132,8 @@ export class Floresta {
         // árvores que entram no mapa de sombra: até um pouco além da diagonal da caixa da sombra
         const raioSombra = Math.max(1350, (this.config.opcoes.alcanceSombra ?? 600) * 1.5);
         const raioSombraSq = raioSombra * raioSombra;
-        const raioVisaoSq = 750000000;
+        const limites = this.limitesLOD();
+        const raioVisaoSq = limites.max;
         const alcance = Math.sqrt(isShadowPass ? raioSombraSq : raioVisaoSq);
         for (const d of this.chunks.values()) {
             // chunk inteiro fora do alcance: nem olha as árvores dele
@@ -138,7 +146,7 @@ export class Floresta {
                 const distSq = dx * dx + dy * dy + dz * dz;
                 if (isShadowPass && distSq > raioSombraSq) continue;
                 if (!isShadowPass && distSq > raioVisaoSq) continue;
-                const k = this.calcularLOD(distSq);
+                const k = this.calcularLOD(distSq, limites);
                 lotes[k].set(M.subarray(i * 16, i * 16 + 16), contagem[k] * 16);
                 contagem[k]++;
             }

@@ -80,9 +80,9 @@ export const GAME_CONFIG = {
     opcoes: {
         rodasVisiveis: true,
         /** sombras: meia largura da área com sombra em volta do carro (unidades do mundo); mais = vai mais longe, menos nítida */
-        alcanceSombra: 1800,
+        alcanceSombra: 600,
         /** sombras: resolução do mapa (1 = 1024, 2 = 2048, 3 = 4096, 4 = 8192); mais = mais nítida e mais pesada */
-        qualidadeSombra: 3,
+        qualidadeSombra: 2,
         /** false = low poly (padrão); true = visual de PS2 (GT4). Alterna também com a tecla G */
         estiloPS2: false,
         /** estilo PS2: altura interna fixa do desenho, em pixels (o PS2 fazia 480 linhas; o padrão aqui é 360); o navegador amplia com filtro bilinear */
@@ -142,7 +142,15 @@ export const GAME_CONFIG = {
             afundamentoBase: 2.5,
             segmentosTronco: 4,
             distanciaEstrada: 20.0,
-        }
+        },
+        // distâncias (da câmera, em unidades do mundo) em que cada árvore troca de nível de detalhe. Ficam fora de
+        // `arvores` de propósito: mudar aqui não reconstrói a vegetação, vale no quadro seguinte.
+        lod: {
+            lod1: 1732.0,            // até aqui: árvore completa (low poly) / dois cartões em cruz (retro)
+            lod2: 4183.0,            // até aqui: 3 segmentos (low poly) / cartão de frente (retro)
+            lod3: 6124.0,            // até aqui: cone único (low poly); depois: billboard
+            maxima: 27386.0,         // além disso a árvore não é desenhada
+        },
     },
     grama: {
         grama: {
