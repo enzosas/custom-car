@@ -248,6 +248,7 @@ export const GAME_CONFIG = {
             offsetZ: 0.0,
             offsetYaw: 0.0,          // graus: gira a câmera em órbita em volta do carro (positivo = para a direita do carro)
             offsetRoll: 0.0,         // graus: inclina o horizonte (positivo = câmera inclina para a direita)
+            seguirChassi: false,     // true = a câmera acompanha a carroceria (afunda, inclina e rola com a suspensão)
         }
     },
     pilotoAutomatico: {

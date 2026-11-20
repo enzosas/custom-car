@@ -131,7 +131,10 @@ export const ABAS: AbaDef[] = [
           { nome: 'offsetYaw', apresentacao: 'offset yaw (graus)', tipo: 'float' },
           { nome: 'offsetRoll', apresentacao: 'offset roll (graus)', tipo: 'float' },
         ],
-        interruptores: [{ nome: 'autoCentrarVerticalmente', rotulo: 'auto-centrar verticalmente' }],
+        interruptores: [
+          { nome: 'autoCentrarVerticalmente', rotulo: 'auto-centrar verticalmente' },
+          { nome: 'seguirChassi', rotulo: 'seguir o chassi (suspensao)' },
+        ],
       },
     ]
   },

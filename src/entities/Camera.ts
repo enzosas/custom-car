@@ -90,7 +90,9 @@ export class CameraJogo {
 
         // auto-centrar: a inclinação do terreno segue na mesma velocidade do retorno da órbita (desligado = alvo 0, decai suave);
         // segurando o botão direito o pitch fica parado (a inclinação seguida congela) e ao soltar a câmera volta a acompanhar o terreno
-        const inclinacaoAlvo = this.autoCentrarVerticalmente ? this.inclinacaoTerreno(targetPos, targetYaw, alturaFn) : 0;
+        // presa ao chassi, a inclinação vem inteira da carroceria (Jogo.prenderCameraAoChassi): seguir o terreno aqui contaria duas vezes
+        const seguirTerreno = this.autoCentrarVerticalmente && !this.config.camera.parametros.seguirChassi;
+        const inclinacaoAlvo = seguirTerreno ? this.inclinacaoTerreno(targetPos, targetYaw, alturaFn) : 0;
         if (!this.inclinacaoInicializada) { this.inclinacaoSuave = inclinacaoAlvo; this.inclinacaoInicializada = true; }
         else if (!arrastando) this.inclinacaoSuave = mix(this.inclinacaoSuave, inclinacaoAlvo, lerpFactorDt(this.taxaRetornoOrbita, dt60));
 

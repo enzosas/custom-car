@@ -8,7 +8,7 @@ import { type ControlesToque, criarControlesToque } from './ControlesToque';
 import { ControleJogador } from './ControleJogador';
 import { CarroVisual } from '@/entities/CarroVisual';
 import { EfeitosDrift } from '@/entities/EfeitosDrift';
-import { lerpFactorDt } from '@/graphics/Mat4';
+import { lerpFactorDt, Mat4, Y_AXIS } from '@/graphics/Mat4';
 import { sementeAleatoria } from './Random';
 import { geometriaDe } from '@/graphics/Malha';
 import { Renderer } from '@/graphics/Renderer';
@@ -68,6 +68,12 @@ export class Jogo {
 
     private veiculo = new Veiculo();
     private cam = new CameraJogo();
+    // temporários da câmera presa ao chassi (opção camera.parametros.seguirChassi)
+    private readonly camPos = new THREE.Vector3();
+    private readonly camAlvo = new THREE.Vector3();
+    private readonly camUp = new THREE.Vector3();
+    private readonly matTmpA = new THREE.Matrix4();
+    private readonly matTmpB = new THREE.Matrix4();
 
     private matOpaco = criarMaterialPrincipal(this.uniforms);
     private matMarcacao = criarMaterialMarcacao(this.uniforms);
@@ -278,6 +284,25 @@ export class Jogo {
         console.log('Medidas estimadas das rodas do modelo:', m);
     }
 
+    /**
+     * Câmera presa ao CHASSI: a CameraJogo calcula a órbita só com a posição e a direção do carro (sem seguir o
+     * terreno, ver Camera.ts), e aqui ela recebe toda a orientação da carroceria por cima disso: a inclinação do
+     * terreno, a atitude no ar durante o pulo e o movimento da suspensão. Assim o ângulo entre câmera e chassi fica
+     * fixo (só a direção horizontal mantém o atraso da câmera de perseguição). O estado suavizado da câmera não muda.
+     */
+    private prenderCameraAoChassi() {
+        const p = this.veiculo.getPosicao();
+        const referencia = this.matTmpA.fromArray(Mat4.translation(p).rotate(this.veiculo.getYawAngle(), Y_AXIS).m);
+        const chassi = this.matTmpB.fromArray(this.veiculo.matrizChassi().m);
+        const d = chassi.multiply(referencia.invert());     // chassi · referência⁻¹: a orientação da carroceria, no mundo
+        this.camPos.applyMatrix4(d);
+        this.camAlvo.applyMatrix4(d);
+        this.camUp.transformDirection(d);
+        // girando junto com a carroceria a câmera pode descer: não deixa entrar no chão (mesma margem da CameraJogo)
+        const chao = this.world.alturaSuperficie(this.camPos.x, this.camPos.z) + 4;
+        if (this.camPos.y < chao) this.camPos.y = chao;
+    }
+
     /** aplica ao mundo o estilo escolhido em config.opcoes.estiloPS2 (idempotente) */
     private aplicarEstiloVisual() {
         const ps2 = this.config.opcoes.estiloPS2;
@@ -464,9 +489,11 @@ export class Jogo {
         );
 
         const cp = this.cam.cameraPos, ct = this.cam.cameraTarget, up = this.cam.getUpRef();
-        this.renderizador.camera.position.set(cp.x, cp.y, cp.z);
-        this.renderizador.camera.up.set(up.x, up.y, up.z);
-        this.renderizador.camera.lookAt(ct.x, ct.y, ct.z);
+        this.camPos.set(cp.x, cp.y, cp.z); this.camAlvo.set(ct.x, ct.y, ct.z); this.camUp.set(up.x, up.y, up.z);
+        if (this.config.camera.parametros.seguirChassi) this.prenderCameraAoChassi();
+        this.renderizador.camera.position.copy(this.camPos);
+        this.renderizador.camera.up.copy(this.camUp);
+        this.renderizador.camera.lookAt(this.camAlvo);
         this.renderizador.camera.updateMatrixWorld(true);
 
         let targetOffX = 0, targetOffY = 0;
