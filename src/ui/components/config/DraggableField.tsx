@@ -1,10 +1,15 @@
 // DraggableField.tsx
-import { useMemo, useReducer, useRef } from 'react';
+import { useEffect, useMemo, useReducer, useRef } from 'react';
 import type { CampoDef } from '../../painelCampos';
 import { useDragValue } from '../../hooks/useDragValue';
 import { arrastar, formatarValor, iniciarSessao, type Alvo, type SessaoArrasto } from '../../lib/propriedade';
 import { foiAlterado, idItem, valorPadrao } from '../../lib/padroes';
 import type { ModoPainel } from './tipos';
+import type { PassoNav } from '../../lib/navegacao';
+import { useRolarAte, useSinal } from '../../hooks/useSinal';
+
+/** quanto de arrasto (em px) cada toque de I/K equivale: a sensibilidade do teclado segue a do arrasto do campo */
+const PX_POR_TECLA = 10;
 
 interface Props {
     def: CampoDef;
@@ -21,9 +26,13 @@ interface Props {
     /** contador que sobe a cada reset do campo; reinicia o flash azul */
     flash?: number;
     onResetar?: (id: string) => void;
+    /** navegação por teclado: cursor neste campo / campo selecionado (I e K mudam o valor) / último passo pedido */
+    cursor?: boolean;
+    selecionado?: boolean;
+    passo?: PassoNav;
 }
 
-export function DraggableField({ def, objeto, caminho, modo, onAlterado, aplicarAoSoltar = false, modoReset = false, original, flash = 0, onResetar }: Props) {
+export function DraggableField({ def, objeto, caminho, modo, onAlterado, aplicarAoSoltar = false, modoReset = false, original, flash = 0, onResetar, cursor = false, selecionado = false, passo }: Props) {
     const chaveCaminho = caminho.join('.');
 
     // Rascunho usado nos campos "aplicar ao soltar": o arrasto altera ele, e não o GAME_CONFIG
@@ -78,8 +87,34 @@ export function DraggableField({ def, objeto, caminho, modo, onAlterado, aplicar
         },
     });
 
-    // Enquanto arrasta um campo "aplicar ao soltar", mostra o rascunho; fora disso, o valor real do config
-    const alvoVisivel = aplicarAoSoltar && arrastando ? alvoRascunho : alvoReal;
+    // --- teclado: com o campo selecionado, cada I/K é um "arrasto" de PX_POR_TECLA px (Shift = 10x, como no mouse) ---
+    const sessaoTeclado = useRef<SessaoArrasto | null>(null);
+    useSinal(passo?.seq ?? 0, selecionado, () => {
+        if (!passo) return;
+        if (!sessaoTeclado.current) {
+            if (aplicarAoSoltar) rascunho.current[def.nome] = objeto[def.nome] ?? 0;
+            sessaoTeclado.current = iniciarSessao(alvoArrasto);
+        }
+        arrastar(alvoArrasto, sessaoTeclado.current, passo.dir * PX_POR_TECLA, passo.rapido, false, passoBase);
+        redesenhar();
+        if (!aplicarAoSoltar) onAlterado();
+    });
+    // soltar a seleção (J) equivale a soltar o arrasto: os campos "aplicar ao soltar" só agora mandam o valor ao jogo
+    useEffect(() => {
+        if (selecionado || !sessaoTeclado.current) return;
+        sessaoTeclado.current = null;
+        if (aplicarAoSoltar) {
+            objeto[def.nome] = rascunho.current[def.nome];
+            redesenhar();
+            onAlterado();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selecionado]);
+    const ref = useRef<HTMLDivElement>(null);
+    useRolarAte(ref, cursor || selecionado);
+
+    // Enquanto arrasta (ou ajusta pelo teclado) um campo "aplicar ao soltar", mostra o rascunho; fora disso, o valor real
+    const alvoVisivel = aplicarAoSoltar && (arrastando || sessaoTeclado.current) ? alvoRascunho : alvoReal;
 
     const alterado = modoReset && foiAlterado(objeto[def.nome], original);
     const aoClicarReset = () => {
@@ -88,12 +123,13 @@ export function DraggableField({ def, objeto, caminho, modo, onAlterado, aplicar
         onResetar?.(idItem(caminho, def.nome));
     };
 
-    const classes = `painel-item campo ${modo}${arrastando ? ' dragging' : ''}`
+    const classes = `painel-item campo ${modo}${arrastando || selecionado ? ' dragging' : ''}`
+        + (selecionado ? ' nav-selecionado' : cursor ? ' nav-cursor' : '')
         + (modoReset ? (alterado ? ' reset-alt' : ' reset-ina') : '')
         + (flash > 0 ? (flash % 2 ? ' flash-a' : ' flash-b') : '');
 
     return (
-        <div className={classes} {...(modoReset ? { onClick: aoClicarReset } : handlers)}>
+        <div ref={ref} className={classes} {...(modoReset ? { onClick: aoClicarReset } : handlers)}>
             <span className="painel-rotulo">{def.apresentacao ?? def.nome}</span>
             <span className="reset-marca">↺</span>
             <span className="painel-celula">{formatarValor(alvoVisivel)}</span>

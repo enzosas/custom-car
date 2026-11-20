@@ -10,6 +10,7 @@ import { SwitchRow } from './SwitchRow';
 import { ActionButton } from './ActionButton';
 import { SeletorEstilo } from './SeletorEstilo';
 import type { AcoesPainel, ModoPainel } from './tipos';
+import type { NavLista } from '../../lib/navegacao';
 
 interface Props {
     aba: AbaDef;
@@ -23,9 +24,11 @@ interface Props {
     sinalResetarTudo: number;
     /** vai no cabeçalho da primeira seção, à direita do título (rola junto com a lista) */
     acaoCabecalho?: ReactNode;
+    /** navegação por teclado dentro da janela (null = cursor fora dela); os índices seguem itensNavegaveis(aba) */
+    nav?: NavLista | null;
 }
 
-export function FieldList({ aba, config, modo, acoes, onAlterado, modoReset, sinalResetarTudo, acaoCabecalho }: Props) {
+export function FieldList({ aba, config, modo, acoes, onAlterado, modoReset, sinalResetarTudo, acaoCabecalho, nav = null }: Props) {
     // re-renderiza a lista a cada ajuste para a amostra de cor HSV acompanhar o arrasto
     const [, atualizar] = useReducer((n: number) => n + 1, 0);
     const aoAlterar = useCallback(() => { atualizar(); onAlterado(); }, [onAlterado]);
@@ -54,6 +57,14 @@ export function FieldList({ aba, config, modo, acoes, onAlterado, modoReset, sin
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sinalResetarTudo]);
 
+    // índice do próximo item navegável, na mesma ordem de itensNavegaveis(aba)
+    let proximo = 0;
+    const navDe = () => {
+        const i = proximo++;
+        const cursor = nav !== null && nav.item === i;
+        return { cursor, acionar: nav?.acionar ?? 0, selecionado: cursor && nav!.selecionado };
+    };
+
     return (
         <>
             {aba.secoes.map((sec, indice) => {
@@ -62,7 +73,10 @@ export function FieldList({ aba, config, modo, acoes, onAlterado, modoReset, sin
                     <Fragment key={`${sec.caminho.join('.')}|${sec.titulo}`}>
                         <SectionHeader titulo={sec.titulo} modo={modo} acao={indice === 0 ? acaoCabecalho : undefined} />
                         {sec.seletorEstilo && (
-                            <SeletorEstilo objeto={objeto as unknown as Record<string, boolean>} modo={modo} onAlterado={aoAlterar} />
+                            (() => {
+                                const n = navDe();
+                                return <SeletorEstilo objeto={objeto as unknown as Record<string, boolean>} modo={modo} onAlterado={aoAlterar} cursor={n.cursor} acionar={n.acionar} />;
+                            })()
                         )}
                         {sec.amostra && (
                             <div
@@ -73,8 +87,10 @@ export function FieldList({ aba, config, modo, acoes, onAlterado, modoReset, sin
                         {sec.campos.map((c) => {
                             const original = valorOriginal(sec.caminho, c.nome, carroGLB);
                             const id = idItem(sec.caminho, c.nome);
+                            const n = navDe();
                             return (
                                 <DraggableField
+                                    cursor={n.cursor} selecionado={n.selecionado} passo={n.cursor ? nav?.passo : undefined}
                                     key={c.nome} def={c} objeto={objeto} caminho={sec.caminho} modo={modo}
                                     aplicarAoSoltar={sec.aplicarAoSoltar} onAlterado={aoAlterar}
                                     modoReset={modoReset} original={typeof original === 'number' ? original : undefined}
@@ -85,8 +101,10 @@ export function FieldList({ aba, config, modo, acoes, onAlterado, modoReset, sin
                         {sec.interruptores?.map((i) => {
                             const original = valorOriginal(sec.caminho, i.nome, carroGLB);
                             const id = idItem(sec.caminho, i.nome);
+                            const n = navDe();
                             return (
                                 <SwitchRow
+                                    cursor={n.cursor} acionar={n.acionar}
                                     key={i.nome} rotulo={i.rotulo} chave={i.nome} modo={modo} onAlterado={aoAlterar}
                                     objeto={objeto as unknown as Record<string, boolean>}
                                     modoReset={modoReset} original={typeof original === 'boolean' ? original : undefined}
@@ -94,15 +112,21 @@ export function FieldList({ aba, config, modo, acoes, onAlterado, modoReset, sin
                                 />
                             );
                         })}
-                        {sec.botoes?.map((b) => (
+                        {sec.botoes?.map((b) => {
+                            const n = navDe();
+                            return (
                             <Fragment key={b.rotulo}>
                                 {b.info === 'seed' && (
                                     <div className={`painel-item info ${modo}`}>{`seed: ${acoes.lerSeed() ?? '-'}`}</div>
                                 )}
                                 {/* só redesenha a lista (para mostrar a seed nova): nada no GAME_CONFIG mudou */}
-                                <ActionButton rotulo={b.rotulo} modo={modo} onClick={() => { acoes[b.acao](); atualizar(); }} />
+                                <ActionButton
+                                    rotulo={b.rotulo} modo={modo} onClick={() => { acoes[b.acao](); atualizar(); }}
+                                    cursor={n.cursor} acionar={n.acionar}
+                                />
                             </Fragment>
-                        ))}
+                            );
+                        })}
                     </Fragment>
                 );
             })}

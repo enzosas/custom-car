@@ -565,3 +565,35 @@
 .painel-seletor .painel-btn .rotulo {
     padding-left: 0;
 }
+
+/* ---------- navegação por teclado (I J K L) ---------- */
+/* cursor: anel azul em volta do botão, campo, interruptor ou seletor */
+.painel-btn.nav-cursor,
+.painel-seletor.nav-cursor,
+.painel-item.nav-cursor,
+.painel-switch.nav-cursor {
+    border-radius: 8px;
+    box-shadow: 0 0 0 2px #2f7de1, 0 0 12px rgba(47, 125, 225, 0.55);
+}
+
+.painel-item.nav-cursor,
+.painel-switch.nav-cursor {
+    background: rgba(47, 125, 225, 0.12);
+}
+
+/* campo selecionado (I aumenta, K diminui): fundo azul, como durante o arrasto */
+.painel-item.nav-selecionado {
+    border-radius: 8px;
+    background: rgba(47, 125, 225, 0.22);
+    box-shadow: 0 0 0 2px #1d5fbf;
+}
+
+.painel-item.nav-selecionado .painel-celula::before {
+    content: "▲▼ ";
+    font-size: 0.75em;
+    color: #1d5fbf;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .painel-btn.nav-cursor { transition: none; }
+}

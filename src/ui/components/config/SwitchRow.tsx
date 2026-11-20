@@ -1,4 +1,5 @@
-import { useReducer } from 'react';
+import { useReducer, useRef } from 'react';
+import { useRolarAte, useSinal } from '../../hooks/useSinal';
 import type { ModoPainel } from './tipos';
 
 interface Props {
@@ -15,6 +16,9 @@ interface Props {
     /** contador que sobe a cada reset do switch; reinicia o flash azul */
     flash?: number;
     onResetar?: (id: string) => void;
+    /** cursor do teclado neste interruptor; `acionar` muda a cada L (liga/desliga, como um clique) */
+    cursor?: boolean;
+    acionar?: number;
 }
 
 /**
@@ -22,7 +26,9 @@ interface Props {
  * <div role="switch"> de propósito (como o TabButton): um <button> focado reagiria à tecla Espaço,
  * que o jogo usa como freio de mão.
  */
-export function SwitchRow({ rotulo, objeto, chave, modo, onAlterado, modoReset = false, original, id = chave, flash = 0, onResetar }: Props) {
+export function SwitchRow({ rotulo, objeto, chave, modo, onAlterado, modoReset = false, original, id = chave, flash = 0, onResetar, cursor = false, acionar = 0 }: Props) {
+    const ref = useRef<HTMLDivElement>(null);
+    useRolarAte(ref, cursor);
     const [, redesenhar] = useReducer((n: number) => n + 1, 0);
     const ligado = !!objeto[chave];
 
@@ -41,12 +47,15 @@ export function SwitchRow({ rotulo, objeto, chave, modo, onAlterado, modoReset =
         onAlterado();
     };
 
-    const classes = `painel-switch ${modo}${ligado ? ' ligado' : ''}`
+    useSinal(acionar, cursor, alternar);
+
+    const classes = `painel-switch ${modo}${ligado ? ' ligado' : ''}${cursor ? ' nav-cursor' : ''}`
         + (modoReset ? (alterado ? ' reset-alt' : ' reset-ina') : '')
         + (flash > 0 ? (flash % 2 ? ' flash-a' : ' flash-b') : '');
 
     return (
         <div
+            ref={ref}
             role="switch"
             aria-checked={ligado}
             aria-label={rotulo}

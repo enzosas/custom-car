@@ -7,6 +7,10 @@ import { FieldList } from './FieldList';
 import { ResetControl } from './ResetControl';
 import { itensAlterados } from '../../lib/padroes';
 import type { AcoesPainel } from './tipos';
+import { itensNavegaveis, type NivelNav, type NavLista, type PassoNav } from '../../lib/navegacao';
+
+/** teclas da navegação (pela posição física, como WASD): I/K = cima/baixo, L = entrar/acionar, J = voltar */
+const TECLAS_NAV: Record<string, 'i' | 'j' | 'k' | 'l'> = { KeyI: 'i', KeyJ: 'j', KeyK: 'k', KeyL: 'l' };
 
 interface Props {
     jogoRef: JogoRef;
@@ -85,6 +89,72 @@ function ConfigPanelBase({ jogoRef, isMobile, abertoMobile, revisao }: Props) {
 
     useEffect(() => { colunaRef.current?.scrollTo({ top: 0 }); }, [abaAtiva]);
 
+    // --- navegação por teclado (I J K L), só no desktop; ver lib/navegacao.ts ---
+    const [nivel, setNivel] = useState<NivelNav>('oculto');
+    const [botaoNav, setBotaoNav] = useState(0);          // 0..titulos.length-1 = abas; titulos.length = piloto automático
+    const [itemNav, setItemNav] = useState(0);
+    const [passoNav, setPassoNav] = useState<PassoNav>({ seq: 0, dir: 1, rapido: false });
+    const [acionarNav, setAcionarNav] = useState(0);
+    const [acionarPiloto, setAcionarPiloto] = useState(0);
+
+    // o mouse também mexe no painel: fechar a aba tira o cursor de dentro dela; trocar de aba leva o cursor ao 1º item
+    useEffect(() => {
+        if (!abertoDesktop && (nivel === 'janela' || nivel === 'campo')) { setNivel('botoes'); setBotaoNav(abaAtiva); }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [abertoDesktop]);
+    useEffect(() => {
+        setItemNav(0);
+        if (nivel === 'campo') setNivel('janela');
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [abaAtiva]);
+
+    const estadoNav = useRef({ nivel, botaoNav, itemNav, abaAtiva, abertoDesktop });
+    estadoNav.current = { nivel, botaoNav, itemNav, abaAtiva, abertoDesktop };
+
+    useEffect(() => {
+        if (isMobile) { setNivel('oculto'); return; }
+        const totalBotoes = titulos.length + 1;
+        const aoTeclar = (e: KeyboardEvent) => {
+            const t = TECLAS_NAV[e.code];
+            if (!t || e.ctrlKey || e.metaKey || e.altKey) return;
+            const alvo = e.target as HTMLElement | null;
+            if (alvo && (alvo.tagName === 'INPUT' || alvo.tagName === 'TEXTAREA' || alvo.isContentEditable)) return;
+            e.preventDefault();
+            const s = estadoNav.current;
+
+            if (s.nivel === 'oculto') {
+                if (t !== 'j') setNivel('botoes');
+            } else if (s.nivel === 'botoes') {
+                if (t === 'i') setBotaoNav((s.botaoNav - 1 + totalBotoes) % totalBotoes);
+                else if (t === 'k') setBotaoNav((s.botaoNav + 1) % totalBotoes);
+                else if (t === 'j') setNivel('oculto');
+                else if (s.botaoNav === titulos.length) setAcionarPiloto((n) => n + 1);   // L no piloto: liga/desliga
+                else {                                                                    // L numa aba: abre e entra
+                    setAbaAtiva(s.botaoNav);
+                    setAbertoDesktop(true);
+                    setItemNav(0);
+                    setNivel(itensNavegaveis(ABAS[s.botaoNav]).length > 0 ? 'janela' : 'botoes');
+                }
+            } else if (s.nivel === 'janela') {
+                const itens = itensNavegaveis(ABAS[s.abaAtiva]);
+                if (t === 'i') setItemNav((s.itemNav - 1 + itens.length) % itens.length);
+                else if (t === 'k') setItemNav((s.itemNav + 1) % itens.length);
+                else if (t === 'j') { setAbertoDesktop(false); setBotaoNav(s.abaAtiva); setNivel('botoes'); }
+                else if (itens[s.itemNav] === 'campo') setNivel('campo');               // L num campo: seleciona
+                else setAcionarNav((n) => n + 1);                                       // L no resto: aciona
+            } else {
+                if (t === 'i' || t === 'k') setPassoNav((p) => ({ seq: p.seq + 1, dir: t === 'i' ? 1 : -1, rapido: e.shiftKey }));
+                else if (t === 'j') setNivel('janela');
+            }
+        };
+        window.addEventListener('keydown', aoTeclar);
+        return () => window.removeEventListener('keydown', aoTeclar);
+    }, [isMobile]);
+
+    const navLista: NavLista | null = !isMobile && abertoDesktop && (nivel === 'janela' || nivel === 'campo')
+        ? { item: itemNav, selecionado: nivel === 'campo', passo: passoNav, acionar: acionarNav }
+        : null;
+
     // o controle do modo "resetar configs" vai dentro do cabeçalho da primeira seção (ver FieldList), então rola com a lista
     // "resetar tudo" restaura a aba atual e desativa o modo
     const controleReset = (
@@ -100,6 +170,7 @@ function ConfigPanelBase({ jogoRef, isMobile, abertoMobile, revisao }: Props) {
         <FieldList
             key={`${abaAtiva}-${revisao}`} aba={ABAS[abaAtiva]} config={GAME_CONFIG} modo={modo} acoes={acoes} onAlterado={aoAlterar}
             modoReset={modoReset} sinalResetarTudo={sinalResetarTudo} acaoCabecalho={controleReset}
+            nav={navLista}
         />
     );
 
@@ -124,6 +195,7 @@ function ConfigPanelBase({ jogoRef, isMobile, abertoMobile, revisao }: Props) {
                 className="painel-menu-desktop" {...regiao('menu')}
                 titulos={titulos} ativa={abertoDesktop ? abaAtiva : -1} modo={modo} config={GAME_CONFIG}
                 onSelecionar={selecionar} onAlterado={aoAlterar}
+                cursor={nivel === 'botoes' ? botaoNav : -1} acionarPiloto={acionarPiloto}
             />
             <div
                 ref={colunaRef}
