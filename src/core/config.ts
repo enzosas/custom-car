@@ -155,7 +155,7 @@ export const GAME_CONFIG = {
         // distâncias (da câmera, em unidades do mundo) em que cada árvore troca de nível de detalhe. Ficam fora de
         // `arvores` de propósito: mudar aqui não reconstrói a vegetação, vale no quadro seguinte.
         lod: {
-            lod1: 1732.0,            // até aqui: árvore completa (low poly) / dois cartões em cruz (retro)
+            lod1: 3000.0,            // até aqui: árvore completa (low poly) / dois cartões em cruz (retro)
             lod2: 4183.0,            // até aqui: 3 segmentos (low poly) / cartão de frente (retro)
             lod3: 6124.0,            // até aqui: cone único (low poly); depois: billboard
             maxima: 27386.0,         // além disso a árvore não é desenhada

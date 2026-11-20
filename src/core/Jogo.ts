@@ -32,7 +32,7 @@ import {
 /** configurações com que o estilo retro começa: as do low poly, com as árvores maiores e mais grossas (cartões de frente, como no GT4) */
 function perfilInicialRetro(): Record<string, unknown> {
     const perfil = tirarPerfilEstilo(GAME_CONFIG) as { arvore: typeof GAME_CONFIG.arvore };
-    perfil.arvore.arvores.alturaTronco = 850;
+    perfil.arvore.arvores.alturaTronco = 3000;
     perfil.arvore.arvores.raioTronco = 50;
     return perfil;
 }
