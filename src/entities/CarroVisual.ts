@@ -6,6 +6,7 @@ import { GAME_CONFIG } from '@/core/config';
 import type { Veiculo } from './Veiculo';
 import type { Mat4 } from '@/graphics/Mat4';
 import { geometriaDe } from '@/graphics/Malha';
+import { detectarRodas } from './detectarRodas';
 
 const ROT_RODA_GLB = new THREE.Matrix4().makeRotationZ(-Math.PI / 2);
 const OFFSET_BASE_MODELO_Y = -3.8;
@@ -276,7 +277,19 @@ export class CarroVisual {
         modelo.scale.set(1, 1, 1);
         modelo.updateMatrixWorld(true);
 
-        const rodas = ['wheelfl', 'wheelfr', 'wheelrl', 'wheelrr'].map((nome) => this.encontrarPorNome(modelo, nome));
+        // rodas: primeiro pelos nomes wheelFL/FR/RL/RR; sem eles, a detecção automática (outros nomes, ou forma e posição)
+        let rodas: (THREE.Object3D | null)[] = ['wheelfl', 'wheelfr', 'wheelrl', 'wheelrr'].map((nome) => this.encontrarPorNome(modelo, nome));
+        if (rodas.every((r) => r)) {
+            console.log('rodas do .glb: pelos nomes wheelFL/FR/RL/RR');
+        } else {
+            const detectadas = detectarRodas(modelo);
+            if (detectadas) {
+                rodas = detectadas.rodas;
+                console.log(`rodas do .glb: ${detectadas.metodo}`);
+            } else {
+                console.warn('rodas do .glb: não encontradas (nem pelos nomes, nem pela forma); o carro usa as rodas do jogo');
+            }
+        }
         let centros: THREE.Vector3[] | null = null;
         if (rodas.every((r) => r)) {
             // 1. onde cada roda está no modelo: decide em qual roda da física ela entra (o nome só serve para achá-la)
