@@ -91,9 +91,9 @@ export const GAME_CONFIG = {
     opcoes: {
         rodasVisiveis: true,
         /** sombras: meia largura da área com sombra em volta do carro (m); mais = vai mais longe, menos nítida */
-        alcanceSombra: 60,
+        alcanceSombra: 300,
         /** sombras: resolução do mapa (1 = 1024, 2 = 2048, 3 = 4096, 4 = 8192); mais = mais nítida e mais pesada */
-        qualidadeSombra: 2,
+        qualidadeSombra: 3,
         /** false = low poly (padrão); true = visual de PS2 (GT4). Alterna também com a tecla G */
         estiloPS2: false,
         /** estilo PS2: altura interna fixa do desenho, em pixels (o PS2 fazia 480 linhas; o padrão aqui é 360); o navegador amplia com filtro bilinear */
