@@ -1,8 +1,9 @@
 // Veiculo.ts — port de Veiculo.h + Cylinder.h (física arcade, suspensão, pulo, malhas do carro).
-// Toda a física roda em unidades "por frame a 60 Hz" (dt60), exatamente como no C++.
+// Tudo em SI: metros, segundos e radianos. A config traz velocidades em km/h e giros em graus/s para ficar
+// legível; parametros() converte na entrada.
 
 import { GAME_CONFIG } from '@/core/config';
-import { Mat4, type V3, X_AXIS, Y_AXIS, Z_AXIS, clamp, mix, sign, radians, degrees, lerpFactorDt } from '@/graphics/Mat4';
+import { Mat4, type V3, X_AXIS, Y_AXIS, Z_AXIS, clamp, mix, sign, radians, degrees } from '@/graphics/Mat4';
 import { v3, add, sub, mul, dot, len, cross, norm, mixV } from '@/graphics/vec';
 import type { Malha } from '@/graphics/Malha';
 
@@ -94,6 +95,16 @@ const estadoFisicaInicial = () => ({
     yawAngle: 0, currentSteer: 0, currentGrip: 0,
     derrapando: false, intensidadeDrift: 0,
 });
+/** fração do caminho até o alvo percorrida em `dt` segundos por uma suavização de constante de tempo `tau` (s) */
+const fatorTempo = (dt: number, tau: number) => (tau > 0 ? 1 - Math.exp(-dt / tau) : 1);
+const kmhParaMs = (kmh: number) => kmh / 3.6;
+
+/**
+ * O atrito lateral (deslize) é um modelo arcade que trabalha com a fração do deslize perdida por quadro de 60 Hz;
+ * a config dá o tempo (s) em que o deslize morre e aqui ele vira essa fração. Exportada para o piloto automático.
+ */
+export const gripPorFrame = (tempoDeslize: number) => (tempoDeslize > 0 ? 1 - Math.exp(-1 / (60 * tempoDeslize)) : 1);
+
 /** uma mola amortecida: posição e velocidade (ver integrarMola) */
 interface Mola { x: number; v: number }
 const mola = (): Mola => ({ x: 0, v: 0 });
@@ -123,10 +134,10 @@ const SUSP = {
     aderenciaPneu: 1.0,           // em "g": a aceleração que inclina a carroceria nunca passa disso (as curvas do jogo são
                                   // arcade e chegam a vários g; um pneu de verdade não segura muito mais que 1g)
     amortMin: 0.05, amortMax: 1.0,// faixa do amortecimento relativo
-    suavRelevoVertical: 0.25,     // suavização (por frame a 60 Hz) das referências do relevo...
-    suavRelevoAngular: 0.15,
-    suavTerreno: 0.20,            // ...da base seguindo o terreno...
-    suavAtitudeAr: 0.04,          // ...e da base seguindo o salto
+    tauRelevoVertical: 0.058,     // s: suavização das referências do relevo...
+    tauRelevoAngular: 0.103,
+    tauTerreno: 0.075,            // s: ...da base seguindo o terreno...
+    tauAtitudeAr: 0.408,          // s: ...e da base seguindo o salto
 };
 
 /**
@@ -168,6 +179,25 @@ export class Veiculo {
     modelMatrix = new Mat4();
     readonly corRodas = [0.15, 0.15, 0.15];
 
+    /** parâmetros da config em SI puro (m, s, rad): converte km/h, graus/s e os tempos de deslize */
+    private parametros() {
+        const fis = this.config.carro.fisica;
+        return {
+            aceleracao: fis.aceleracao,
+            frenagem: fis.frenagem,
+            velMax: Math.max(0.01, kmhParaMs(fis.velMaxKmh)),
+            velMaxRe: Math.abs(kmhParaMs(fis.velMaxReKmh)),
+            giro: radians(fis.giroGrausS),
+            velGiroTotal: Math.max(0.001, kmhParaMs(fis.velGiroTotalKmh)),
+            gravidade: Math.max(0, fis.gravidade),
+            velocidadePulo: fis.velocidadePulo,
+            limiarDecolagem: kmhParaMs(fis.limiarDecolagemKmh),
+            limiarDrift: Math.max(0.01, kmhParaMs(fis.limiarDriftRastroKmh)),
+            gripPista: gripPorFrame(fis.tempoDeslizePista),
+            gripFreioMao: gripPorFrame(fis.tempoDeslizeFreioMao),
+        };
+    }
+
     constructor(private config = GAME_CONFIG) { }
 
     // ---------- geometria ----------
@@ -183,7 +213,7 @@ export class Veiculo {
         this.pulo = estadoPuloInicial();
         this.rodas = estadoRodasInicial(this.config.carro.rodas.raio);
         this.fisica.position = v3(0, this.rodas.radius, 0);
-        this.fisica.currentGrip = this.config.carro.fisica.aderenciaPista;
+        this.fisica.currentGrip = gripPorFrame(this.config.carro.fisica.tempoDeslizePista);
         this.modelMatrix = Mat4.translation(this.fisica.position);
     }
 
@@ -219,8 +249,8 @@ export class Veiculo {
 
     // ---------- vertical: pulo, decolagem natural, aterrissagem ----------
     private atualizarVertical(alturaChao: number, dt: number) {
-        const fis = this.config.carro.fisica, p = this.pulo, f = this.fisica;
-        const g = Math.max(0, fis.gravidade);
+        const fis = this.config.carro.fisica, par = this.parametros(), p = this.pulo, f = this.fisica;
+        const g = par.gravidade;
 
         p.pousouNoFrame = false;
         const soloConhecido = p.soloValido;
@@ -241,14 +271,14 @@ export class Veiculo {
 
             if (soltou || p.buffer > 0) {
                 const fatorMin = clamp(fis.fatorPuloMinimo, 0, 1);
-                const forca = fis.forcaPulo * mix(fatorMin, 1, p.carga);
+                const forca = par.velocidadePulo * mix(fatorMin, 1, p.carga);
                 f.velocityY = vyChaoAnt + forca;
                 this.suspensao.altura.v -= forca * SUSP.impulsoPulo;
                 p.noAr = true; p.carga = 0; p.buffer = 0;
             } else if (soloConhecido) {
                 const yBalistico = f.position.y + vyChaoAnt * dt - 0.5 * g * dt * dt;
                 const desvio = (yBalistico - alturaChao) / dt;
-                if (desvio > fis.limiarDecolagem) { f.velocityY = vyChaoAnt; p.noAr = true; }
+                if (desvio > par.limiarDecolagem) { f.velocityY = vyChaoAnt; p.noAr = true; }
             }
             if (!p.noAr) f.position.y = alturaChao;
         } else {
@@ -282,10 +312,10 @@ export class Veiculo {
             return;
         }
         const antes = s.vySoloSuave;
-        s.vySoloSuave = mix(antes, vyChao, lerpFactorDt(SUSP.suavRelevoVertical, dt * 60));
+        s.vySoloSuave = mix(antes, vyChao, fatorTempo(dt, SUSP.tauRelevoVertical));
 
         const ganho = SUSP.ganhoRelevoVertical;
-        const limite = 3 * Math.max(g, 50);               // evita picos nos "joelhos" entre triângulos do terreno
+        const limite = 3 * Math.max(g, 5);               // evita picos nos "joelhos" entre triângulos do terreno
         const aSolo = clamp((s.vySoloSuave - antes) / dt, -limite, limite);
         s.altura.v += aSolo * ganho * dt;
     }
@@ -296,12 +326,12 @@ export class Veiculo {
      * balanço). A referência é a inclinação do terreno suavizada, que só segue o relevo; por isso a transição
      * ar -> chão não conta (ela já é tratada pelo impulso de aterrissagem).
      */
-    private reagirAoRelevoAngular(pitchAlvo: number, rollAlvo: number, dt60: number, primeiroFrame: boolean) {
+    private reagirAoRelevoAngular(pitchAlvo: number, rollAlvo: number, dt: number, primeiroFrame: boolean) {
         const s = this.suspensao;
         const pAnt = s.soloPitchSuave, rAnt = s.soloRollSuave;
         if (primeiroFrame) { s.soloPitchSuave = pitchAlvo; s.soloRollSuave = rollAlvo; return; }
 
-        const fator = lerpFactorDt(SUSP.suavRelevoAngular, dt60);
+        const fator = fatorTempo(dt, SUSP.tauRelevoAngular);
         s.soloPitchSuave = mix(pAnt, pitchAlvo, fator);
         s.soloRollSuave = mix(rAnt, rollAlvo, fator);
 
@@ -311,103 +341,105 @@ export class Veiculo {
     }
 
     // ---------- direção e aceleração ----------
-    private atualizarDirecaoEAceleracao(dt60: number, throttle: number, steer: number) {
-        const fis = this.config.carro.fisica, f = this.fisica;
-        const maxSpeed = Math.max(0.01, fis.velmax);
-        const maxReverseSpeed = -Math.abs(fis.velmaxre);
+    private atualizarDirecaoEAceleracao(dt: number, throttle: number, steer: number) {
+        const fis = this.config.carro.fisica, par = this.parametros(), f = this.fisica;
+        const maxSpeed = par.velMax;
+        const maxReverseSpeed = -par.velMaxRe;
 
-        f.currentSteer = mix(f.currentSteer, steer, lerpFactorDt(fis.taxaLerpVolante, dt60));
+        f.currentSteer = mix(f.currentSteer, steer, fatorTempo(dt, fis.tempoVolante));
 
-        const fatorVelocidadeGiro = clamp(Math.abs(f.lastForwardSpeed) / Math.max(0.001, fis.velReferenciaGiro), 0, 1);
-        const direcaoMovimento = f.lastForwardSpeed < -0.01 ? -1 : 1;
-        f.yawAngle += f.currentSteer * fis.velocidadeGiro * fatorVelocidadeGiro * direcaoMovimento * (this.pulo.noAr ? 0.35 : 1) * dt60;
+        const fatorVelocidadeGiro = clamp(Math.abs(f.lastForwardSpeed) / par.velGiroTotal, 0, 1);
+        const direcaoMovimento = f.lastForwardSpeed < -0.06 ? -1 : 1;
+        f.yawAngle += f.currentSteer * par.giro * fatorVelocidadeGiro * direcaoMovimento * (this.pulo.noAr ? 0.35 : 1) * dt;
 
         if (!this.pulo.noAr && throttle > 0) {
             if (f.forwardSpeed < 0) {
-                f.forwardSpeed += throttle * fis.aceleracaoFreio * dt60;
+                f.forwardSpeed += throttle * par.frenagem * dt;
             } else if (f.forwardSpeed < maxSpeed) {
                 const speedRatio = clamp(f.forwardSpeed / maxSpeed, 0, 1);
                 const engineEfficiency = Math.max(0.15, 1 - (speedRatio * speedRatio * 0.85));
-                f.forwardSpeed += throttle * fis.aceleracao * engineEfficiency * dt60;
+                f.forwardSpeed += throttle * par.aceleracao * engineEfficiency * dt;
                 if (f.forwardSpeed > maxSpeed) f.forwardSpeed = maxSpeed;
             }
         } else if (!this.pulo.noAr && throttle < 0) {
-            if (f.forwardSpeed > 0.05) {
-                f.forwardSpeed += throttle * fis.aceleracaoFreio * dt60;
+            if (f.forwardSpeed > 0.3) {
+                f.forwardSpeed += throttle * par.frenagem * dt;
                 if (f.forwardSpeed < 0) f.forwardSpeed = 0;
             } else if (f.forwardSpeed > maxReverseSpeed) {
                 const revRatio = clamp(Math.abs(f.forwardSpeed) / Math.max(0.01, Math.abs(maxReverseSpeed)), 0, 1);
                 const revEfficiency = Math.max(0.20, 1 - (revRatio * revRatio * 0.80));
-                f.forwardSpeed += throttle * fis.aceleracao * revEfficiency * dt60;
+                f.forwardSpeed += throttle * par.aceleracao * revEfficiency * dt;
                 if (f.forwardSpeed < maxReverseSpeed) f.forwardSpeed = maxReverseSpeed;
             }
         } else if (!this.pulo.noAr) {
-            f.forwardSpeed *= Math.pow(clamp(fis.atritoEscalar, 0, 1), dt60);
-            const fatorArrasto = clamp(fis.atritoLinear * dt60, 0, 1);
-            f.forwardSpeed -= f.forwardSpeed * fatorArrasto;
+            f.forwardSpeed *= Math.exp(-Math.max(0, fis.perdaPontoMorto) * dt);   // ponto morto: perde uma fração por segundo
         }
 
-        if (f.forwardSpeed > maxSpeed) f.forwardSpeed = mix(f.forwardSpeed, maxSpeed, lerpFactorDt(0.05, dt60));
+        if (f.forwardSpeed > maxSpeed) f.forwardSpeed = mix(f.forwardSpeed, maxSpeed, fatorTempo(dt, 0.325));
         f.lastForwardSpeed = f.forwardSpeed;
     }
 
     // ---------- atrito lateral / drift ----------
-    private atualizarAtritoELateral(dt60: number, handbrake: boolean, throttle: number) {
-        const fis = this.config.carro.fisica, f = this.fisica;
+    private atualizarAtritoELateral(dt: number, handbrake: boolean, throttle: number) {
+        const fis = this.config.carro.fisica, par = this.parametros(), f = this.fisica;
 
-        f.currentGrip = handbrake ? fis.aderenciaFreioDeMao
-            : mix(f.currentGrip, fis.aderenciaPista, lerpFactorDt(fis.taxaRecuperacaoGrip, dt60));
+        f.currentGrip = handbrake ? par.gripFreioMao
+            : mix(f.currentGrip, par.gripPista, fatorTempo(dt, fis.tempoRecuperacaoGrip));
 
         const velTotal = len(f.velocity);
         const deslizeLateral = Math.abs(f.lateralSpeed);
         let gripEfetivo = f.currentGrip;
 
-        const aceleracaoNormal = fis.aderenciaPista * Math.max(0, fis.gravidade);
-        const escalaFisica = Math.sqrt(aceleracaoNormal / 4.5);
-        const velCorteManobra = Math.max(0.1, 1.2 * escalaFisica);
-        const emManobraLenta = !handbrake && deslizeLateral < 0.05;
+        // manobra lenta: abaixo de velCorteManobra o pneu segura o carro (sem deslizar de lado). A velocidade de corte
+        // cresce com a aderência e a gravidade: 7,2 m/s com a aderência padrão e g = 15 m/s² (a gravidade antiga do jogo)
+        const G_REF = 15;               // m/s²: a gravidade antiga do jogo, referência do atrito em manobras
+        const escalaFisica = Math.sqrt((par.gripPista / gripPorFrame(0.547)) * (par.gravidade / G_REF));
+        const velCorteManobra = Math.max(0.6, 7.2 * escalaFisica);
+        const emManobraLenta = !handbrake && deslizeLateral < 0.3;
 
         if (emManobraLenta) {
             const fatorBaixaVel = clamp(velTotal / velCorteManobra, 0, 1);
             gripEfetivo = mix(1, f.currentGrip, fatorBaixaVel);
         }
 
-        const retencaoLateral = Math.pow(clamp(1 - gripEfetivo, 0, 1), dt60);
+        const retencaoLateral = Math.pow(clamp(1 - gripEfetivo, 0, 1), dt * 60);
         if (!this.pulo.noAr) {
             f.lateralSpeed *= retencaoLateral;
             const fatorAtritoLinear = clamp(1 - (velTotal / velCorteManobra), 0, 1);
-            const fatorGravidade = Math.max(0, fis.gravidade) / 150;
-            const desaceleracaoLinear = (emManobraLenta ? (fis.aderenciaPista * fatorGravidade * 0.4 * fatorAtritoLinear) : 0) * dt60;
+            const fatorGravidade = par.gravidade / G_REF;
+            // atrito seco que para o deslize em manobras lentas: até 4,3 m/s² (o antigo "por frame" x 60 x 60 = por segundo,
+            // x 0,1 da antiga unidade do jogo para metros)
+            const desaceleracaoLinear = (emManobraLenta ? (par.gripPista * fatorGravidade * 0.4 * fatorAtritoLinear) : 0) * 360 * dt;
             if (Math.abs(f.lateralSpeed) <= desaceleracaoLinear) f.lateralSpeed = 0;
             else f.lateralSpeed -= sign(f.lateralSpeed) * desaceleracaoLinear;
         }
 
-        const limiar = Math.max(0.01, fis.limiarDriftRastro);
-        f.derrapando = !this.pulo.noAr && velTotal > 0.40 && (handbrake || deslizeLateral > limiar);
+        const limiar = par.limiarDrift;
+        f.derrapando = !this.pulo.noAr && velTotal > 2.4 && (handbrake || deslizeLateral > limiar);
         f.intensidadeDrift = clamp(deslizeLateral / (limiar * 6), 0.20, 0.50);
 
-        if (Math.abs(throttle) < 0.001 && velTotal < 0.15) {
-            const fatorParada = lerpFactorDt(0.10, dt60);
+        if (Math.abs(throttle) < 0.001 && velTotal < 0.9) {
+            const fatorParada = fatorTempo(dt, 0.158);
             f.velocity = mixV(f.velocity, v3(), fatorParada);
             f.lastForwardSpeed = mix(f.lastForwardSpeed, 0, fatorParada);
-            if (velTotal < 0.005) { f.velocity = v3(); f.lastForwardSpeed = 0; }
+            if (velTotal < 0.03) { f.velocity = v3(); f.lastForwardSpeed = 0; }
         }
     }
 
     // ---------- inclinação inercial do chassi ----------
-    private atualizarInclinacaoChassi(dt: number, dt60: number, forward: V3, right: V3) {
-        const fis = this.config.carro.fisica, f = this.fisica, s = this.suspensao;
-        const globalAccel = mul(sub(f.velocity, f.lastVelocity), 1 / dt60);
+    private atualizarInclinacaoChassi(dt: number, forward: V3, right: V3) {
+        const f = this.fisica, s = this.suspensao;
+        const globalAccel = mul(sub(f.velocity, f.lastVelocity), 1 / dt);   // m/s²
         f.lastVelocity = { ...f.velocity };
 
         const su = this.config.carro.suspensao, dim = this.config.carro.dimensoes;
         const { k, c } = this.molaSuspensao();
 
-        // aceleração do carro (unidades/s²), limitada ao que o pneu consegue transmitir: as curvas do jogo são arcade
+        // aceleração do carro (m/s²), limitada ao que o pneu consegue transmitir: as curvas do jogo são arcade
         // (chegam a vários g) e um carro de verdade não passa de ~1g
-        const aMax = SUSP.aderenciaPneu * Math.max(0, fis.gravidade);
-        const aLong = clamp(-dot(globalAccel, forward) * 3600, -aMax, aMax);   // dt60 -> por segundo: x 60²
-        const aLat = clamp(dot(globalAccel, right) * 3600, -aMax, aMax);
+        const aMax = SUSP.aderenciaPneu * this.parametros().gravidade;
+        const aLong = clamp(-dot(globalAccel, forward), -aMax, aMax);
+        const aLat = clamp(dot(globalAccel, right), -aMax, aMax);
 
         // transferência de peso: a carroceria inclina até as molas segurarem o momento m·a·h. Com as molas da
         // frequência dada (k = m/4 · ω² em cada roda), o ângulo de equilíbrio é atan(4·a·h / (ω²·L²)): a massa se
@@ -423,8 +455,8 @@ export class Veiculo {
     }
 
     // ---------- rodas: contato, atitude, esterçamento ----------
-    private calcularPosicoesRodas(dt: number, dt60: number, forward: V3, right: V3, alturaFn?: AlturaFn) {
-        const dim = this.config.carro.dimensoes, fis = this.config.carro.fisica;
+    private calcularPosicoesRodas(dt: number, forward: V3, right: V3, alturaFn?: AlturaFn) {
+        const dim = this.config.carro.dimensoes;
         const f = this.fisica, s = this.suspensao, r = this.rodas;
         const w2 = dim.largurarodas * 0.5, l2 = dim.comprimentorodas * 0.5;
 
@@ -454,16 +486,16 @@ export class Veiculo {
             }
 
             if (!this.pulo.noAr) {
-                const fator = lerpFactorDt(SUSP.suavTerreno, dt60);
+                const fator = fatorTempo(dt, SUSP.tauTerreno);
                 s.terrenoPitchAngle = mix(s.terrenoPitchAngle, pitchAlvo, fator);
                 s.terrenoRollAngle = mix(s.terrenoRollAngle, rollAlvo, fator);
-                this.reagirAoRelevoAngular(pitchAlvo, rollAlvo, dt60, primeiroFrameSolo);
+                this.reagirAoRelevoAngular(pitchAlvo, rollAlvo, dt, primeiroFrameSolo);
             } else {
                 s.soloPitchSuave = pitchAlvo; s.soloRollSuave = rollAlvo;
-                const velHorizontal = len(f.velocity) * 60;
-                const fatorAtitude = clamp(velHorizontal / 150, 0, 1);
-                const pitchAr = clamp(-degrees(Math.atan2(f.velocityY, Math.max(velHorizontal, 1))), -25, 25) * fatorAtitude;
-                const fator = lerpFactorDt(SUSP.suavAtitudeAr, dt60);
+                const velHorizontal = len(f.velocity);
+                const fatorAtitude = clamp(velHorizontal / (15), 0, 1);   // atitude toda a partir de 15 m/s
+                const pitchAr = clamp(-degrees(Math.atan2(f.velocityY, Math.max(velHorizontal, 0.1))), -25, 25) * fatorAtitude;
+                const fator = fatorTempo(dt, SUSP.tauAtitudeAr);
                 s.terrenoPitchAngle = mix(s.terrenoPitchAngle, pitchAr, fator);
                 s.terrenoRollAngle = mix(s.terrenoRollAngle, 0, fator);
             }
@@ -479,7 +511,8 @@ export class Veiculo {
         }
 
         // esterçamento visual (Ackermann simplificado)
-        const curvaturaMax = fis.velocidadeGiro / Math.max(0.001, fis.velReferenciaGiro);
+        const par = this.parametros();
+        const curvaturaMax = par.giro / par.velGiroTotal;
         const anguloFisicoRadMax = Math.atan(dim.comprimentorodas * curvaturaMax);
         r.steerAngle = degrees(anguloFisicoRadMax * f.currentSteer);
 
@@ -490,14 +523,13 @@ export class Veiculo {
         r.eixoLateral[0] = rightDianteiro; r.eixoLateral[1] = rightDianteiro;
         r.eixoLateral[2] = right; r.eixoLateral[3] = right;
 
-        const forwardDistance = f.forwardSpeed * dt60;
+        const forwardDistance = f.forwardSpeed * dt;
         r.rollAngle = (r.rollAngle + degrees(forwardDistance / r.radius)) % 360;
     }
 
     /** update(): um passo da simulação */
     update(deltaTime: number, throttle: number, steer: number, handbrake = false, alturaFn?: AlturaFn) {
         const dt = clamp(deltaTime, 0.0001, 0.1);
-        const dt60 = dt * 60;
         const f = this.fisica;
 
         f.forwardSpeed = dot(f.velocity, v3(Math.sin(f.yawAngle), 0, Math.cos(f.yawAngle)));
@@ -506,15 +538,15 @@ export class Veiculo {
         const forward = v3(Math.sin(f.yawAngle), 0, Math.cos(f.yawAngle));
         const right = v3(Math.cos(f.yawAngle), 0, -Math.sin(f.yawAngle));
 
-        this.atualizarDirecaoEAceleracao(dt60, throttle, steer);
-        this.atualizarAtritoELateral(dt60, handbrake, throttle);
+        this.atualizarDirecaoEAceleracao(dt, throttle, steer);
+        this.atualizarAtritoELateral(dt, handbrake, throttle);
 
         f.velocity = add(mul(forward, f.forwardSpeed), mul(right, f.lateralSpeed));
 
-        this.atualizarInclinacaoChassi(dt, dt60, forward, right);
-        f.position = add(f.position, mul(f.velocity, dt60));
+        this.atualizarInclinacaoChassi(dt, forward, right);
+        f.position = add(f.position, mul(f.velocity, dt));
 
-        this.calcularPosicoesRodas(dt, dt60, forward, right, alturaFn);
+        this.calcularPosicoesRodas(dt, forward, right, alturaFn);
 
         let m = Mat4.translation(f.position);
         m = m.rotate(f.yawAngle, Y_AXIS);
@@ -549,6 +581,7 @@ export class Veiculo {
     // ---------- consultas ----------
     getPosicao() { return this.fisica.position; }
     getYawAngle() { return this.fisica.yawAngle; }
+    /** velocidade em m/s */
     getVelocidade() { return len(this.fisica.velocity); }
     getVelocidadeVetor() { return this.fisica.velocity; }
     setSegurandoPulo(s: boolean) { this.pulo.segurando = s; }

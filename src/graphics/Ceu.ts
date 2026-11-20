@@ -149,16 +149,16 @@ export class Ceu {
 
         // o grupo fica na câmera; as nuvens são posicionadas relativas a ela (e dão a volta no mundo ao sair do raio)
         this.grupo.position.copy(cam);
-        const R = Math.max(1000, c.nuvensRaio), P = 2 * R;
+        const R = Math.max(100, c.nuvensRaio), P = 2 * R;
         const dir = c.nuvensDirecao * Math.PI / 180;
         const vx = Math.cos(dir) * c.nuvensVelocidade * this.tempo, vz = Math.sin(dir) * c.nuvensVelocidade * this.tempo;
-        const esc = Math.max(0.05, c.nuvensEscala) * 500;
+        const esc = Math.max(0.05, c.nuvensEscala) * 50;   // m: tamanho de uma nuvem na escala 1
         const arr = this.nuvens.instanceMatrix.array as Float32Array;
         for (let i = 0; i < n; ++i) {
             const s = i * 8, o = i * 16;
             let rx = (this.sorteios[s] * P + vx - cam.x) % P; if (rx < 0) rx += P; rx -= R;
             let rz = (this.sorteios[s + 1] * P + vz - cam.z) % P; if (rz < 0) rz += P; rz -= R;
-            const y = c.nuvensAltura + (this.sorteios[s + 2] - 0.5) * 600 - cam.y;
+            const y = c.nuvensAltura + (this.sorteios[s + 2] - 0.5) * 60 - cam.y;
             const sx = esc * this.sorteios[s + 3], sz = sx * this.sorteios[s + 4], sy = sx * 0.45;
             const cs = Math.cos(this.sorteios[s + 5]), sn = Math.sin(this.sorteios[s + 5]);
             arr[o] = cs * sx; arr[o + 1] = 0; arr[o + 2] = -sn * sx; arr[o + 3] = 0;

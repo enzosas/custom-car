@@ -1,25 +1,27 @@
 // config.ts
+//
+// Tudo em unidades do SI: comprimentos em metros, tempo em segundos, massas não aparecem (se cancelam). Para ficar
+// legível, velocidades do carro vêm em km/h e giros em graus/s (a física converte na entrada).
 
 const FISICA_BASE = {
-    aceleracao: 0.03,
-    aceleracaoFreio: 0.04,
-    velmax: 7.0,
-    velmaxre: -2.0,
-    velocidadeGiro: 0.03,
-    taxaLerpVolante: 0.025,
-    aderenciaFreioDeMao: 0.015,
-    aderenciaPista: 0.03,
-    atritoEscalar: 0.9999,
-    atritoLinear: 0.001,
-    velReferenciaGiro: 0.5,
-    taxaRecuperacaoGrip: 0.02,
-    forcaPulo: 70.0,
-    gravidade: 150.0,
-    fatorPuloMinimo: 0.55,
-    tempoCargaPulo: 0.6,
-    compressaoPulo: 1.4,          // quanto a carroceria afunda ao segurar o pulo (carga cheia)
-    limiarDecolagem: 10.0,
-    limiarDriftRastro: 0.9,
+    aceleracao: 10.8,             // m/s²: aceleração do motor partindo do zero (cai perto da velocidade máxima)
+    frenagem: 14.4,               // m/s²: desaceleração do freio (e da ré trocando de sentido)
+    velMaxKmh: 151.2,             // km/h
+    velMaxReKmh: 43.2,            // km/h: velocidade máxima de ré
+    giroGrausS: 103.13,            // graus/s: rotação do carro com o volante todo virado
+    velGiroTotalKmh: 10.8,        // km/h: abaixo disso o carro gira menos (parado não gira)
+    tempoVolante: 0.658,           // s: quanto o volante demora para responder (constante de tempo)
+    tempoDeslizePista: 0.547,      // s: quanto o deslize lateral demora para morrer com os pneus agarrando
+    tempoDeslizeFreioMao: 1.103,   // s: o mesmo com o freio de mão puxado (maior = drift mais longo)
+    tempoRecuperacaoGrip: 0.825,   // s: quanto a aderência demora para voltar depois de soltar o freio de mão
+    perdaPontoMorto: 0.066,       // 1/s: fração da velocidade perdida por segundo sem acelerar nem frear
+    velocidadePulo: 5.66,         // m/s: velocidade para cima no pulo com carga cheia (1,6 m de altura)
+    gravidade: 9.81,              // m/s²
+    fatorPuloMinimo: 0.55,        // fração da velocidade do pulo sem carga
+    tempoCargaPulo: 0.6,          // s: tempo segurando para a carga cheia
+    compressaoPulo: 0.14,         // m: quanto a carroceria afunda ao segurar o pulo (carga cheia)
+    limiarDecolagemKmh: 3.6,      // km/h: numa crista, quanto o chão pode "fugir" para baixo antes de o carro sair do chão
+    limiarDriftRastroKmh: 19.44,  // km/h: deslize lateral a partir do qual o pneu deixa rastro
 };
 
 /**
@@ -30,9 +32,9 @@ const FISICA_BASE = {
 const SUSPENSAO_BASE = {
     frequencia: 1.42,             // Hz: frequência natural da suspensão (carro comum 1 a 1,5; esportivo 2 a 3)
     amortecimento: 0.45,          // fração do amortecimento crítico (carro comum 0,2 a 0,4; 1 = volta sem balançar)
-    alturaCentroMassa: 5.5,       // altura do centro de massa acima do chão (unidades do jogo): mais alto = inclina mais
+    alturaCentroMassa: 0.55,      // m: altura do centro de massa acima do chão; mais alto = inclina mais
     barraEstabilizadora: 2.5,     // quantas vezes a rolagem nas curvas é mais dura que a mola sozinha (1 = sem barra)
-    curso: 1.9,                   // quanto a suspensão comprime ou estica (unidades do jogo); nunca passa da altura do chão
+    curso: 0.19,                  // m: quanto a suspensão comprime ou estica; nunca passa da altura do chão
 };
 
 const COCKPIT_BASE = {
@@ -44,37 +46,37 @@ const COCKPIT_BASE = {
 
 /** Carro procedural (o "vermelho") */
 export const PERFIL_CARRO_VERMELHO = {
-    dimensoes: {
-        largura: 10.0,
-        comprimento: 20.0,
-        alturachao: 2.0,
-        alturaporta: 4.5,
-        alturaparabrisa: 4.5,
-        comprimentorodas: 13.0,
-        largurarodas: 10.0,
+    dimensoes: {                 // metros
+        largura: 1.0,
+        comprimento: 2.0,
+        alturachao: 0.2,
+        alturaporta: 0.45,
+        alturaparabrisa: 0.45,
+        comprimentorodas: 1.3,
+        largurarodas: 1.0,
         offsetchassi: 0.0,
         ...COCKPIT_BASE,
     },
-    rodas: { raio: 2.0, largura: 1.5, segmentos: 16 },
+    rodas: { raio: 0.2, largura: 0.15, segmentos: 16 },   // metros
     fisica: { ...FISICA_BASE },
     // carro menor e mais duro que o GLB
-    suspensao: { ...SUSPENSAO_BASE, frequencia: 1.95, amortecimento: 0.33, alturaCentroMassa: 3.5 },
+    suspensao: { ...SUSPENSAO_BASE, frequencia: 1.95, amortecimento: 0.33, alturaCentroMassa: 0.35 },
 };
 
 /** Carro carregado de um modelo .glb */
 export const PERFIL_CARRO_GLB = {
-    dimensoes: {
-        largura: 10.0,
-        comprimento: 40.0,
-        alturachao: 2.0,
-        alturaporta: 4.5,
-        alturaparabrisa: 4.5,
-        comprimentorodas: 26.5,
-        largurarodas: 15.9,
-        offsetchassi: 0.100,
+    dimensoes: {                 // metros
+        largura: 1.0,
+        comprimento: 4.0,
+        alturachao: 0.2,
+        alturaporta: 0.45,
+        alturaparabrisa: 0.45,
+        comprimentorodas: 2.65,
+        largurarodas: 1.59,
+        offsetchassi: 0.01,
         ...COCKPIT_BASE,
     },
-    rodas: { raio: 3.2, largura: 1.5, segmentos: 16 },
+    rodas: { raio: 0.32, largura: 0.15, segmentos: 16 },  // metros
     fisica: { ...FISICA_BASE },
     suspensao: { ...SUSPENSAO_BASE },
 };
@@ -88,17 +90,17 @@ export const GAME_CONFIG = {
     /** interruptores (liga/desliga) do painel; cada chave aqui vira uma linha de switch via `interruptores` em painelCampos.ts */
     opcoes: {
         rodasVisiveis: true,
-        /** sombras: meia largura da área com sombra em volta do carro (unidades do mundo); mais = vai mais longe, menos nítida */
-        alcanceSombra: 600,
+        /** sombras: meia largura da área com sombra em volta do carro (m); mais = vai mais longe, menos nítida */
+        alcanceSombra: 60,
         /** sombras: resolução do mapa (1 = 1024, 2 = 2048, 3 = 4096, 4 = 8192); mais = mais nítida e mais pesada */
         qualidadeSombra: 2,
         /** false = low poly (padrão); true = visual de PS2 (GT4). Alterna também com a tecla G */
         estiloPS2: false,
         /** estilo PS2: altura interna fixa do desenho, em pixels (o PS2 fazia 480 linhas; o padrão aqui é 360); o navegador amplia com filtro bilinear */
         alturaInternaPS2: 360,
-        /** estilo PS2: onde a neblina começa e onde cobre tudo (unidades do mundo); no low poly são 5000 e 15000 */
-        neblinaInicioPS2: 1500,
-        neblinaFimPS2: 9000,
+        /** estilo PS2: onde a neblina começa e onde cobre tudo (m); no low poly são 500 e 1500 */
+        neblinaInicioPS2: 150,
+        neblinaFimPS2: 900,
         /** estilo PS2: quanto o horizonte (céu, neblina e fundo) é puxado para um azul-acinzentado de dia; 0 = nada, 1 = todo */
         tomHorizontePS2: 0.55,
         /** estilo PS2: tamanho das texturas do chão (1 = padrão; 2 = o dobro, mais esticadas; 0.5 = a metade, mais repetidas) */
@@ -117,18 +119,18 @@ export const GAME_CONFIG = {
     },
     terreno: {
         parametros: {
-            espacamento: 30060.0,    // distância entre vértices = espacamento * 0.005 (~150): triângulos grandes
-            ondulacao: 24000.0,      // altura máxima do relevo = ondulacao * 0.05 (1200)
-            comprimentoOnda: 1962.9446, // tamanho (unidades) dos morros
+            espacamento: 3006.0,     // distância entre vértices = espacamento * 0.005 m (~15 m): triângulos grandes
+            ondulacao: 2400.0,       // altura máxima do relevo = ondulacao * 0.05 m (120 m)
+            comprimentoOnda: 196.29446, // m: tamanho dos morros
             oitavas: 4,              // camadas de detalhe do relevo
             persistencia: 0.5,       // quanto cada camada de detalhe seguinte pesa (0 = suave, 1 = muito rugoso)
             celulasPorChunk: 32,     // resolução de um chunk (4 a 250); mudar recria todos os chunks
-            raioChunks: 4,           // chunks carregados em volta do carro; precisa cobrir a neblina (~15000 / tamanho do chunk). Menos = mais leve
+            raioChunks: 4,           // chunks carregados em volta do carro; precisa cobrir a neblina (~1500 m / tamanho do chunk). Menos = mais leve
         },
         // Cor do terreno por altitude, inclinação e bioma (e onde cresce vegetação). Mudar reconstrói o terreno.
         paleta: {
             ativa: true,             // false = terreno de uma cor só, como antes
-            escalaBioma: 26000.0,    // tamanho aproximado de cada região de bioma (verde, oliva, dourado, outono, savana, deserto)
+            escalaBioma: 2600.0,     // m: tamanho aproximado de cada região de bioma (verde, oliva, dourado, outono, savana, deserto)
             altitudeRocha: 0.62,     // altitude (0..1 da altura máxima) em que a grama dá lugar à rocha e acaba a vegetação
             altitudeNeve: 0.90,      // altitude em que começa a neve
             inclinacaoRocha: 0.45,   // inclinação (0 = plano, 1 = 45°) a partir da qual a encosta vira rocha
@@ -142,46 +144,46 @@ export const GAME_CONFIG = {
     arvore: {
         arvores: {
             quantidade: 8000,
-            alturaTronco: 400.0,
+            alturaTronco: 4.0,       // m (a árvore inteira tem ~1,85x isso, com as copas)
             alturaTroncoRand: 0.35,
-            raioTronco: 20.0,
+            raioTronco: 0.4,         // m, na base (a copa mais larga tem 4,5x isso)
             raioTroncoRand: 0.3,
             anguloRandMax: 360.0,
             inclinacaoRandMax: 0.1,
-            afundamentoBase: 2.5,
+            afundamentoBase: 0.25,   // m
             segmentosTronco: 4,
-            distanciaEstrada: 20.0,
+            distanciaEstrada: 2.0,   // m
         },
-        // distâncias (da câmera, em unidades do mundo) em que cada árvore troca de nível de detalhe. Ficam fora de
+        // distâncias (da câmera, em metros) em que cada árvore troca de nível de detalhe. Ficam fora de
         // `arvores` de propósito: mudar aqui não reconstrói a vegetação, vale no quadro seguinte.
         lod: {
-            lod1: 3000.0,            // até aqui: árvore completa (low poly) / dois cartões em cruz (retro)
-            lod2: 4183.0,            // até aqui: 3 segmentos (low poly) / cartão de frente (retro)
-            lod3: 6124.0,            // até aqui: cone único (low poly); depois: billboard
-            maxima: 27386.0,         // além disso a árvore não é desenhada
+            lod1: 300.0,            // até aqui: árvore completa (low poly) / dois cartões em cruz (retro)
+            lod2: 418.3,            // até aqui: 3 segmentos (low poly) / cartão de frente (retro)
+            lod3: 612.4,            // até aqui: cone único (low poly); depois: billboard
+            maxima: 2738.6,         // além disso a árvore não é desenhada
         },
     },
     grama: {
         grama: {
             quantidade: 16000,
-            altura: 5.0,
-            raio: 1.0,
+            altura: 0.5,             // m
+            raio: 0.1,               // m
             segmentos: 4,
-            distanciaEstrada: 30.0,
+            distanciaEstrada: 3.0,   // m
         }
     },
     estrada: {
         estrada: {
-            largura: 80.0,
+            largura: 8.0,            // m
             anguloCurva: 40.0,       // graus: quanto a pista pode se desviar da direção geral (0 = reta; acima de 85 é limitado)
-            comprimentoCurva: 1800.0, // distância (unidades) em que cada curva se desenvolve: maior = curvas mais longas e suaves
-            larguraTransicao: 400.0, // faixa em volta do platô da pista onde o terreno volta ao relevo natural (maior = pista corta menos os morros)
+            comprimentoCurva: 180.0, // m: distância em que cada curva se desenvolve: maior = curvas mais longas e suaves
+            larguraTransicao: 40.0,  // m: faixa em volta do platô da pista onde o terreno volta ao relevo natural (maior = pista corta menos os morros)
             // marcações: duas linhas brancas contínuas nas laterais e uma tracejada no centro (só visual)
             marcacoes: true,
-            linhaLargura: 1.5,       // largura de cada linha
-            linhaMargem: 4.0,        // distância entre a borda do asfalto e a linha lateral
-            tracoComprimento: 50.0,  // comprimento de cada traço da linha central
-            tracoVao: 75.0,          // espaço entre os traços (0 = linha central contínua)
+            linhaLargura: 0.15,      // m: largura de cada linha
+            linhaMargem: 0.4,        // m: distância entre a borda do asfalto e a linha lateral
+            tracoComprimento: 5.0,   // m: comprimento de cada traço da linha central
+            tracoVao: 7.5,           // m: espaço entre os traços (0 = linha central contínua)
         }
     },
     luz: {
@@ -226,17 +228,17 @@ export const GAME_CONFIG = {
             estrelas: true,
             nuvens: true,
             nuvensQuantidade: 60.0,  // sem limite: o buffer de instâncias cresce conforme precisa
-            nuvensAltura: 2100.0,    // altitude das nuvens (as montanhas chegam a ~1200)
-            nuvensRaio: 14000.0,     // até onde as nuvens aparecem em volta da câmera
+            nuvensAltura: 210.0,     // m: altitude das nuvens (as montanhas chegam a ~120 m)
+            nuvensRaio: 1400.0,      // m: até onde as nuvens aparecem em volta da câmera
             nuvensEscala: 1.0,
             nuvensBrilho: 1.0,       // multiplica a luz das nuvens low poly (1 = padrão)
-            nuvensVelocidade: 12.0,  // unidades por segundo
+            nuvensVelocidade: 1.2,   // m/s
             nuvensDirecao: 30.0,     // graus (0 = +x, 90 = +z)
         }
     },
     camera: {
         parametros: {
-            distanciaRaioBase: 80.0,
+            distanciaRaioBase: 8.0,  // m
             pitchPadrao: 15.0,
             suavizacaoPos: 0.5,
             suavizacaoTarget: 1.0,
@@ -253,17 +255,17 @@ export const GAME_CONFIG = {
     },
     pilotoAutomatico: {
         parametros: {
-            lookaheadBase: 80.0,
-            lookaheadVel: 30.0,
-            lookaheadForaPista: 150.0,
+            lookaheadBase: 8.0,      // m
+            antecipacaoTempo: 0.5,   // s: o ponto mirado fica a mais esta quantidade de segundos à frente na velocidade atual
+            lookaheadForaPista: 15.0, // m
             kLead: 2.0,
             kYaw: 0.05,
             fatorVelCurva: 0.9,
             fatorFreio: 0.8,
-            velMinCurva: 1.5,
+            velMinCurvaKmh: 32.4,    // km/h: o piloto nunca planeja passar das curvas abaixo disso
             fatorLinha: 0.5,
-            margemLinha: 12.0,
-            raioRefLinha: 600.0,
+            margemLinha: 1.2,        // m
+            raioRefLinha: 60.0,      // m
         }
     }
 };

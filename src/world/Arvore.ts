@@ -56,8 +56,8 @@ function gerarBillboardCone(raioBase: number, altTotal: number, cor: number[]): 
 
 export function gerarGeometriasArvore(config = GAME_CONFIG): GeometriasArvore {
     const a = config.arvore.arvores;
-    const alturaTronco = a.alturaTronco * 0.1;
-    const raioTroncoBase = a.raioTronco * 0.2;
+    const alturaTronco = a.alturaTronco;       // m
+    const raioTroncoBase = a.raioTronco;       // m (na base; o topo é 45% disso)
     const raioTroncoTopo = raioTroncoBase * 0.45;
     const segLOD0 = a.segmentosTronco;
 

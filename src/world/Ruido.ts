@@ -66,8 +66,8 @@ export function ruidoCristas(perlin: PerlinNoise2D, x: number, z: number, oitava
     return norma > 0 ? soma / norma : 0;
 }
 
-/** Área de referência das densidades de vegetação: `quantidade` vale para um quadrado de 20736 x 20736 (o mapa antigo). */
-export const AREA_REF = 20736 * 20736;
+/** Área de referência das densidades de vegetação: `quantidade` vale para um quadrado de 2073,6 m x 2073,6 m (o mapa antigo). */
+export const AREA_REF = 2073.6 * 2073.6;
 
 /** Semente determinística do RNG de um chunk: depende da seed do mundo, do chunk e do tipo de objeto (`salt`). */
 export function sementeChunk(seed: number, cx: number, cz: number, salt: number): number {

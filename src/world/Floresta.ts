@@ -71,7 +71,7 @@ export class Floresta {
         const meiaLarguraPista = this.config.estrada.estrada.largura * 0.5;
         const distMinimaPista = meiaLarguraPista + pArvore.distanciaEstrada;
 
-        const escalaRuido = 0.0035;
+        const escalaRuido = 0.035;       // 1/m: tamanho das clareiras
         const limiarClareira = 0.42;
         const pos: number[] = [];
         const mats: number[] = [];
@@ -82,7 +82,7 @@ export class Floresta {
             const x = x0 + uniformReal(rng, 0, tam);
             const z = z0 + uniformReal(rng, 0, tam);
 
-            if (Math.abs(x) < 30 && Math.abs(z) < 30) continue;
+            if (Math.abs(x) < 3 && Math.abs(z) < 3) continue;
 
             // primeiro os testes baratos (o das clareiras rejeita ~93% dos sorteios); a consulta à pista fica por último
             const densidade = this.perlin.noise(x * escalaRuido, z * escalaRuido);
@@ -130,7 +130,7 @@ export class Floresta {
     selecionar(pontoRef: { x: number; y: number; z: number }, isShadowPass: boolean, lotes: Float32Array[]): number[] {
         const contagem = [0, 0, 0, 0];
         // árvores que entram no mapa de sombra: até um pouco além da diagonal da caixa da sombra
-        const raioSombra = Math.max(1350, (this.config.opcoes.alcanceSombra ?? 600) * 1.5);
+        const raioSombra = Math.max(135, (this.config.opcoes.alcanceSombra ?? 60) * 1.5);
         const raioSombraSq = raioSombra * raioSombra;
         const limites = this.limitesLOD();
         const raioVisaoSq = limites.max;

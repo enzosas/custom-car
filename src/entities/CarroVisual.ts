@@ -9,7 +9,7 @@ import { geometriaDe } from '@/graphics/Malha';
 import { detectarRodas } from './detectarRodas';
 
 const ROT_RODA_GLB = new THREE.Matrix4().makeRotationZ(-Math.PI / 2);
-const OFFSET_BASE_MODELO_Y = -3.8;
+const OFFSET_BASE_MODELO_Y = -0.38;   // m
 
 /** medidas das rodas lidas do .glb, em unidades do modelo (antes da escala que o ajusta ao carro) */
 interface MedidasRodasModelo {
@@ -21,7 +21,7 @@ interface MedidasRodasModelo {
     alturaCentro: number;    // altura do centro das rodas acima da base da carroceria
 }
 
-/** valores estimados para a config (unidades do jogo), a partir das rodas do .glb */
+/** valores estimados para a config (metros), a partir das rodas do .glb */
 export interface MedidasEstimadas {
     comprimentorodas: number;
     largurarodas: number;
@@ -449,16 +449,16 @@ export class CarroVisual {
         const size = this.bboxOriginal.getSize(new THREE.Vector3());
         const dimMaior = Math.max(size.z, size.x);
         const esc = dimMaior > 0 ? this.config.carro.dimensoes.comprimento / dimMaior : 1;
-        const r2 = (v: number) => Math.round(v * 100) / 100;
+        const r3 = (v: number) => Math.round(v * 1000) / 1000;   // milímetros
         return {
-            comprimentorodas: r2(m.entreEixos * esc),
-            largurarodas: r2(m.bitola * esc),
+            comprimentorodas: r3(m.entreEixos * esc),
+            largurarodas: r3(m.bitola * esc),
             // a carroceria fica em offsetchassi (z) em relação ao centro das rodas da física
-            offsetchassi: r2(-m.deslocZ * esc),
+            offsetchassi: r3(-m.deslocZ * esc),
             // em ajustarModeloAoCarro, o centro das rodas do modelo cai em y = 0 (centro das rodas da física) quando:
-            alturachao: r2(Math.max(0.05, -OFFSET_BASE_MODELO_Y - m.alturaCentro * esc)),
-            raio: r2(m.raio * esc),
-            larguraRoda: r2(Math.max(0.1, m.larguraPneu * esc)),
+            alturachao: r3(Math.max(0.005, -OFFSET_BASE_MODELO_Y - m.alturaCentro * esc)),
+            raio: r3(m.raio * esc),
+            larguraRoda: r3(Math.max(0.01, m.larguraPneu * esc)),
         };
     }
 

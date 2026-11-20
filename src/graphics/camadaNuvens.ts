@@ -29,7 +29,7 @@ export interface CamadaNuvens {
 }
 
 /** tamanho base (escala 1) de uma repetição da textura: a forma grande e o detalhe */
-export const TILE_NUVENS = { grande: 18000, fino: 6000 };
+export const TILE_NUVENS = { grande: 1800, fino: 600 };   // m
 
 const fr = (v: number) => v - Math.floor(v);
 
@@ -42,7 +42,7 @@ export function calcularCamadaNuvens(c: ParamNuvens, camX: number, camY: number,
     // a textura anda com o vento (+v); a posição da câmera entra com sinal oposto à deriva do padrão
     s.ligada = c.nuvens;
     s.cobertura = Math.min(1, Math.max(0, c.nuvensQuantidade / 150));
-    s.altura = Math.max(100, c.nuvensAltura - camY);
+    s.altura = Math.max(10, c.nuvensAltura - camY);
     s.tileGrande = tg; s.tileFino = tf;
     s.offGrande[0] = fr((camX - vx) / tg); s.offGrande[1] = fr((camZ - vz) / tg);
     s.offFino[0] = fr((camX - vx) / tf); s.offFino[1] = fr((camZ - vz) / tf);

@@ -3,8 +3,8 @@ import { ShadowMap } from './ShadowMap';
 import type { Atmosfera } from './Atmosfera';
 import type { UniformsCompartilhados } from './materialPrincipal';
 
-const NEAR_PLANE = 0.3;
-const FAR_PLANE = 15000;
+const NEAR_PLANE = 0.03;   // m
+const FAR_PLANE = 1500;    // m
 
 /**
  * As luzes do three (usadas só por materiais embutidos, como os do .glb) seguem os mesmos parâmetros do shader
@@ -100,7 +100,7 @@ export class Renderer {
         // A luz do mundo (sol de dia, luar à noite) continua independente
         this.luzSol.color.setRGB(a.corLuz[0], a.corLuz[1], a.corLuz[2]);
         this.luzSol.intensity = a.intDifusa * ESCALA_LUZ_THREE;
-        this.luzSol.position.set(a.dirLuz[0], a.dirLuz[1], a.dirLuz[2]).multiplyScalar(500);
+        this.luzSol.position.set(a.dirLuz[0], a.dirLuz[1], a.dirLuz[2]).multiplyScalar(50);
 
         // O fundo da tela é a cor do horizonte (o domo do céu cobre quase tudo, mas isto evita falhas)
         this.renderer.setClearColor(this.corCeuTmp.setRGB(a.corHorizonte[0], a.corHorizonte[1], a.corHorizonte[2]), 1);   // sem conversão: valores crus

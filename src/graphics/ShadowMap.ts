@@ -1,6 +1,6 @@
-// ShadowMap.ts — mapa de sombras direcional (ortográfico, caixa de 2 * RAIO_SOMBRA unidades em volta do alvo).
+// ShadowMap.ts — mapa de sombras direcional (ortográfico, caixa de 2 * RAIO_SOMBRA metros em volta do alvo).
 //
-//  - resolução padrão 2048x2048 com caixa de 1200 unidades (mesma nitidez do original 4096 com caixa de 2400,
+//  - resolução padrão 2048x2048 com caixa de 120 m (mesma nitidez do original 4096 com caixa de 240 m,
 //    mas 4x menos pixels para desenhar e para amostrar);
 //  - "texel snapping": a caixa da luz anda em passos de exatamente 1 texel, então a sombra não tremula quando o
 //    carro se move;
@@ -15,16 +15,16 @@ import { criarMaterialProfundidade, criarMaterialProfundidadeArvore } from './ma
 export const TAMANHO_SOMBRA = 2048;
 
 /**
- * meia largura da caixa ortográfica (a caixa cobre 2 * RAIO_SOMBRA unidades de mundo).
- * Resolução da sombra = 2 * RAIO_SOMBRA / TAMANHO_SOMBRA unidades por texel (600 e 2048 => ~0.59, igual ao
- * 1200 e 4096 do original). Menor raio = sombra mais nítida, porém com menos alcance. O shader faz o fade da
+ * meia largura da caixa ortográfica (a caixa cobre 2 * RAIO_SOMBRA metros).
+ * Resolução da sombra = 2 * RAIO_SOMBRA / TAMANHO_SOMBRA metros por texel (60 e 2048 => ~6 cm, igual ao
+ * 120 m e 4096 do original). Menor raio = sombra mais nítida, porém com menos alcance. O shader faz o fade da
  * sombra nas bordas da caixa, então não precisa mexer lá ao trocar este valor.
  */
-export const RAIO_SOMBRA = 600;   // valor inicial: o painel muda com opcoes.alcanceSombra
+export const RAIO_SOMBRA = 60;    // m: valor inicial; o painel muda com opcoes.alcanceSombra
 
 /** camada do three dos cartões de árvore do estilo PS2: a passada de sombra os separa do resto (material de profundidade com alpha test) */
 export const CAMADA_ARVORE_PS2 = 1;
-const DISTANCIA_LUZ = 1800;
+const DISTANCIA_LUZ = 180;        // m
 
 export class ShadowMap {
     largura: number;
@@ -49,7 +49,7 @@ export class ShadowMap {
     private readonly lightPos = new THREE.Vector3();
     private readonly zero = new THREE.Vector3();
     private readonly cima = new THREE.Vector3(0, 1, 0);
-    /** tamanho de um texel em unidades de mundo */
+    /** tamanho de um texel em metros */
     private texelMundo: number;
 
     constructor(private uniforms: UniformsCompartilhados, w = TAMANHO_SOMBRA, h = w) {
@@ -58,16 +58,16 @@ export class ShadowMap {
         this.materialProfundidade = criarMaterialProfundidade(uniforms);
         this.materialProfundidadeArvore = criarMaterialProfundidadeArvore(uniforms);
 
-        this.proj.makeOrthographic(-this.raio, this.raio, this.raio, -this.raio, 1, 4000);
+        this.proj.makeOrthographic(-this.raio, this.raio, this.raio, -this.raio, 0.1, 400);
         this.texelMundo = (2 * this.raio) / w;
     }
 
     /**
-     * Alcance (meia largura da caixa, em unidades do mundo) e lado do mapa em texels. Barato quando nada muda: pode ser
+     * Alcance (meia largura da caixa, em metros) e lado do mapa em texels. Barato quando nada muda: pode ser
      * chamado todo frame. Mais alcance com a mesma resolução = sombra menos nítida; o lado é arredondado para potência de 2.
      */
     configurar(alcance: number, lado: number) {
-        const raio = Math.min(8000, Math.max(100, alcance));
+        const raio = Math.min(800, Math.max(10, alcance));
         const tam = Math.pow(2, Math.round(Math.log2(Math.min(8192, Math.max(512, lado)))));
         if (tam !== this.largura) {
             this.alvo.depthTexture?.dispose();
@@ -77,7 +77,7 @@ export class ShadowMap {
         }
         if (raio !== this.raio || tam !== this.largura || this.texelMundo !== (2 * raio) / tam) {
             this.raio = raio;
-            this.proj.makeOrthographic(-raio, raio, raio, -raio, 1, 4000);
+            this.proj.makeOrthographic(-raio, raio, raio, -raio, 0.1, 400);
             this.texelMundo = (2 * raio) / tam;
         }
     }
@@ -123,7 +123,7 @@ export class ShadowMap {
         const sx = cx - Math.round(cx / t) * t;      // deslocamento (|s| <= t/2) que alinha a grade ao mundo
         const sy = cy - Math.round(cy / t) * t;
 
-        // vista relativa à origem: a luz fica em dir * 1800 e olha para (0,0,0)
+        // vista relativa à origem: a luz fica em dir * DISTANCIA_LUZ e olha para (0,0,0)
         this.lightPos.copy(this.dir).multiplyScalar(DISTANCIA_LUZ);
         this.view.lookAt(this.lightPos, this.zero, this.cima);
         this.view.setPosition(this.lightPos);

@@ -7,8 +7,8 @@
 
 import * as THREE from 'three';
 
-/** tamanho (unidades do mundo) de uma repetição de cada textura do chão; o shader recebe os mesmos valores */
-export const TILE_CHAO = { gramaFino: 70, gramaGrosso: 640, asfaltoFino: 36, asfaltoGrosso: 420, superficieFino: 90, superficieGrosso: 520 };
+/** tamanho (m) de uma repetição de cada textura do chão; o shader recebe os mesmos valores */
+export const TILE_CHAO = { gramaFino: 7, gramaGrosso: 64, asfaltoFino: 3.6, asfaltoGrosso: 42, superficieFino: 9, superficieGrosso: 52 };   // m
 
 const TAM = 256;
 

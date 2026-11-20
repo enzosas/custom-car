@@ -1,4 +1,5 @@
 // Particulas.ts — port de Particulas.h: fumaça de drift, nuvens (areia, neve, poeira), pedaços de grama e folhas (billboards).
+// Tamanhos em metros, velocidades em m/s e acelerações em m/s².
 
 import { type V3, mix } from './Mat4';
 import { randGlobal } from '@/core/Random';
@@ -21,9 +22,9 @@ interface PerfilNuvem {
 
 // A areia e a neve são a fumaça do drift maior (~1,8x) e mais encorpada; a poeira da rocha é pequena e quase transparente.
 const PERFIS_NUVEM: Record<TipoNuvem, PerfilNuvem> = {
-    [TipoNuvem.AREIA]: { escalaInicial: [3.2, 4.8], escalaFinal: [12, 18], vida: [0.9, 1.7], alpha: [0.28, 0.48], velY: [1.5, 3.5], velHoriz: 2.2, espalha: 0.9, variacao: 0.07, cinza: false, brilho: 1.1 },
-    [TipoNuvem.NEVE]: { escalaInicial: [3.0, 4.5], escalaFinal: [11, 16], vida: [0.9, 1.6], alpha: [0.32, 0.55], velY: [1.5, 3.5], velHoriz: 2.2, espalha: 0.9, variacao: 0.03, cinza: false, brilho: 1 },
-    [TipoNuvem.POEIRA]: { escalaInicial: [1.8, 2.8], escalaFinal: [6, 9], vida: [0.6, 1.1], alpha: [0.12, 0.22], velY: [0.8, 2.0], velHoriz: 1.2, espalha: 0.6, variacao: 0, cinza: true, brilho: 1 },
+    [TipoNuvem.AREIA]: { escalaInicial: [0.32, 0.48], escalaFinal: [1.2, 1.8], vida: [0.9, 1.7], alpha: [0.28, 0.48], velY: [0.15, 0.35], velHoriz: 0.22, espalha: 0.09, variacao: 0.07, cinza: false, brilho: 1.1 },
+    [TipoNuvem.NEVE]: { escalaInicial: [0.30, 0.45], escalaFinal: [1.1, 1.6], vida: [0.9, 1.6], alpha: [0.32, 0.55], velY: [0.15, 0.35], velHoriz: 0.22, espalha: 0.09, variacao: 0.03, cinza: false, brilho: 1 },
+    [TipoNuvem.POEIRA]: { escalaInicial: [0.18, 0.28], escalaFinal: [0.6, 0.9], vida: [0.6, 1.1], alpha: [0.12, 0.22], velY: [0.08, 0.20], velHoriz: 0.12, espalha: 0.06, variacao: 0, cinza: true, brilho: 1 },
 };
 
 /** tons das folhas do outono (misturados com a cor do terreno para combinar com o chão) */
@@ -67,10 +68,10 @@ export class SistemaParticulas {
 
     /**
      * posição espalhada ao longo do caminho que a roda percorreu neste frame (evita "pontilhado" em alta velocidade).
-     * A velocidade do carro é em unidades por frame a 60 Hz (ver Veiculo.ts), por isso o deslocamento é vel * dt * 60.
+     * A velocidade do carro é em unidades do mundo por segundo (ver Veiculo.ts): o deslocamento no frame é vel * dt.
      */
     private posNoCaminho(posAtual: V3, velRoda: V3, dt: number): V3 {
-        const fator = this.r(0, 1), k = dt * 60;
+        const fator = this.r(0, 1), k = dt;
         return {
             x: mix(posAtual.x - velRoda.x * k, posAtual.x, fator),
             y: mix(posAtual.y - velRoda.y * k, posAtual.y, fator),
@@ -83,10 +84,10 @@ export class SistemaParticulas {
             const base = this.posNoCaminho(posAtual, velRoda, dt);
             const tom = this.r(0.35, 0.55);
             this.nova({
-                pos: { x: base.x + this.r(-0.6, 0.6), y: base.y + this.r(0, 0.6), z: base.z + this.r(-0.6, 0.6) },
-                vel: { x: this.r(-1.5, 1.5), y: this.r(1, 3), z: this.r(-1.5, 1.5) },
+                pos: { x: base.x + this.r(-0.06, 0.06), y: base.y + this.r(0, 0.06), z: base.z + this.r(-0.06, 0.06) },
+                vel: { x: this.r(-0.15, 0.15), y: this.r(0.1, 0.3), z: this.r(-0.15, 0.15) },
                 tempoVidaMax: this.r(0.6, 1.2),
-                escalaInicial: this.r(1.8, 2.8), escalaFinal: this.r(6, 10),
+                escalaInicial: this.r(0.18, 0.28), escalaFinal: this.r(0.6, 1.0),
                 cor: { x: tom, y: tom, z: tom }, alphaInicial: this.r(0.10, 0.25),
                 tipo: TipoParticula.P_FUMACA, anguloZ: this.r(0, 6.28), velAngular: this.r(-2, 2),
             });
@@ -129,17 +130,17 @@ export class SistemaParticulas {
     /** pedaços de grama na cor do terreno sob a roda (`cor`) */
     emitirGrama(origem: V3, velRoda: V3, quantidade: number, cor: V3) {
         for (let i = 0; i < quantidade; ++i) {
-            const pos = { x: origem.x + this.r(-1, 1), y: origem.y + this.r(0, 1), z: origem.z + this.r(-1, 1) };
+            const pos = { x: origem.x + this.r(-0.1, 0.1), y: origem.y + this.r(0, 0.1), z: origem.z + this.r(-0.1, 0.1) };
             const o = this.opostoVel(velRoda);
-            const k = this.r(0, 4);
-            const vel = { x: o.x * k + this.r(-25, 25), y: o.y * k + this.r(50, 85), z: o.z * k + this.r(-25, 25) };
+            const k = this.r(0, 0.4);
+            const vel = { x: o.x * k + this.r(-2.5, 2.5), y: o.y * k + this.r(5, 8.5), z: o.z * k + this.r(-2.5, 2.5) };
             const lum = this.r(0.92, 1.08);
 
             this.nova({
-                pos, vel, tempoVidaMax: this.r(1.0, 1.6), escalaInicial: this.r(1.5, 3.0), escalaFinal: 0,
+                pos, vel, tempoVidaMax: this.r(1.0, 1.6), escalaInicial: this.r(0.15, 0.30), escalaFinal: 0,
                 cor: { x: cor.x * lum, y: cor.y * lum, z: cor.z * lum }, alphaInicial: 1,
                 tipo: TipoParticula.P_GRAMA, anguloZ: this.r(0, 6.28), velAngular: this.r(-45, 45),
-                gravidade: 100,
+                gravidade: 10,
             });
         }
     }
@@ -147,14 +148,14 @@ export class SistemaParticulas {
     /** folhas secas do bioma de outono: sobem menos que a grama e descem devagar, balançando de um lado para o outro */
     emitirFolha(origem: V3, velRoda: V3, quantidade: number, corTerreno: V3) {
         for (let i = 0; i < quantidade; ++i) {
-            const pos = { x: origem.x + this.r(-1, 1), y: origem.y + this.r(0, 1), z: origem.z + this.r(-1, 1) };
+            const pos = { x: origem.x + this.r(-0.1, 0.1), y: origem.y + this.r(0, 0.1), z: origem.z + this.r(-0.1, 0.1) };
             const o = this.opostoVel(velRoda);
-            const k = this.r(0, 4);
-            const vel = { x: o.x * k + this.r(-14, 14), y: o.y * k + this.r(22, 40), z: o.z * k + this.r(-14, 14) };
+            const k = this.r(0, 0.4);
+            const vel = { x: o.x * k + this.r(-1.4, 1.4), y: o.y * k + this.r(2.2, 4.0), z: o.z * k + this.r(-1.4, 1.4) };
 
             const folha = COR_FOLHAS[Math.floor(this.r(0, COR_FOLHAS.length - 0.001))];
             const lum = this.r(0.9, 1.1);
-            const escala = this.r(2.0, 3.6);
+            const escala = this.r(0.20, 0.36);
 
             this.nova({
                 pos, vel, tempoVidaMax: this.r(1.8, 2.8), escalaInicial: escala, escalaFinal: escala * 0.5,
@@ -165,8 +166,8 @@ export class SistemaParticulas {
                 },
                 alphaInicial: 1,
                 tipo: TipoParticula.P_FOLHA, anguloZ: this.r(0, 6.28), velAngular: this.r(-8, 8),
-                gravidade: 22, quedaMax: 10, arrasto: 1.5,
-                balanco: this.r(6, 14), fase: this.r(0, 6.28), freqBalanco: this.r(3, 6),
+                gravidade: 2.2, quedaMax: 1.0, arrasto: 1.5,
+                balanco: this.r(0.6, 1.4), fase: this.r(0, 6.28), freqBalanco: this.r(3, 6),
             });
         }
     }

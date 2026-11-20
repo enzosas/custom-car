@@ -7,10 +7,10 @@ interface FitaRastro { pontos: PontoFita[]; tempoVidaRestante: number; alphaInic
 
 export class RastroPneu {
     private fitas: FitaRastro[][] = [[], []]; // 0 = TE, 1 = TD
-    private offsetElevacao = 0.08;
-    private distMinimaSq = 0.04;
+    private offsetElevacao = 0.008;   // m acima do chão
+    private distMinimaSq = 0.0004;    // (2 cm)²: distância mínima entre pontos da fita
 
-    constructor(private larguraRastro = 1.4, private tempoVidaMax = 6.0) {}
+    constructor(private larguraRastro = 0.14, private tempoVidaMax = 6.0) {}
 
     setLargura(larg: number) { this.larguraRastro = larg; }
 

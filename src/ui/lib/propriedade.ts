@@ -49,9 +49,10 @@ export function arrastar(a: Alvo, s: SessaoArrasto, deltaX: number, acelerado: b
     a.obj[a.chave] = a.tipo === 'uint' ? Math.round(novoValor) : novoValor;
 }
 
-export function formatarValor(a: Alvo): string {
+/** texto do valor; `escala` só muda a exibição (100 = fração mostrada em porcentagem) */
+export function formatarValor(a: Alvo, escala = 1): string {
     // Fallback de segurança contra 'Cannot read properties of undefined'
-    const valor = a.obj[a.chave] ?? 0;
+    const valor = (a.obj[a.chave] ?? 0) * escala;
     // O construtor Number() em volta de toFixed limpa os zeros inúteis do final
     return a.tipo === 'float' ? Number(valor.toFixed(4)).toString() : String(valor);
 }

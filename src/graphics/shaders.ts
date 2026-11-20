@@ -2,7 +2,7 @@
 // Normal "flat" por derivadas de tela, Blinn-Phong, sombra PCF 3x3 e neblina.
 // O original não faz correção de gama nem tone mapping: o ShaderMaterial também não faz (valores crus).
 //
-// PRECISÃO LONGE DA ORIGEM: float32 só tem ~7 dígitos. Com o carro a centenas de milhares de unidades da origem, uma
+// PRECISÃO LONGE DA ORIGEM: float32 só tem ~7 dígitos. Com o carro a dezenas de quilômetros da origem, uma
 // posição absoluta do mundo perde 0.03 ou mais de precisão, e o shader tira a normal "flat" das derivadas dessa
 // posição: as faces passam a piscar. Por isso o shader principal trabalha RELATIVO À CÂMERA (vRel): a posição vem
 // de modelViewMatrix (calculada em dupla precisão no JS) e fica sempre pequena. A sombra também é relativa
@@ -196,7 +196,7 @@ void main() {
     vec3 detSolo = detGrama * (1.0 - (wSup.x + wSup.y + wSup.z + wSup.w)) + vec3(dot(vec4(wSup.xyz, wDetTerra), detSup));
     vec3 detalhe = mix(detSolo, detAsfalto, clamp(vAsfalto, 0.0, 1.0));
     // longe o detalhe some (a neblina cobre e o mipmap já o apagou): evita cintilação
-    float semDetalhe = smoothstep(2500.0, 9000.0, length(vRel));
+    float semDetalhe = smoothstep(250.0, 900.0, length(vRel));
     detalhe = mix(detalhe, vec3(1.0), semDetalhe);
     albedo *= detalhe;
     // terra de outono pela foto: dois tamanhos da mesma foto (o grosso só quebra a repetição), COR da foto como base.
@@ -245,7 +245,8 @@ void main() {
 // Árvore do estilo PS2: um cartão com a textura de uma conífera (atlas de 4), alpha test, luz pintada na textura.
 // FACE_CAMERA: o cartão gira em torno do eixo VERTICAL para ficar de frente para a câmera (sem FACE_CAMERA, são dois
 // cartões fixos em X). A variante do atlas, o espelhamento e o brilho de cada árvore saem de um hash da posição da
-// instância: nenhuma árvore precisa de cor própria, e a mesma árvore é igual em todos os LODs.
+// instância: nenhuma árvore precisa de cor própria, e a mesma árvore é igual em todos os LODs. A posição entra x10
+// no hash (decímetros) para cada árvore manter a mesma variante de quando o mundo era em unidades de 0,1 m.
 const glslHashArvore = /* glsl */ `
 float hash12(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -265,10 +266,10 @@ void main() {
 #ifdef USE_INSTANCING
     inst = instanceMatrix;
 #endif
-    float h1 = hash12(inst[3].xz);
-    float h2 = hash12(inst[3].zx + 17.0);
-    float h3 = hash12(inst[3].xz * 1.7 + 3.0);
-    float h4 = hash12(inst[3].zx * 2.3 + 11.0);
+    float h1 = hash12(inst[3].xz * 10.0);
+    float h2 = hash12(inst[3].zx * 10.0 + 17.0);
+    float h3 = hash12(inst[3].xz * 17.0 + 3.0);
+    float h4 = hash12(inst[3].zx * 23.0 + 11.0);
 
     vec4 mvPos;
 #ifdef FACE_CAMERA
@@ -368,8 +369,8 @@ void main() {
 #ifdef USE_INSTANCING
     inst = instanceMatrix;
 #endif
-    float h1 = hash12(inst[3].xz);
-    float h2 = hash12(inst[3].zx + 17.0);
+    float h1 = hash12(inst[3].xz * 10.0);
+    float h2 = hash12(inst[3].zx * 10.0 + 17.0);
     vec3 o = (model * inst * vec4(0.0, 0.0, 0.0, 1.0)).xyz;      // base da árvore, relativa à origem da sombra
     float sy = length(inst[1].xyz), sx = sy;                     // escala uniforme, como no quadro principal
     vec3 d = vec3(uLightDir.x, 0.0, uLightDir.z);

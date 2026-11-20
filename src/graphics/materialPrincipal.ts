@@ -19,8 +19,8 @@ export function criarUniformsCompartilhados() {
         uAmbientColor: { value: new THREE.Vector3(...corAmbiente(l)) },
         uFogColor: { value: new THREE.Vector3(...corCeu(l)) },
         uNeblina: { value: l.neblina },
-        uFogNear: { value: 5000 },     // onde a neblina começa e onde cobre tudo; vêm da atmosfera (atualizarLuz)
-        uFogFar: { value: 15000 },
+        uFogNear: { value: 500 },     // onde a neblina começa e onde cobre tudo; vêm da atmosfera (atualizarLuz)
+        uFogFar: { value: 1500 },
         // brilho da neblina e do céu em volta do sol (ver glslHorizonte em shaders.ts)
         uSunDir: { value: new THREE.Vector3(0, 1, 0) },
         uSunGlow: { value: new THREE.Vector3(1, 1, 1) },
@@ -77,8 +77,8 @@ export function criarMaterialCeu(u: UniformsCompartilhados): THREE.ShaderMateria
             // camada de nuvens do estilo PS2 (só existe no shader com NUVENS_PS2; ver Ceu.atualizar)
             uTexNuvensCeu: { value: null as THREE.Texture | null },
             uNuvOff: { value: new THREE.Vector4() },
-            uNuvTile: { value: new THREE.Vector2(18000, 6000) },
-            uNuvH: { value: 2100 },
+            uNuvTile: { value: new THREE.Vector2(1800, 600) },
+            uNuvH: { value: 210 },
             uNuvCobertura: { value: 0.4 },
             uNuvOn: { value: 0 },
             uNuvNoite: { value: 0 },
@@ -181,8 +181,8 @@ export function criarMaterialTerreno(u: UniformsCompartilhados): THREE.ShaderMat
 
 /**
  * Marcações da pista: mesmo shader do asfalto, mas puxadas na direção da câmera na profundidade (polygonOffset).
- * Só a folga geométrica não basta: com o plano próximo em 0.3 e o distante em 15000, o buffer de profundidade perde
- * resolução com a distância (a ~1000 unidades ele distingue só ~0.2) e as linhas piscariam contra o asfalto.
+ * Só a folga geométrica não basta: com o plano próximo em 0,03 m e o distante em 1500 m, o buffer de profundidade perde
+ * resolução com a distância (a ~100 m ele distingue só ~2 cm) e as linhas piscariam contra o asfalto.
  */
 export function criarMaterialMarcacao(u: UniformsCompartilhados): THREE.ShaderMaterial {
     return new THREE.ShaderMaterial({

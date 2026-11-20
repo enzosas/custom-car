@@ -32,8 +32,8 @@ import {
 /** configurações com que o estilo retro começa: as do low poly, com as árvores maiores e mais grossas (cartões de frente, como no GT4) */
 function perfilInicialRetro(): Record<string, unknown> {
     const perfil = tirarPerfilEstilo(GAME_CONFIG) as { arvore: typeof GAME_CONFIG.arvore };
-    perfil.arvore.arvores.alturaTronco = 3000;
-    perfil.arvore.arvores.raioTronco = 50;
+    perfil.arvore.arvores.alturaTronco = 30;   // m
+    perfil.arvore.arvores.raioTronco = 1;      // m
     return perfil;
 }
 
@@ -299,7 +299,7 @@ export class Jogo {
         this.camAlvo.applyMatrix4(d);
         this.camUp.transformDirection(d);
         // girando junto com a carroceria a câmera pode descer: não deixa entrar no chão (mesma margem da CameraJogo)
-        const chao = this.world.alturaSuperficie(this.camPos.x, this.camPos.z) + 4;
+        const chao = this.world.alturaSuperficie(this.camPos.x, this.camPos.z) + 0.4;
         if (this.camPos.y < chao) this.camPos.y = chao;
     }
 

@@ -110,7 +110,7 @@ export class Grama {
             const x = x0 + uniformReal(rng, 0, tam);
             const z = z0 + uniformReal(rng, 0, tam);
 
-            if (Math.abs(x) < 25 && Math.abs(z) < 25) continue;
+            if (Math.abs(x) < 2.5 && Math.abs(z) < 2.5) continue;
             if (estrada && estrada.distanciaEixo(x, z) < distMinimaPista) continue;
 
             // a paleta diz quanta grama o ponto aceita; a cor do tufo é a do terreno sob ele
@@ -124,7 +124,7 @@ export class Grama {
                 cores.push(0.34, 0.7, 0.56);
             }
 
-            const y = terreno.obterAlturaMundo(x, z) - 0.2;
+            const y = terreno.obterAlturaMundo(x, z) - 0.02;
             pos.push(x, y, z);
 
             const esc = uniformReal(rng, 0.85, 1.45);
@@ -143,7 +143,7 @@ export class Grama {
 
     /** copia para `lote` as instâncias dentro do raio de visão; devolve a contagem */
     selecionar(pontoRef: V3, isShadowPass: boolean, lote: Float32Array, loteCor?: Float32Array): number {
-        const alcance = isShadowPass ? 100 : 2000;
+        const alcance = isShadowPass ? 10 : 200;   // m
         const raioSq = alcance * alcance;
         let n = 0;
         for (const d of this.chunks.values()) {

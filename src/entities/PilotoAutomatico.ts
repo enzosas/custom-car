@@ -1,9 +1,16 @@
 // PilotoAutomatico.ts — port de PilotoAutomatico.h (pure pursuit + perfil de frenagem antecipada).
 // A pista agora é infinita e aberta: o piloto trabalha numa janela de pontos à frente do carro, sem dar a volta.
+//
+// O algoritmo foi afinado na unidade ANTIGA do jogo (0,1 m) e "por frame a 60 Hz". Para não mudar o comportamento,
+// ele continua rodando nessa base: posições, pista e parâmetros (em metros, km/h e m/s²) são convertidos na entrada
+// por UNIDADE_ANTIGA. A saída (acelerador, volante) não tem unidade.
+
+/** unidades antigas do jogo por metro */
+const UNIDADE_ANTIGA = 10;
 
 import { GAME_CONFIG } from '@/core/config';
-import { clamp, normalizarAngulo as angulo } from '@/graphics/Mat4';
-import type { Veiculo } from './Veiculo';
+import { clamp, normalizarAngulo as angulo, radians } from '@/graphics/Mat4';
+import { gripPorFrame, type Veiculo } from './Veiculo';
 import { PASSO, type Estrada } from '@/world/Estrada';
 
 type V2 = { x: number; y: number };
@@ -73,19 +80,30 @@ export class PilotoAutomatico {
         this.ultimoTempo = agora;
         this.temTempo = true;
 
+        // conversão para a base do algoritmo (ver o topo do arquivo)
+        const K = UNIDADE_ANTIGA;
+        const porFrame = (kmh: number) => kmh / 3.6 * K / 60;         // km/h -> unidades antigas por frame
+        const velMax = porFrame(fis.velMaxKmh);
+        const velGiroTotal = Math.max(0.001, porFrame(fis.velGiroTotalKmh));
+        const frenagem = fis.frenagem * K / 3600;                      // m/s² -> unidades antigas por frame²
+        const velMinCurva = porFrame(pConf.velMinCurvaKmh);
+        const lookaheadPorVel = pConf.antecipacaoTempo * 60;           // s -> frames: lookahead = base + vel * frames
+        const lookaheadBase = pConf.lookaheadBase * K, lookaheadForaPista = pConf.lookaheadForaPista * K;
+        const margemLinha = pConf.margemLinha * K, raioRefLinha = pConf.raioRefLinha * K;
+
         const pos3 = veiculo.getPosicao(), vel3 = veiculo.getVelocidadeVetor();
-        const pos: V2 = { x: pos3.x, y: pos3.z };
-        const vel: V2 = { x: vel3.x, y: vel3.z };
+        const pos: V2 = { x: pos3.x * K, y: pos3.z * K };
+        const vel: V2 = { x: vel3.x * K / 60, y: vel3.z * K / 60 };    // m/s -> unidades antigas por frame
         const speed = len2(vel);
         const yaw = veiculo.getYawAngle();
 
-        const omegaMax = Math.max(1e-4, fis.velocidadeGiro);
-        const grip = Math.max(1e-4, fis.aderenciaPista);
+        const omegaMax = Math.max(1e-4, radians(fis.giroGrausS) / 60);  // rad por frame
+        const grip = Math.max(1e-4, gripPorFrame(fis.tempoDeslizePista));
 
         // estimativa do esterçamento real (a interpolação do volante cria atraso)
         if (this.temYawAnterior) {
             const dYaw = angulo(yaw - this.yawAnterior);
-            const fatorVel = Math.min(Math.max(speed / Math.max(0.001, fis.velReferenciaGiro), 0.2), 1);
+            const fatorVel = Math.min(Math.max(speed / velGiroTotal, 0.2), 1);
             let bruto = dYaw / (omegaMax * dt60 * fatorVel);
             bruto = Math.min(Math.max(bruto, -1), 1);
             this.steerEstimado += (bruto - this.steerEstimado) * 0.5;
@@ -98,25 +116,25 @@ export class PilotoAutomatico {
         // posição do carro na pista e o trecho à frente dele (a pista é infinita: só uma janela em volta do carro)
         const proj = estrada.projetar(pos3.x, pos3.z);
         if (!proj) return saida;
-        const aFreioJan = Math.max(1e-4, fis.aceleracaoFreio * pConf.fatorFreio);
-        const distFreio = (fis.velmax * fis.velmax) / (2 * aFreioJan) + 200;
-        const alcance = Math.max(distFreio, pConf.lookaheadForaPista, pConf.lookaheadBase + speed * pConf.lookaheadVel) + 400;
-        const jan = estrada.janela(proj.i - 4, proj.i + Math.ceil(alcance / PASSO) + 4);
-        const curva = jan.pontos;
+        const aFreioJan = Math.max(1e-4, frenagem * pConf.fatorFreio);
+        const distFreio = (velMax * velMax) / (2 * aFreioJan) + 200;
+        const alcance = Math.max(distFreio, lookaheadForaPista, lookaheadBase + speed * lookaheadPorVel) + 400;
+        const jan = estrada.janela(proj.i - 4, proj.i + Math.ceil(alcance / (PASSO * K)) + 4);
+        const curva = jan.pontos.map((p) => ({ x: p.x * K, z: p.z * K }));
         const n = curva.length;
         const seg = proj.i - jan.inicio;
         const tSeg = proj.t;
         if (n < 8 || seg < 0 || seg >= n - 1) return saida;
 
         const foraDaPista = !estrada.estaNoAsfalto(pos3.x, pos3.z);
-        const meiaLargura = this.config.estrada.estrada.largura * 0.5;
+        const meiaLargura = this.config.estrada.estrada.largura * 0.5 * K;
 
         // direção efetiva do movimento (mistura com o yaw em baixa velocidade)
         const w = clamp(speed / 1.5, 0, 1);
         let phiV = yaw;
         if (speed > 1e-4) phiV = yaw + w * angulo(Math.atan2(vel.x, vel.y) - yaw);
 
-        const lookahead = foraDaPista ? pConf.lookaheadForaPista : (pConf.lookaheadBase + speed * pConf.lookaheadVel);
+        const lookahead = foraDaPista ? lookaheadForaPista : (lookaheadBase + speed * lookaheadPorVel);
         let alvo = pontoAFrente(curva, seg, tSeg, lookahead);
 
         // deslocamento do alvo para o lado de dentro da curva (traçado)
@@ -132,8 +150,8 @@ export class PilotoAutomatico {
                 const ld = len2(dd) || 1;
                 const tg = { x: dd.x / ld, y: dd.y / ld };
                 const rv = { x: tg.y, y: -tg.x };
-                const mag = pConf.fatorLinha * Math.max(meiaLargura - pConf.margemLinha, 0);
-                const kRef = 1 / Math.max(pConf.raioRefLinha, 1);
+                const mag = pConf.fatorLinha * Math.max(meiaLargura - margemLinha, 0);
+                const kRef = 1 / Math.max(raioRefLinha, 1);
                 alvo = addv(alvo, mulv(rv, mag * clamp(-ks / kRef, -1, 1)));
             }
         }
@@ -162,15 +180,15 @@ export class PilotoAutomatico {
         saida.steer = clamp(u, -1, 1);
 
         // perfil de velocidade: freia antes das curvas
-        const aFreio = Math.max(1e-4, fis.aceleracaoFreio * pConf.fatorFreio);
-        const distMax = (fis.velmax * fis.velmax) / (2 * aFreio) + 200;
+        const aFreio = Math.max(1e-4, frenagem * pConf.fatorFreio);
+        const distMax = (velMax * velMax) / (2 * aFreio) + 200;
 
-        let vAlvo = fis.velmax;
+        let vAlvo = velMax;
         let acum = 0;
         for (let i = seg; i < n - 1 && acum <= distMax; ++i) {
             const kappa = curvatura(curva, i);
             let vc = pConf.fatorVelCurva * (grip * 0.5) / Math.max(kappa, 1e-5);
-            vc = Math.max(vc, pConf.velMinCurva);
+            vc = Math.max(vc, velMinCurva);
             vAlvo = Math.min(vAlvo, Math.sqrt(vc * vc + 2 * aFreio * acum));
             acum += len2(sub(xz(curva[i + 1]), xz(curva[i])));
         }

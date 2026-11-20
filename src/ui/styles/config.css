@@ -14,6 +14,7 @@
     --secao-mt: 0px;
     --switch-h: 32px;
     --celula-min: 104px;
+    --unidade-w: 64px;        /* coluna da unidade, à direita do valor (vazia nos campos sem unidade) */
     --amostra-h: 18px;
     --reset-d: 30px;          /* diâmetro do ↺ e altura do chip "resetar tudo" */
 }
@@ -29,6 +30,7 @@
     --secao-mt: 10px;
     --switch-h: 30px;
     --celula-min: 76px;
+    --unidade-w: 44px;
     --amostra-h: 14px;
     --reset-d: 34px;
 }
@@ -136,9 +138,10 @@
     touch-action: pan-y;
     font-family: Arial, Helvetica, sans-serif;
     white-space: nowrap;
-    /* rótulo | marca ↺ | trilho: a coluna da marca existe sempre, então nada se mexe ao ligar o modo "resetar" */
+    /* rótulo | marca ↺ | trilho | (vazio): a coluna da marca existe sempre, então nada se mexe ao ligar o modo "resetar";
+       a última, da largura da unidade dos campos, alinha o trilho com as células de valor */
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto var(--unidade-w);
     align-items: center;
     color: rgba(0, 0, 0, 0.7);
     flex-shrink: 0;
@@ -280,7 +283,7 @@
 }
 
 .painel-desktop-fundo {
-    flex: 0 0 420px;
+    flex: 0 0 520px;
     height: min(960px, 100%);
     box-sizing: border-box;
     padding: var(--painel-pad-y) var(--painel-pad-x);
@@ -503,11 +506,21 @@
 }
 
 /* ---------- valor numérico em célula ancorada na borda direita do painel ---------- */
-/* campo arrastável: rótulo | marca ↺ | célula do valor (a célula fica na borda direita) */
+/* campo arrastável: rótulo | marca ↺ | célula do valor | unidade (a coluna da unidade existe sempre, para as células
+   de todas as linhas ficarem alinhadas, com ou sem unidade) */
 .painel-item.campo {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto var(--unidade-w);
     align-items: center;
+}
+
+.painel-unidade {
+    padding-left: 8px;
+    font-size: calc(var(--fonte-celula) * 0.9);
+    color: rgba(0, 0, 0, 0.7);        /* o mesmo tom dos rótulos */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .painel-rotulo {

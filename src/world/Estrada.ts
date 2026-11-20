@@ -1,6 +1,6 @@
 // Estrada.ts   pista INFINITA.
 //
-// A linha central é gerada de forma determinística pela seed, em passos de PASSO unidades, nos dois sentidos a partir
+// A linha central é gerada de forma determinística pela seed, em passos de PASSO metros, nos dois sentidos a partir
 // da origem, e só até onde o carro precisa. O rumo em cada ponto é  anguloCurva * g(s / comprimentoCurva)  em relação
 // ao eixo +z, com g um ruído suave em [-1, 1]. Como o desvio nunca passa de 85° (< 90°), a pista SEMPRE avança em z:
 // nunca se cruza nem volta sobre si mesma, e z cresce de forma estritamente monotônica ao longo dela. Isso permite
@@ -17,8 +17,8 @@ import type { Terreno, Vec3 } from './Terreno';
 import { PerlinNoise2D } from './Ruido';
 import type { Malha } from '@/graphics/Malha';
 
-/** distância entre pontos consecutivos da linha central */
-export const PASSO = 40;
+/** distância (m) entre pontos consecutivos da linha central */
+export const PASSO = 4;
 /** meia janela (em pontos) de cada uma das duas passadas de média que suavizam a cota da pista */
 const JANELA = 15;
 /** pontos gerados por vez ao estender a pista */
@@ -30,13 +30,13 @@ const MAX_PONTOS = 600000;
 const COR_ASFALTO = [0.25, 0.25, 0.28];
 /** cor das marcações (linhas brancas) e a folga delas acima do asfalto */
 const COR_MARCACAO = [0.95, 0.95, 0.95];
-const ELEVACAO_MARCACAO = 0.12;
+const ELEVACAO_MARCACAO = 0.012;   // m
 /** distância máxima entre as seções de uma fita: para ela acompanhar as quebras entre os triângulos do terreno */
-const PASSO_FITA = 10;
+const PASSO_FITA = 1;              // m
 /** distância aproximada entre os pontos que seguem a curva da borda do asfalto dentro de um triângulo */
-const ESPACO_BORDA = 25;
+const ESPACO_BORDA = 2.5;          // m
 /** quanto além da menor distância um trecho da pista ainda pesa na cota do terreno (ver consultarCota) */
-const FOLGA_COTA = 200;
+const FOLGA_COTA = 20;             // m
 
 interface Pt { x: number; z: number; yr: number; y1: number; y: number }
 
@@ -98,8 +98,8 @@ export class Estrada {
     private seed = 1;
     private ruido = new PerlinNoise2D(1);
     private anguloMax = 0;
-    private comp = 1800;
-    private hw = 40;
+    private comp = 180;
+    private hw = 4;
     private rp = 0;             // raio do platô (nivelado)
     private rt = 0;             // raio total (platô + transição)
 
@@ -122,10 +122,10 @@ export class Estrada {
         this.seed = (seed >>> 0) || 1;
         const c = this.config.estrada.estrada;
         this.anguloMax = Math.min(Math.max(c.anguloCurva, 0), MAX_ANGULO) * Math.PI / 180;
-        this.comp = Math.max(100, c.comprimentoCurva);
+        this.comp = Math.max(10, c.comprimentoCurva);
         this.hw = c.largura * 0.5;
         this.rp = this.hw + 1.5 * this.terreno.espacamento;   // 1.5 célula: todo vértice de um triângulo que toca o asfalto fica no platô
-        this.rt = this.rp + Math.max(1, c.larguraTransicao);
+        this.rt = this.rp + Math.max(0.1, c.larguraTransicao);
         this.ruido = new PerlinNoise2D((((this.seed ^ 0x2545f491) >>> 0)) || 1);
         this.fw = []; this.bw = [];
         this.p1 = { a: 0, b: -1 }; this.pf = { a: 0, b: -1 };
@@ -296,14 +296,14 @@ export class Estrada {
         return this.consultar(x, z) ? this.resD : Infinity;
     }
 
-    /** dentro da meia largura (+0,5, como no jogo original) */
+    /** dentro da meia largura (+5 cm, como no jogo original) */
     estaNoAsfalto(x: number, z: number): boolean {
-        return this.consultar(x, z, this.hw + 1) && this.resD <= this.hw + 0.5;
+        return this.consultar(x, z, this.hw + 0.1) && this.resD <= this.hw + 0.05;
     }
 
     /** ponto mais próximo na linha central, em qualquer distância (amplia a busca até achar) */
     projetar(x: number, z: number): Projecao | null {
-        for (let raio = Math.max(this.rt, 1000); raio <= 4e6; raio *= 2) {
+        for (let raio = Math.max(this.rt, 100); raio <= 4e5; raio *= 2) {
             this.garantirCobertura(z - raio - 2 * PASSO, z + raio + 2 * PASSO);
             if (!this.consultar(x, z, raio)) continue;
             const i = this.resI, t = this.resT;
@@ -328,12 +328,12 @@ export class Estrada {
      * com cor chapada por vértice, que não desenham uma linha de ~1 unidade).
      *
      * - A posição vem da linha central: cada ponto tem um vetor lateral (com correção de quina, para a linha ficar à
-     *   mesma distância dos dois segmentos vizinhos). Os pontos ficam a PASSO unidades um do outro, então o comprimento
+     *   mesma distância dos dois segmentos vizinhos). Os pontos ficam a PASSO metros um do outro, então o comprimento
      *   de arco global é `índice * PASSO`; o tracejado é função dele e por isso é contínuo entre chunks.
      * - Cada trecho pertence ao chunk que contém o seu meio, e as seções das pontas são calculadas dos mesmos pontos
      *   nos dois chunks: não sobra fresta nem sobreposição.
      * - A altura vem da MESMA superfície da malha do terreno e da física (Terreno.criarAmostradorAltura), com as seções
-     *   a cada ~PASSO_FITA unidades para acompanhar as quebras entre os triângulos, mais uma folga pequena.
+     *   a cada ~PASSO_FITA metros para acompanhar as quebras entre os triângulos, mais uma folga pequena.
      * - Vértices locais ao chunk (como os do terreno), para manter os floats pequenos longe da origem.
      * Devolve null se desligadas, ou se a pista não passa pelo chunk.
      */
@@ -341,7 +341,7 @@ export class Estrada {
         const c = this.config.estrada.estrada;
         if (!c.marcacoes || this.pf.b - this.pf.a < 3) return null;
 
-        const larg = Math.max(0.05, c.linhaLargura);
+        const larg = Math.max(0.005, c.linhaLargura);
         const dBorda = this.hw - Math.max(0, c.linhaMargem) - larg / 2;      // distância do centro da linha lateral ao eixo
         const traco = Math.max(0, c.tracoComprimento), periodo = traco + Math.max(0, c.tracoVao);
         const x0 = cx * tam, z0 = cz * tam;
@@ -411,7 +411,7 @@ export class Estrada {
             }
         }
         // linha central tracejada: o padrão depende só do comprimento de arco global
-        if (traco > 0.01 && periodo > 0.5) {
+        if (traco > 0.001 && periodo > 0.05) {
             const sMin = ia * PASSO, sMax = ib * PASSO;
             for (let m = Math.ceil(sMin / periodo); m * periodo + traco <= sMax; ++m) {
                 const s0 = m * periodo;
@@ -432,13 +432,13 @@ export class Estrada {
      * "distância à linha central = largura/2". Os vértices da pista ficam onde essa curva cruza as ARESTAS da grade:
      * esses cruzamentos são calculados uma única vez por aresta, em coordenadas do mundo, e usados pelos dois
      * triângulos que a dividem (e pelo chunk vizinho, na borda do chunk), então os pedaços nunca deixam fresta.
-     * Em cada triângulo a borda segue a curva real, em pontos a cada ~ESPACO_BORDA unidades. Todos os pontos ficam no
+     * Em cada triângulo a borda segue a curva real, em pontos a cada ~ESPACO_BORDA metros. Todos os pontos ficam no
      * plano do triângulo, ou seja, na superfície que a física lê.
      */
     gerarMalhaTerrenoChunk(cx: number, cz: number, tam: number, esp: number, celulas: number, pos: Float32Array, coresGrade: Float32Array, coresGradePS2?: Float32Array, supGrade?: Float32Array): Malha | null {
         if (this.pf.b <= this.pf.a) return null;
         const hw = this.hw, n = celulas + 1, x0 = cx * tam, z0 = cz * tam;
-        const R = hw + 215;                                    // além disso o ponto está "longe" da pista (> meia diagonal de uma célula)
+        const R = hw + 21.5;                                   // além disso o ponto está "longe" da pista (> meia diagonal de uma célula)
 
         // f > 0 dentro do asfalto, f < 0 fora; (a distância assinada à borda)
         const f = (x: number, z: number): number => (this.consultar(x, z, R) ? hw - this.resD : -1e9);
@@ -472,7 +472,7 @@ export class Estrada {
                         const fk = k === M ? fb : f(ax + (bx - ax) * t, az + (bz - az) * t);
                         if ((fp > 0) !== (fk > 0)) {
                             let lo = tp, hi = t, flo = fp;           // bisseção: o sinal troca entre lo e hi
-                            for (let it = 0; it < 20; ++it) {                // 150 / 2^20: bem abaixo de 0.001 unidade
+                            for (let it = 0; it < 20; ++it) {                // 15 m / 2^20: bem abaixo de 0,1 mm
                                 const mid = 0.5 * (lo + hi), fm = f(ax + (bx - ax) * mid, az + (bz - az) * mid);
                                 if ((flo > 0) === (fm > 0)) { lo = mid; flo = fm; } else hi = mid;
                             }
@@ -500,7 +500,7 @@ export class Estrada {
 
         for (let j = 0; j < celulas; ++j) for (let i = 0; i < celulas; ++i) {
             // nenhum canto da célula perto da pista: não há o que fazer nela
-            if (fVert(i, j) < -110 && fVert(i + 1, j) < -110 && fVert(i, j + 1) < -110 && fVert(i + 1, j + 1) < -110) continue;
+            if (fVert(i, j) < -11 && fVert(i + 1, j) < -11 && fVert(i, j + 1) < -11 && fVert(i + 1, j + 1) < -11) continue;
 
             for (let h = 0; h < 2; ++h) {
                 // triângulo da grade, na mesma ordem de Terreno.gerarIndices: (i0,i2,i1) e (i1,i2,i3)

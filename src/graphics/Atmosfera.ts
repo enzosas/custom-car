@@ -19,7 +19,7 @@ export interface Atmosfera {
     corAmbiente: RGB;
     /** cor do céu no horizonte: também é a cor da neblina e do fundo da tela */
     corHorizonte: RGB;
-    /** distância em que a neblina começa e em que cobre tudo (unidades do mundo) */
+    /** distância em que a neblina começa e em que cobre tudo (m) */
     neblinaInicio: number;
     neblinaFim: number;
     /** cor do céu no alto */
@@ -40,8 +40,8 @@ export interface Atmosfera {
 }
 
 /** neblina do estilo low poly */
-const NEBLINA_INICIO = 5000;
-const NEBLINA_FIM = 15000;
+const NEBLINA_INICIO = 500;    // m
+const NEBLINA_FIM = 1500;      // m
 /** horizonte de dia no estilo PS2: azul-acinzentado, de céu meio enevoado */
 const HORIZONTE_PS2: RGB = [0.62, 0.70, 0.80];
 

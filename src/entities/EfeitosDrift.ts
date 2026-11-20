@@ -18,8 +18,10 @@ type Buffers = { pos: Float32Array; cor: Float32Array };
 const TAXA_FRAME = 60;
 /** a superfície sob a roda (bioma, altitude) muda devagar: relê no máximo a cada tanto de segundos */
 const INTERVALO_SUPERFICIE = 0.15;
-/** rodando fora do asfalto: velocidade mínima para levantar areia, neve e poeira (a da grama é 3, ver chanceRolando) */
-const VEL_MIN_NUVEM = 1.0;
+/** rodando fora do asfalto: velocidade mínima (m/s) para levantar areia, neve e poeira */
+const VEL_MIN_NUVEM = 6;
+/** pedaços de grama e folhas: começam a sair acima desta velocidade (m/s) e chegam à chance máxima FAIXA_GRAMA m/s depois */
+const VEL_MIN_GRAMA = 18, FAIXA_GRAMA = 24;
 /** nuvens por segundo, por roda, a plena superfície de areia/neve: de VEL_MIN_NUVEM até a velocidade máxima do carro */
 const TAXA_NUVEM_MIN = 8, TAXA_NUVEM_MAX = 30;
 /** o mesmo para a poeira da rocha: poucas */
@@ -123,13 +125,14 @@ export class EfeitosDrift {
 
         const derrapando = v.estaDerrapando();
         const intensidade = derrapando ? v.getIntensidadeDrift() : 0;
-        const vel = v.getVelocidade();
+        const vel = v.getVelocidade();   // m/s
         const velVec = v.getVelocidadeVetor();
         const noChao = !v.estaNoAr();
         // chance (por frame a 60 fps) de uma roda soltar um pedaço de grama ou folha fora do asfalto
-        const chanceRolando = vel > 3.0 ? Math.min(1, ((vel - 3.0) / 4.0 * 5.0 + 0.1) / 100) : 0;
+        const chanceRolando = vel > VEL_MIN_GRAMA ? Math.min(1, ((vel - VEL_MIN_GRAMA) / FAIXA_GRAMA * 5.0 + 0.1) / 100) : 0;
         // 0..1: da velocidade mínima das nuvens até a velocidade máxima do carro
-        const fracVel = Math.min(1, Math.max(0, (vel - VEL_MIN_NUVEM) / Math.max(0.01, this.config.carro.fisica.velmax - VEL_MIN_NUVEM)));
+        const velMax = this.config.carro.fisica.velMaxKmh / 3.6;
+        const fracVel = Math.min(1, Math.max(0, (vel - VEL_MIN_NUVEM) / Math.max(0.01, velMax - VEL_MIN_NUVEM)));
 
         for (let roda = 0; roda < 4; ++roda) {
             this.tempoSuperficie[roda] -= dt;

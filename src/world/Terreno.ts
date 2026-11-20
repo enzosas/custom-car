@@ -27,11 +27,11 @@ const MONTANHA_INICIO = 0.45;    // a partir de que "altitude regional" as crist
 const MONTANHA_PLENA = 0.80;
 const GANHO_CRISTAS = 1.8;
 const FORCA_MONTANHA = 0.71;     // altura das cristas
-const COMPRIMENTO_REGIAO = 23030; // tamanho das regiões (planície x terras altas)
+const COMPRIMENTO_REGIAO = 2303;  // m: tamanho das regiões (planície x terras altas)
 const JOELHO = 0.78;             // acima disso o relevo satura suavemente (sem topos achatados)
 
 const CONTRASTE_BIOMA = 2.4;       // o ruído de bioma fica concentrado perto de 0.5; abre a faixa para usar 0..1
-const ESCALA_MANCHAS = 700;        // tamanho das manchas de variação de cor (unidades)
+const ESCALA_MANCHAS = 70;         // m: tamanho das manchas de variação de cor
 
 const limitar = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 const suave = (a: number, b: number, x: number) => { const t = limitar((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
@@ -91,7 +91,7 @@ export class Terreno {
 
     definirSeed(seed: number) { this.perlin = new PerlinNoise2D((seed >>> 0) || 1); }
 
-    /** distância entre vértices vizinhos (unidades do mundo) */
+    /** distância entre vértices vizinhos (m) */
     get espacamento() { return this.config.terreno.parametros.espacamento * 0.005; }
     /** altura máxima do relevo */
     get escalaOndulacao() { return this.config.terreno.parametros.ondulacao * 0.05; }
@@ -102,7 +102,7 @@ export class Terreno {
 
     private lerParametros(): ParamRelevo {
         const p = this.config.terreno.parametros;
-        const comp = Math.max(10, p.comprimentoOnda);
+        const comp = Math.max(1, p.comprimentoOnda);
         return {
             fColinas: 1 / comp,
             fCristas: 1 / (comp * 0.7),
@@ -175,7 +175,7 @@ export class Terreno {
 
     /** bioma em (x, z): 0..1, ruído de baixa frequência (ver Paleta.ts) */
     biomaEm(x: number, z: number): number {
-        const f = 1 / Math.max(1000, this.config.terreno.paleta.escalaBioma);
+        const f = 1 / Math.max(100, this.config.terreno.paleta.escalaBioma);
         return limitar((ruidoFractal(this.perlin, x * f + 900, z * f + 900, 2, 0.5) - 0.5) * CONTRASTE_BIOMA + 0.5, 0, 1);
     }
 

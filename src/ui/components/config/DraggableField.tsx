@@ -132,7 +132,8 @@ export function DraggableField({ def, objeto, caminho, modo, onAlterado, aplicar
         <div ref={ref} className={classes} {...(modoReset ? { onClick: aoClicarReset } : handlers)}>
             <span className="painel-rotulo">{def.apresentacao ?? def.nome}</span>
             <span className="reset-marca">↺</span>
-            <span className="painel-celula">{formatarValor(alvoVisivel)}</span>
+            <span className="painel-celula">{formatarValor(alvoVisivel, def.percentual ? 100 : 1)}</span>
+            <span className="painel-unidade">{def.percentual ? '%' : (def.unidade ?? '')}</span>
         </div>
     );
 }

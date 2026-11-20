@@ -7,10 +7,10 @@ import { type V3, clamp, mix, radians, degrees, normalizarAngulo, lerpFactorDt }
 export interface EntradaMouse { x: number; y: number; direito: boolean; esquerdo: boolean }
 
 export class CameraJogo {
-    cameraPos: V3 = { x: 0, y: 20, z: -80 };
+    cameraPos: V3 = { x: 0, y: 2, z: -8 };
     cameraTarget: V3 = { x: 0, y: 0, z: 0 };
 
-    private distanciaRaioBase = 80;
+    private distanciaRaioBase = 8;   // m
     private fatorZoom = 1;
     private suavizacaoPos = 0.12;
     private suavizacaoTarget = 1.0;
@@ -43,7 +43,7 @@ export class CameraJogo {
     }
 
     /**
-     * inclinação do terreno sob o carro em graus (+ = subida). A malha é de triângulos planos (~150 unidades), então
+     * inclinação do terreno sob o carro em graus (+ = subida). A malha é de triângulos planos (~15 m), então
      * uma base curta (a distância entre eixos) daria um degrau a cada triângulo cruzado; por isso a base cobre
      * ~2 células da malha: a janela desliza pela superfície contínua e a inclinação varia sem saltos.
      */
@@ -81,7 +81,7 @@ export class CameraJogo {
             this.anguloCameraPitch = clamp(this.anguloCameraPitch, -20, 80);
         } else {
             this.estavaArrastando = false;
-            const velocidadeMinimaAlinhamento = 0.35;
+            const velocidadeMinimaAlinhamento = 2.1;   // m/s
             if (Math.abs(velocidadeCarro) > velocidadeMinimaAlinhamento) {
                 const diffYaw = normalizarAngulo(targetYaw - this.anguloCameraYaw);
                 this.anguloCameraYaw += diffYaw * lerpFactorDt(this.taxaRetornoOrbita, dt60);
@@ -138,7 +138,7 @@ export class CameraJogo {
 
         if (alturaFn) {
             const alturaSolo = alturaFn(this.cameraPos.x, this.cameraPos.z);
-            const margemSeguranca = 4;
+            const margemSeguranca = 0.4;   // m acima do chão
             if (this.cameraPos.y < alturaSolo + margemSeguranca) this.cameraPos.y = alturaSolo + margemSeguranca;
         }
     }
