@@ -13,7 +13,7 @@ export interface GeometriasArvore {
     lod2: Malha[];      // cone único de 4 lados
     lod3: Malha[];      // billboard cruzado
     alturaTotal: number;
-    raioCopa: number;   // raio da copa mais larga (base): dá a largura dos cartões do estilo PS2
+    raioCopa: number;   // raio da copa mais larga (base); os cartões do estilo PS2 usam a proporção do atlas (1:2), não este raio
 }
 
 /** gerarConeDeslocado(): tronco ou copa cônica truncada com deslocamento vertical e rotação angular */
@@ -97,7 +97,8 @@ export function gerarGeometriasArvore(config = GAME_CONFIG): GeometriasArvore {
  * A base fica em y = 0, como o tronco da árvore de cones, então a mesma matriz de instância serve para os dois estilos.
  */
 export function gerarCartoesArvore(g: GeometriasArvore): { cruz: Malha; face: Malha } {
-    const h = g.alturaTotal, m = g.raioCopa / 0.9;        // a copa ocupa ~90% da largura do cartão
+    // cartão na MESMA proporção da célula do atlas (1:2), para a imagem da árvore não esticar
+    const h = g.alturaTotal, m = h / 4;
     const branco = (n: number) => new Float32Array(n * 3).fill(1);
     const quadXY = [-m, 0, 0, m, 0, 0, m, h, 0, -m, h, 0];
     const quadZY = [0, 0, -m, 0, 0, m, 0, h, m, 0, h, -m];

@@ -273,13 +273,17 @@ void main() {
     vec4 mvPos;
 #ifdef FACE_CAMERA
     vec3 o = (modelViewMatrix * inst * vec4(0.0, 0.0, 0.0, 1.0)).xyz;      // base da árvore, no espaço da vista
-    float sx = length(inst[0].xyz), sy = length(inst[1].xyz);
+    // escala UNIFORME (a da altura): a largura e a altura da árvore sorteadas separadamente deformariam a imagem
+    float sy = length(inst[1].xyz), sx = sy;
     vec3 upV = mat3(viewMatrix)[1];                                          // o "para cima" do mundo, no espaço da vista
     vec3 r = cross(o, upV);
     vec3 rightV = r / max(length(r), 1e-4);
     mvPos = vec4(o + rightV * (position.x * sx) + upV * (position.y * sy), 1.0);
 #else
-    mvPos = modelViewMatrix * inst * vec4(position, 1.0);
+    // a matriz da instância tem escalas diferentes em X/Z e em Y: corrige a largura para ficar na proporção da altura
+    float kx = length(inst[1].xyz) / max(length(inst[0].xyz), 1e-4);
+    float kz = length(inst[1].xyz) / max(length(inst[2].xyz), 1e-4);
+    mvPos = modelViewMatrix * inst * vec4(position.x * kx, position.y, position.z * kz, 1.0);
 #endif
 
     vRel = mvPos.xyz * mat3(viewMatrix);       // posição relativa à câmera nos eixos do mundo (neblina)
@@ -297,6 +301,7 @@ varying vec2 vUv;
 varying vec3 vRel;
 varying vec3 vTom;
 uniform sampler2D uTexArvore;
+uniform vec2  uTamAtlas;          // tamanho do atlas em pixels (muda quando as árvores vêm de PNG)
 uniform vec3  uLightDir;
 uniform vec3  uLightColor;
 uniform vec3  uAmbientColor;
@@ -308,7 +313,7 @@ void main() {
     vec4 t = texture2D(uTexArvore, vUv);
 
     // alpha test; longe o mipmap dilui o alfa e a folhagem ralearia, então o limiar cai com o nível do mipmap
-    vec2 tx = vUv * vec2(512.0, 256.0);
+    vec2 tx = vUv * uTamAtlas;
     vec2 dx = dFdx(tx), dy = dFdy(tx);
     float lod = max(0.0, 0.5 * log2(max(max(dot(dx, dx), dot(dy, dy)), 1e-6)));
     if (t.a < clamp(0.5 - 0.06 * lod, 0.18, 0.5)) discard;
@@ -366,7 +371,7 @@ void main() {
     float h1 = hash12(inst[3].xz);
     float h2 = hash12(inst[3].zx + 17.0);
     vec3 o = (model * inst * vec4(0.0, 0.0, 0.0, 1.0)).xyz;      // base da árvore, relativa à origem da sombra
-    float sx = length(inst[0].xyz), sy = length(inst[1].xyz);
+    float sy = length(inst[1].xyz), sx = sy;                     // escala uniforme, como no quadro principal
     vec3 d = vec3(uLightDir.x, 0.0, uLightDir.z);
     vec3 r = (length(d) > 1e-3) ? normalize(vec3(d.z, 0.0, -d.x)) : vec3(1.0, 0.0, 0.0);
     float largura = position.x + position.z;

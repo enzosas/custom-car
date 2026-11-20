@@ -8,7 +8,7 @@ import { gerarGeometriasArvore, gerarCartoesArvore } from './Arvore';
 import { geometriaDe } from '@/graphics/Malha';
 import { CAMADA_ARVORE_PS2 } from '@/graphics/ShadowMap';
 import { definirEstiloMaterial } from '@/graphics/materialPrincipal';
-import { texturasChao, texturaArvores, carregarTexturaGrama, definirTexturaGrama, texturaSuperficies, carregarTexturaSuperficies, carregarTexturaTerra, definirTexturaSuperficies, TILE_CHAO } from '@/graphics/texturasPS2';
+import { texturasChao, texturaArvores, carregarTexturaArvores, definirTexturaArvores, carregarTexturaGrama, definirTexturaGrama, texturaSuperficies, carregarTexturaSuperficies, carregarTexturaTerra, definirTexturaSuperficies, TILE_CHAO } from '@/graphics/texturasPS2';
 
 /** chunks novos montados por frame enquanto o carro anda (carga inicial e mudanças do painel montam tudo de uma vez) */
 const CHUNKS_POR_FRAME = 3;
@@ -88,9 +88,7 @@ export class WorldBuilder {
             this.matTerreno.uniforms.uTexAsfalto.value = t.asfalto;
             this.matTerreno.uniforms.uTexSup.value = texturaSuperficies();
             if (!this.matTerreno.uniforms.uTexTerra.value) this.matTerreno.uniforms.uTexTerra.value = texturaSuperficies();   // só um sampler válido; vale só com uFotoTerra = 1
-            const arv = texturaArvores();
-            this.matArvoreCruz.uniforms.uTexArvore.value = arv;
-            this.matArvoreFace.uniforms.uTexArvore.value = arv;
+            this.aplicarAtlasArvores(texturaArvores());
         }
         this.terreno.paletaPS2 = ps2;          // as cores que as partículas do carro leem do chão acompanham o estilo
         definirEstiloMaterial(this.matTerreno, ps2, ['TEXTURA_CHAO', 'PALETA_PS2']);
@@ -118,12 +116,28 @@ export class WorldBuilder {
         this.matTerreno.uniforms.uCorDetalheGrama.value = corDetalheGrama;
     }
 
+    /** atlas das árvores do estilo PS2 nos dois materiais de cartão (o tamanho entra no cálculo do mipmap do shader) */
+    private aplicarAtlasArvores(tex: THREE.DataTexture) {
+        for (const m of [this.matArvoreCruz, this.matArvoreFace]) {
+            m.uniforms.uTexArvore.value = tex;
+            (m.uniforms.uTamAtlas.value as THREE.Vector2).set(tex.image.width, tex.image.height);
+        }
+    }
+
     /**
-     * Procura as texturas de arquivo em public/texturas/ (grama.jpg, rocha.jpg, neve.jpg, areia.jpg, terra.jpg). Se existirem, substituem as geradas
+     * Procura as texturas de arquivo em public/texturas/ (grama.jpg, rocha.jpg, neve.jpg, areia.jpg, terra.jpg e
+     * arvore1.png .. arvore4.png). Se existirem, substituem as geradas
      * por código; se não, nada muda. Chamar uma vez ao iniciar; funciona mesmo que o estilo PS2 seja ligado antes de terminar.
      */
     async carregarTexturasExternas() {
-        const [grama, sup, terra] = await Promise.all([carregarTexturaGrama(), carregarTexturaSuperficies(), carregarTexturaTerra()]);
+        const [grama, sup, terra, arvores] = await Promise.all([
+            carregarTexturaGrama(), carregarTexturaSuperficies(), carregarTexturaTerra(), carregarTexturaArvores(),
+        ]);
+        if (arvores) {
+            definirTexturaArvores(arvores.textura);
+            this.aplicarAtlasArvores(arvores.textura);
+            console.log(`arvores carregadas de texturas/: ${arvores.arquivos.join(', ')}`);
+        }
         if (terra) {
             // a foto de terra aparece como ela é (com a cor) na terra de outono; os outros canais continuam como detalhe
             this.matTerreno.uniforms.uTexTerra.value = terra.textura;

@@ -132,7 +132,7 @@ export function criarMaterialArvorePS2(u: UniformsCompartilhados, face: boolean)
         fragmentShader: fragmentArvorePS2,
         defines: face ? { FACE_CAMERA: '1' } : {},
         side: THREE.DoubleSide,
-        uniforms: { ...u, uTexArvore: { value: null as THREE.Texture | null } },
+        uniforms: { ...u, uTexArvore: { value: null as THREE.Texture | null }, uTamAtlas: { value: new THREE.Vector2(512, 256) } },
     });
 }
 

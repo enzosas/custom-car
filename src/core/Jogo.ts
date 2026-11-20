@@ -32,7 +32,7 @@ import {
 /** configurações com que o estilo retro começa: as do low poly, com as árvores maiores e mais grossas (cartões de frente, como no GT4) */
 function perfilInicialRetro(): Record<string, unknown> {
     const perfil = tirarPerfilEstilo(GAME_CONFIG) as { arvore: typeof GAME_CONFIG.arvore };
-    perfil.arvore.arvores.alturaTronco = 850;
+    perfil.arvore.arvores.alturaTronco = 2000;
     perfil.arvore.arvores.raioTronco = 50;
     return perfil;
 }
@@ -157,7 +157,10 @@ export class Jogo {
 
         this.renderizador.camera.layers.enable(CAMADA_ARVORE_PS2);   // cartões de árvore do estilo PS2 (ver ShadowMap)
         this.aplicarEstiloVisual();
-        void this.world.carregarTexturasExternas();   // public/texturas/grama.jpg, se existir
+        // public/texturas/ (grama.jpg, arvore1.png...), se existirem; a sombra dos cartões passa a recortar com o atlas novo
+        void this.world.carregarTexturasExternas().then(() => {
+            this.renderizador.sombra.materialProfundidadeArvore.uniforms.uTexArvore.value = this.matArvoreFace.uniforms.uTexArvore.value;
+        });
 
         this.carro = new CarroVisual(this.renderizador.scene, this.veiculo, this.matOpaco, this.config);
         this.carro.carregarModeloPadrao();

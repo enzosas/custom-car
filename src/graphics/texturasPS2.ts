@@ -252,24 +252,116 @@ const PASTA_TEXTURAS = './texturas/';
 const TAM_EXTERNA = 512;
 
 /** lê public/texturas/<nome> e devolve os pixels RGBA redimensionados para `tamanho` x `tamanho`; null se não existir ou não abrir */
-export function lerPixelsDeImagem(nome: string, tamanho = TAM_EXTERNA): Promise<Uint8ClampedArray | null> {
+export async function lerPixelsDeImagem(nome: string, tamanho = TAM_EXTERNA): Promise<Uint8ClampedArray | null> {
+    const img = await abrirImagem(nome);
+    if (!img) return null;
+    try {
+        const ctx = novoContexto(tamanho, tamanho);
+        if (!ctx) return null;
+        ctx.drawImage(img, 0, 0, tamanho, tamanho);
+        return ctx.getImageData(0, 0, tamanho, tamanho).data;
+    } catch { return null; }
+}
+
+/** abre public/texturas/<nome>; null se não existir ou não abrir */
+function abrirImagem(nome: string): Promise<HTMLImageElement | null> {
     return new Promise(resolve => {
         const img = new Image();
-        img.onload = () => {
-            try {
-                const c = document.createElement('canvas');
-                c.width = c.height = tamanho;
-                const ctx = c.getContext('2d', { willReadFrequently: true });
-                if (!ctx) { resolve(null); return; }
-                ctx.imageSmoothingEnabled = true;
-                ctx.imageSmoothingQuality = 'high';
-                ctx.drawImage(img, 0, 0, tamanho, tamanho);
-                resolve(ctx.getImageData(0, 0, tamanho, tamanho).data);
-            } catch { resolve(null); }
-        };
+        img.onload = () => resolve(img);
         img.onerror = () => resolve(null);
         img.src = PASTA_TEXTURAS + nome;
     });
+}
+
+function novoContexto(w: number, h: number): CanvasRenderingContext2D | null {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    if (ctx) { ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; }
+    return ctx;
+}
+
+// ---------- árvores de ARQUIVO (opcionais): public/texturas/arvore1.png .. arvore4.png ----------
+// Cada PNG que existir substitui a conífera do mesmo número no atlas; as que faltarem continuam desenhadas por código.
+// O PNG precisa de fundo transparente. As margens vazias são cortadas e a árvore é encaixada na célula sem distorcer,
+// centralizada e com a base do tronco na borda de baixo (onde o cartão encosta no chão). Com algum PNG, o atlas passa
+// a ter o dobro da resolução (256x512 por árvore); as células desenhadas por código são só ampliadas.
+
+/** resolução de cada célula do atlas quando há árvores de arquivo */
+const ARVORE_PNG = { largura: 256, altura: 512 };
+
+/** recorta a árvore do PNG (pelo alfa) e a encaixa numa célula w x h; pixels com a linha 0 = BASE, como o atlas */
+function celulaDeImagem(img: HTMLImageElement, w: number, h: number): Uint8Array | null {
+    // 1. a imagem inteira (limitada a 2048 px no lado maior) para achar a caixa do que não é transparente
+    const esc = Math.min(1, 2048 / Math.max(img.width, img.height));
+    const iw = Math.max(1, Math.round(img.width * esc)), ih = Math.max(1, Math.round(img.height * esc));
+    const ctxImg = novoContexto(iw, ih);
+    if (!ctxImg) return null;
+    ctxImg.drawImage(img, 0, 0, iw, ih);
+    const dados = ctxImg.getImageData(0, 0, iw, ih).data;
+    let x0 = iw, y0 = ih, x1 = -1, y1 = -1;
+    for (let y = 0; y < ih; ++y) for (let x = 0; x < iw; ++x) {
+        if (dados[(y * iw + x) * 4 + 3] > 8) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    if (x1 < 0) return null;                                  // imagem toda transparente
+    const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+
+    // 2. encaixa sem distorcer: centralizada na horizontal, base embaixo
+    const k = Math.min(w / cw, h / ch);
+    const dw = cw * k, dh = ch * k;
+    const ctx = novoContexto(w, h);
+    if (!ctx) return null;
+    ctx.drawImage(ctxImg.canvas, x0, y0, cw, ch, (w - dw) / 2, h - dh, dw, dh);
+    const src = ctx.getImageData(0, 0, w, h).data;
+
+    // 3. vira de cabeça para baixo (no atlas a linha 0 é a base) e pinta o RGB dos pixels transparentes com a cor média
+    //    da folhagem: o filtro bilinear e os mipmaps não criam contorno escuro em volta da silhueta
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let i = 0; i < src.length; i += 4) if (src[i + 3] > 200) { r += src[i]; g += src[i + 1]; b += src[i + 2]; ++n; }
+    const media = n ? [r / n, g / n, b / n] : [40, 60, 30];
+    const out = new Uint8Array(w * h * 4);
+    for (let y = 0; y < h; ++y) for (let x = 0; x < w; ++x) {
+        const s = (y * w + x) * 4, d = ((h - 1 - y) * w + x) * 4;
+        if (src[s + 3] === 0) { out[d] = media[0]; out[d + 1] = media[1]; out[d + 2] = media[2]; out[d + 3] = 0; continue; }
+        out[d] = src[s]; out[d + 1] = src[s + 1]; out[d + 2] = src[s + 2]; out[d + 3] = src[s + 3];
+    }
+    return out;
+}
+
+/**
+ * Procura public/texturas/arvore1.png .. arvore4.png. Devolve o atlas novo (256x512 por árvore; as que não têm
+ * arquivo vêm do desenho por código, ampliadas) e a lista do que foi lido; null se não houver nenhum PNG.
+ */
+export async function carregarTexturaArvores(): Promise<{ textura: THREE.DataTexture; arquivos: string[] } | null> {
+    const minha = geracao;
+    const nomes = Array.from({ length: ARVORE_ATLAS.celulas }, (_, i) => `arvore${i + 1}.png`);
+    const imagens = await Promise.all(nomes.map(abrirImagem));
+    if (minha !== geracao || imagens.every(i => !i)) return null;
+
+    const { largura: CW, altura: CH } = ARVORE_PNG;
+    const NC = ARVORE_ATLAS.celulas, W = NC * CW;
+    const atlas = new Uint8Array(W * CH * 4);
+    const proc = pixelsArvores();                              // células sem arquivo: o desenho por código
+    const pW = NC * ARVORE_ATLAS.largura, fx = ARVORE_ATLAS.largura / CW, fy = ARVORE_ATLAS.altura / CH;
+    const arquivos: string[] = [];
+    for (let c = 0; c < NC; ++c) {
+        const cel = imagens[c] ? celulaDeImagem(imagens[c]!, CW, CH) : null;
+        if (cel) arquivos.push(nomes[c]);
+        for (let y = 0; y < CH; ++y) for (let x = 0; x < CW; ++x) {
+            const d = (y * W + c * CW + x) * 4;
+            const s = cel ? (y * CW + x) * 4 : (Math.floor(y * fy) * pW + c * ARVORE_ATLAS.largura + Math.floor(x * fx)) * 4;
+            const fonte = cel ?? proc;
+            atlas[d] = fonte[s]; atlas[d + 1] = fonte[s + 1]; atlas[d + 2] = fonte[s + 2]; atlas[d + 3] = fonte[s + 3];
+        }
+    }
+    if (arquivos.length === 0) return null;
+    return { textura: criarTextura(atlas, W, CH, false), arquivos };
+}
+
+/** troca o atlas das árvores (o carregado dos PNGs); o anterior é descartado */
+export function definirTexturaArvores(tex: THREE.DataTexture) {
+    if (cacheArvores) cacheArvores.dispose();
+    cacheArvores = tex;
 }
 
 /**
